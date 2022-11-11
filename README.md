@@ -15,3 +15,8 @@ Here is the mindmap from the brainstorming made with viewers on the first stream
 
 The name `Hexpocalypse Later` was proposed by GPT-3 after a long time of brainstorming and giving up... Some people 
 should have the reference (hint: an old movie) :wink:
+
+
+## Stack
+
+The game will be made in pure [python (3.10)](https://python.org), and the rendering will be a simple HTML page created with [Django](https://www.djangoproject.com/) (in [Async mode](https://docs.djangoproject.com/en/4.1/topics/async/)), updated via [SSE](https://wikipedia.org/wiki/Server-sent_events), thanks to [Htmx](https://htmx.org). We'll get the coordinates of the players clicks via [websocket](https://en.wikipedia.org/wiki/WebSocket) using the [Heat Twitch Extension](https://dashboard.twitch.tv/extensions/cr20njfkgll4okyrhag7xxph270sqk-2.1.1).
