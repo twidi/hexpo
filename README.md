@@ -13,6 +13,15 @@ Here is the mindmap from the brainstorming made with viewers on the first stream
 
 ![Mindmap](resources/mindmap-2022-11-10.png)
 
+And here is the first wireframe on how it will look on stream:
+
+![Wireframe](resources/wireframe-2022-11-10.png)
+
+The purple hexagon is where the webcam of the streamer is, the top left block is where players will pick their actions,
+and the game will be run in the main area.
+
+## About the name
+
 The name `Hexpocalypse Later` was proposed by GPT-3 after a long time of brainstorming and giving up... Some people 
 should have the reference (hint: an old movie) :wink:
 
