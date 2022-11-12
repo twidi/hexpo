@@ -25,6 +25,9 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "aiohttp",
+    "channels",
+    "django",
+    "django-eventstream",
     "websockets",
 ]
 
@@ -45,6 +48,7 @@ exclude = [
 [project.optional-dependencies]
 dev = [
     'ipython<8.2.0',
+    'django-stubs',
     'mypy',
     'mypy-extensions',
 ]
@@ -78,6 +82,7 @@ line-length = 118
 target_version = ['py310']
 
 [tool.mypy]
+plugins = ["mypy_django_plugin.main"]
 python_version = "3.10"
 check_untyped_defs = true
 no_implicit_optional = true
@@ -93,6 +98,9 @@ show_error_codes = true
 pretty = true
 strict = true
 implicit_reexport = true
+
+[tool.django-stubs]
+django_settings_module = "hexpo_game.settings"
 
 [[tool.mypy.overrides]]
 module = [
@@ -116,7 +124,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 addopts = "--cov=hexpo_game --cov-report term-missing:skip-covered --ignore setup.py --ignore docs --ignore ci --pyargs"
 
-[tool.flake8zzz]
+[tool.flake8]
 ignore = [
     # Line too long: we let black manage it
     'E501',
