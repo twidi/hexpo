@@ -27,6 +27,7 @@ dependencies = [
     "aiohttp",
     "channels",
     "django",
+    "django-extensions",
     "django-eventstream",
     "websockets",
 ]
@@ -161,6 +162,7 @@ select = [
 ]
 exclude = [
     '*/tests/__init__.py',
+    '*/migrations/0*.py',
 ]
 per-file-ignores = [
     # ignore unused and global import in __init__.py files
@@ -186,6 +188,11 @@ exclude_lines = [
     'raise NotImplementedError',
     'if TYPE_CHECKING:',
     '@overload',
+]
+
+[tool.pylint.master]
+ignore=[
+    "migrations",
 ]
 
 [tool.pylint.format]
