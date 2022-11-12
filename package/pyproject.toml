@@ -25,10 +25,9 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "aiohttp",
-    "channels",
+    "aiohttp_sse",
     "django",
     "django-extensions",
-    "django-eventstream",
     "websockets",
 ]
 
