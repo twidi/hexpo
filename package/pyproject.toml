@@ -1,0 +1,181 @@
+# https://packaging.python.org/en/latest/specifications/declaring-project-metadata/
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hexpo_game"
+version = "0.0.0.dev0"
+authors = [{author = 'Stephane "Twidi" Angel', email = "s.angel@twidi.com"}]
+urls = {github = "https://github.com/twidi/hexpo", twitch = "https://www.twitch.tv/twidi_angel", discord = "https://discord.gg/EJjmVNDRUN"}
+description = "'Hexpocalypse Later': A Twitch turn based game where players have conquer the biggest territory."
+readme = "README.md"
+license = {text = "MIT"}
+keywords = ["game", "twitch", "turnbyturn", "hexagons", "territory"]
+classifiers = [
+    "Development Status :: 0 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "aiohttp",
+    "websockets",
+]
+
+[tool.setuptools]
+zip-safe = true
+platforms = ["Linux"]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["hexpo_game"]
+exclude = [
+    "tests",
+    "*.tests",
+    "*.tests.*",
+]
+
+[project.optional-dependencies]
+dev = [
+    'ipython<8.2.0',
+    'mypy',
+    'mypy-extensions',
+]
+
+lint = [
+    'black',
+    'flake8',
+    'flake8-bugbear',
+    'flake8-comprehensions',
+    'flake8-docstrings',
+    'flake8-pyproject',
+    'isort',
+    'pycodestyle',
+    'pydocstyle',
+    'pylint',
+]
+tests = [
+    'mock',
+    'pytest',
+    'pytest-cov',
+    'pytest-lazy-fixture',
+    'pytest-sugar',
+    'types-mock',
+]
+
+[tool.isort]
+profile = "black"
+
+[tool.black]
+line-length = 118
+target_version = ['py310']
+
+[tool.mypy]
+python_version = "3.10"
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = false
+warn_return_any = true
+warn_unreachable = true
+local_partial_types = true
+strict_equality = true
+show_error_context = true
+show_column_numbers = true
+show_error_codes = true
+pretty = true
+strict = true
+implicit_reexport = true
+
+[[tool.mypy.overrides]]
+module = [
+    'hexpo_game.*.tests.*',
+    'hexpo_game.conftest',
+    'hexpo_game.*.conftest',
+]
+#; strict = False  # doesn't work so we disallow all manually that are not set globally
+disallow_untyped_calls = false
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+module = [
+    'pytest_lazyfixture.*',
+]
+ignore_missing_imports = true
+
+
+[tool.pytest.ini_options]
+addopts = "--cov=hexpo_game --cov-report term-missing:skip-covered --ignore setup.py --ignore docs --ignore ci --pyargs"
+
+[tool.flake8zzz]
+ignore = [
+    # Line too long: we let black manage it
+    'E501',
+    # Line break occurred before a binary operator: we let black manage it
+    'W503',
+    # Allow assigning lambda expressions
+    'E731',
+    # Ignore line length, handled by black
+    'B950',
+    # Allow whitespace before ':', make numpy slicing more readable
+    'E203',
+    # Allow complexity...
+    'C901',
+    # Flake8 gives meaningless `First line should not be the function's "signature"`
+    'D402',
+]
+max-complexity = 15
+select = [
+    # flake8 error class
+    'F',
+    # mccabe plugin
+    'C',
+    # pycodestyle plugin
+    'E',
+    'W',
+    # docstrings (using pydocstyle) plugin
+    'D',
+    # bugbear plugin
+    'B',
+    'B9',
+    'B950',
+    # pep3101 (enforce .format over %) plugin
+    'S001',
+]
+exclude = [
+    '*/tests/__init__.py',
+]
+per-file-ignores = [
+    # ignore unused and global import in __init__.py files
+    '*/__init__.py:F401,F403',
+    # ignore missing docstrings and global importsin tests
+    'test_*:D,F403',
+    '*/tests/*:D,F403',
+    '*/tests/*/__init__.py:D,F401,F403',
+    '*/conftest.py:D,F401,F403',
+]
+
+[tool.coverage.run]
+branch = true
+omit = [
+    '*/tests/*',
+    '*/conftest.py',
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    'pragma: no cover',
+    'pragma: not covered',
+    'raise NotImplementedError',
+    'if TYPE_CHECKING:',
+    '@overload',
+]
