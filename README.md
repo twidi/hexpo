@@ -9,13 +9,13 @@ The game is made to be played by viewers of a Twitch stream, by clicking directl
 
 It is partially developed and playable (at least when we'll have a first playable version) on [Twidi's Twitch](https://www.twitch.tv/twidi_angel), and on [Twidi's Discord](https://discord.gg/EJjmVNDRUN).
 
-Here is the mindmap from the brainstorming made with viewers on the first stream about this game: 
+Here is the mindmap from the brainstorming made with viewers on the first stream about this game (click for large version): 
 
-![Mindmap](resources/mindmap-2022-11-10.png)
+[![Mindmap](resources/mindmap-2022-11-11.png)](https://raw.githubusercontent.com/twidi/hexpo/main/resources/mindmap-2022-11-11.png)
 
-And here is the first wireframe on how it will look on stream:
+And here is the first wireframe on how it will look on stream (click for large version):
 
-![Wireframe](resources/wireframe-2022-11-10.png)
+[![Wireframe](resources/wireframe-2022-11-11.png)](https://raw.githubusercontent.com/twidi/hexpo/main/resources/wireframe-2022-11-11.png)
 
 The purple hexagon is where the webcam of the streamer is, the top left block is where players will pick their actions,
 and the game will be run in the main area.
