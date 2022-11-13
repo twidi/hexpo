@@ -39,11 +39,11 @@ class PlayerInGame(models.Model):
     started_turn = models.PositiveIntegerField(help_text="Turn number when the player started.")
     ended_turn = models.PositiveIntegerField(null=True, blank=True, help_text="Turn number when the player ended.")
     color = models.CharField(max_length=7, help_text="Color of the player.")
-    start_tile_coord_q = models.IntegerField(
-        help_text="The q coordinate of the start tile in the axial coordinate system."
+    start_tile_col = models.IntegerField(
+        help_text="The grid column of the start tile in the offset `odd-q` coordinate system."
     )
-    start_tile_coord_r = models.IntegerField(
-        help_text="The r coordinate of the start tile in the axial coordinate system."
+    start_tile_row = models.IntegerField(
+        help_text="The grid row of the start tile in the offset `odd-q` coordinate system."
     )
     level = models.PositiveIntegerField(default=1, help_text="Current level of the player.")
     coins = models.PositiveIntegerField(default=0, help_text="Current number of coins of the player.")
@@ -55,8 +55,8 @@ class OccupiedTile(models.Model):
 
     game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the tile is in.")
     player = models.ForeignKey(Player, on_delete=models.CASCADE, help_text="Player that occupies the tile.")
-    coord_q = models.IntegerField(help_text="The q coordinate of the tile in the axial coordinate system.")
-    coord_r = models.IntegerField(help_text="The r coordinate of the tile in the axial coordinate system.")
+    col = models.IntegerField(help_text="The grid column of the tile in the offset `odd-q` coordinate system.")
+    row = models.IntegerField(help_text="The grid row of the tile in the offset `odd-q` coordinate system.")
     level = models.PositiveSmallIntegerField(
         default=20, help_text="Current level of the tile. Max 100. Destroyed at 0."
     )
@@ -66,8 +66,8 @@ class Drop(models.Model):
     """Represent a drop not yet picked up by a player."""
 
     game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the drop is in.")
-    tile_coord_q = models.IntegerField(help_text="The q coordinate of the drop in the axial coordinate system.")
-    tile_coord_r = models.IntegerField(help_text="The r coordinate of the drop in the axial coordinate system.")
+    tile_col = models.IntegerField(help_text="The grid column of the drop in the offset `odd-q` coordinate system.")
+    tile_row = models.IntegerField(help_text="The grid row of the drop in the offset `odd-q` coordinate system.")
     coins = models.PositiveIntegerField(help_text="Number of coins in the drop.")
 
 
@@ -78,11 +78,11 @@ class Action(models.Model):
     game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the action is in.")
     turn = models.PositiveIntegerField(help_text="Turn number when the action was done.")
     action_type = models.CharField(max_length=255, help_text="Type of the action.", choices=ActionType.choices)
-    tile_coord_q = models.IntegerField(
-        help_text="The q coordinate of the action in the axial coordinate system.", null=True
+    tile_col = models.IntegerField(
+        help_text="The grid column of the action in the offset `odd-q` coordinate system.", null=True
     )
-    tile_coord_r = models.IntegerField(
-        help_text="The r coordinate of the action in the axial coordinate system.", null=True
+    tile_row = models.IntegerField(
+        help_text="The grid row of the action in the offset `odd-q` coordinate system.", null=True
     )
     confirmed_at = models.DateTimeField(help_text="When the action was confirmed.", null=True)
     efficiency = models.FloatField(help_text="Efficiency of the action. (between 0 and 1)", default=1.0)
@@ -97,11 +97,11 @@ class RandomEvent(models.Model):
         max_length=255, help_text="Moment of the turn when the event happened.", choices=RandomEventTurnMoment.choices
     )
     event_type = models.CharField(max_length=255, help_text="Type of the event.")
-    tile_coord_q = models.IntegerField(
-        help_text="The q coordinate of the event in the axial coordinate system.", null=True
+    tile_col = models.IntegerField(
+        help_text="The grid column of the event in the offset `odd-q` coordinate system.", null=True
     )
-    tile_coord_r = models.IntegerField(
-        help_text="The r coordinate of the event in the axial coordinate system.", null=True
+    tile_row = models.IntegerField(
+        help_text="The grid row of the event in the offset `odd-q` coordinate system.", null=True
     )
     confirmed_at = models.DateTimeField(help_text="When the event was confirmed.", null=True)
     lightning_damage = models.PositiveIntegerField(help_text="Damage of the lightning.", null=True)
