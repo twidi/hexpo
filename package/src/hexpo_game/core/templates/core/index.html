@@ -1,0 +1,64 @@
+<html>
+    <head>
+        <title>Hexpocalypse Later</title>
+        <style>
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+body {
+    background-color: #333;
+}
+#container {
+    display: flex;
+    height: 100%;
+}
+#controls-area {
+    width: 400px;
+    height: 300px;
+}
+#actions {
+    margin: 10px;
+    margin-top: 200px;
+    display: flex;
+    gap: 10px;
+}
+.action-btn {
+    width: 60px;
+    padding: 10px;
+    color: #ccc;
+    border: 1px solid red;
+    text-align: center;
+    background-color: #000;
+}
+#game-area  {
+    flex: 1;
+}
+        </style>
+    </head>
+    <body>
+        <div id="container">
+            <div id="controls-area">
+                <div id="actions">
+                    <div class="action-btn positioned" id="action-btn-attack">Attack</div>
+                    <div class="action-btn positioned" id="action-btn-defend">Defend</div>
+                    <div class="action-btn positioned" id="action-btn-grow">Grow</div>
+                    <div class="action-btn positioned" id="action-btn-bank">Bank</div>
+                </div>
+            </div>
+            <div id="game-area">
+            </div>
+        </div>
+    <script>
+        let log = '\n';
+        document.querySelectorAll('.positioned').forEach((el) => {
+            const boundingRect = el.getBoundingClientRect();
+            log += `    '${el.id}': ((${boundingRect.left}, ${boundingRect.top}), (${boundingRect.right}, ${boundingRect.bottom})),\n`;
+        });
+        console.log(log);
+    </script>
+    </body>
+</html>
