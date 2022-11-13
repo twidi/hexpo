@@ -28,6 +28,7 @@ dependencies = [
     "aiohttp_sse",
     "django",
     "django-extensions",
+    "pyyaml",
     "websockets",
 ]
 

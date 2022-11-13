@@ -10,8 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.1/ref/settings/
 """
 
+import logging.config
 import os
 from pathlib import Path
+
+import yaml
 
 # Build paths inside the project like this: PROJECT_DIR / 'subdir'.
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -125,3 +128,12 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+config_path = Path(__file__).parent / "logging.yaml"
+try:
+    with config_path.open() as f:
+        config = yaml.safe_load(f.read())
+    logging.config.dictConfig(config)
+except Exception as e:
+    raise RuntimeError(f"Failed to read logging config file {config_path}") from e
