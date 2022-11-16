@@ -8,6 +8,7 @@ We use the "odd-q" grid (flat top and top left tile filled) with the simple offs
 
 from __future__ import annotations
 
+import base64
 import enum
 from dataclasses import dataclass, field
 from math import ceil, sqrt
@@ -213,10 +214,11 @@ class ConcreteGrid:
         Returns
         -------
         RenderedMap
-            The map of the grid as a 3 dimensional numpy array (nb pixels y, nb pixels x, 3 colors) of uint8.
+            The map of the grid as a 3 dimensional numpy array
+            (nb pixels y, nb pixels x, 4 channels (3 colors + alpha) of uint8.
 
         """
-        return np.zeros((ceil(self.max_coordinates.y + 1), ceil(self.max_coordinates.x + 1), 3), dtype=np.uint8)
+        return np.zeros((ceil(self.max_coordinates.y + 1), ceil(self.max_coordinates.x + 1), 4), dtype=np.uint8)
 
     def reset_map(self) -> None:
         """Reset the map to 0."""
@@ -250,7 +252,15 @@ class ConcreteGrid:
         if not tiles:
             return
 
+        hex_map = self.create_map()
+
+        # we only draw the tiles in the alpha channel
         for col, row in tiles:
             cv2.fillConvexPoly(  # pylint: disable=no-member
-                self.map, self.tiles[row][col].points_array, color, cv2.LINE_AA  # pylint: disable=no-member
+                hex_map, self.tiles[row][col].points_array, (0, 0, 0, 255), cv2.LINE_AA  # pylint: disable=no-member
             )
+        # we set the same color
+        mask = np.where(hex_map[:, :, 3] != 0)
+        hex_map[:, :, :3] = color  # sadly we cannot do things like hex_map[mask][:,:3] = color
+        # we update the map with only the pixels that are not fully transparent, i.e. where the tiles are drawn
+        self.map[mask] = hex_map[mask]
