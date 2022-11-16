@@ -10,8 +10,13 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
-from math import sqrt
-from typing import Any, Iterator, NamedTuple, TypeAlias
+from math import ceil, sqrt
+from textwrap import wrap
+from typing import Any, Iterator, NamedTuple, Sequence, TypeAlias
+
+import cv2  # type: ignore[import]
+import numpy as np
+import numpy.typing as npt
 
 
 class Tile(NamedTuple):
@@ -38,6 +43,9 @@ DIRECTION_DIFFERENCES = (
     # odd cols
     [Tile(0, -1), Tile(1, 0), Tile(1, 1), Tile(0, 1), Tile(-1, 1), Tile(-1, 0)],
 )
+
+
+RenderedMap: TypeAlias = npt.NDArray[np.uint8]
 
 
 @dataclass
@@ -82,10 +90,43 @@ class Point(NamedTuple):
     y: float
 
     def __add__(self, other: Any) -> Point:
-        """Add two points."""
+        """Add something to a point to get another one.
+
+        Parameters
+        ----------
+        other : Any
+            - Can be a Point, the values of the other point will be added to the current one.
+            - Any other kind of value will raise a TypeError.
+
+        """
         if isinstance(other, Point):
             return Point(self.x + other.x, self.y + other.y)
         return NotImplemented
+
+
+class Color(NamedTuple):
+    """A color with red/green/blue values."""
+
+    red: int = 0
+    green: int = 0
+    blue: int = 0
+
+    @property
+    def as_hex(self) -> str:
+        """Return the color as a hex string."""
+        return f"#{self.red:02x}{self.green:02x}{self.blue:02x}".upper()
+
+    def as_bgr(self) -> Color:
+        """Return the color as a BGR one."""
+        return Color(self.blue, self.green, self.red)
+
+    @classmethod
+    def from_hex(cls, hex_color: str) -> Color:
+        """Create a color from a hex string."""
+        hex_color = hex_color.removeprefix("#")
+        if len(hex_color) == 3:
+            hex_color = f"{hex_color[0]}{hex_color[0]}{hex_color[1]}{hex_color[1]}{hex_color[2]}{hex_color[2]}"
+        return Color(*[int(part, 16) for part in wrap(hex_color, 2)])
 
 
 TilePoints: TypeAlias = tuple[Point, Point, Point, Point, Point, Point]
@@ -97,6 +138,7 @@ class ConcreteTile(NamedTuple):
     tile: Tile
     center: Point
     points: TilePoints
+    points_array: npt.NDArray[np.int32] = field(repr=False, compare=False, hash=False)
 
 
 @dataclass
@@ -110,6 +152,8 @@ class ConcreteGrid:
     tiles: tuple[tuple[ConcreteTile, ...], ...] = field(
         default_factory=tuple, init=False, repr=False, compare=False, hash=False
     )
+    max_coordinates: Point = field(init=False, repr=False, compare=False, hash=False)
+    map: RenderedMap = field(init=False, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         """Create the concrete grid."""
@@ -120,12 +164,15 @@ class ConcreteGrid:
                 ConcreteTile(
                     tile,
                     center := self.compute_tile_center(tile),
-                    self.compute_tile_points(center),
+                    points := self.compute_tile_points(center),
+                    np.array(tuple((round(point.x), round(point.y)) for point in points), dtype=np.int32),
                 )
                 for tile in col
             )
             for col in self.grid.tiles
         )
+        self.max_coordinates = self.compute_max_coordinates()
+        self.map = self.create_map()
 
     def __iter__(self) -> Iterator[ConcreteTile]:
         """Iterate over the concrete tiles."""
@@ -153,3 +200,57 @@ class ConcreteGrid:
             Point(center.x - self.tile_width * 1 / 2, center.y),
             Point(center.x - self.tile_width * 1 / 4, center.y - self.tile_height * 1 / 2),
         )
+
+    def compute_max_coordinates(self) -> Point:
+        """Return the maximum coordinates of the grid."""
+        last_tile_horizontal = self.tiles[0][-1]
+        last_tile_vertical = self.tiles[-1][1 if self.grid.nb_cols > 1 else 0]
+        return Point(last_tile_horizontal.points[1].x, last_tile_vertical.points[2].y)
+
+    def create_map(self) -> RenderedMap:
+        """Create the map of the grid.
+
+        Returns
+        -------
+        RenderedMap
+            The map of the grid as a 3 dimensional numpy array (nb pixels y, nb pixels x, 3 colors) of uint8.
+
+        """
+        return np.zeros((ceil(self.max_coordinates.y + 1), ceil(self.max_coordinates.x + 1), 3), dtype=np.uint8)
+
+    def reset_map(self) -> None:
+        """Reset the map to 0."""
+        self.map.fill(0)
+
+    def fill_tiles(self, tiles: Sequence[Tile], color: Color) -> None:
+        """Fill the area occupied by the given tiles with the given color.
+
+        Parameters
+        ----------
+        tiles : Sequence[Tile]
+            The tiles to fill.
+        color : Color
+            The color to use.
+
+        Notes
+        -----
+        It's faster with `fillConvexPoly`, and even if it doesn't work with concave polygons, it's not a problem
+        for hexagons.
+        The code to render the same with `fillPoly` is:
+
+        >>> cv2.fillPoly(self.map, np.stack(tuple(
+        ...     self.tiles[row][col].points_array
+        ...     for col, row in tiles
+        ... )), tuple(color), cv2.LINE_AA)
+
+        Optimization idea: generate a mask (values between 0 and 1) of a polygon only once and apply the mask
+        multiplied by the color for each polygon.
+
+        """
+        if not tiles:
+            return
+
+        for col, row in tiles:
+            cv2.fillConvexPoly(  # pylint: disable=no-member
+                self.map, self.tiles[row][col].points_array, color, cv2.LINE_AA  # pylint: disable=no-member
+            )
