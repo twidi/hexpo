@@ -28,7 +28,9 @@ dependencies = [
     "aiohttp_sse",
     "django",
     "django-extensions",
+    "python-dotenv",
     "pyyaml",
+    "twitchio",
     "websockets",
 ]
 
@@ -65,6 +67,7 @@ lint = [
     'pycodestyle',
     'pydocstyle',
     'pylint',
+    'pylint-django',
 ]
 tests = [
     'mock',
@@ -193,6 +196,9 @@ exclude_lines = [
 [tool.pylint.master]
 ignore=[
     "migrations",
+]
+load-plugins=[
+    "pylint_django",
 ]
 
 [tool.pylint.format]

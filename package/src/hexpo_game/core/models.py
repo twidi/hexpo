@@ -26,6 +26,23 @@ class Player(models.Model):
     )
     name = models.CharField(max_length=255, help_text="Name of the player.")
     games = models.ManyToManyField(Game, through="PlayerInGame")
+    allowed = models.BooleanField(default=True, help_text="Whether the player is allowed or not.", db_index=True)
+
+    def __str__(self) -> str:
+        """Return the string representation of the player."""
+        return f"User #{self.external_id} ({self.name})"
+
+    @classmethod
+    def get_not_allowed_ids(cls) -> set[str]:
+        """Return the external IDs of the players that are not allowed.
+
+        Returns
+        -------
+        set[str]
+            The external IDs of the players that are not allowed.
+
+        """
+        return set(Player.objects.filter(allowed=False).values_list("external_id", flat=True))
 
 
 class PlayerInGame(models.Model):
