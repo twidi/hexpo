@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Optional, cast
+from typing import Any, Awaitable, Callable, Optional, TypeAlias, cast
 
 import aiohttp
 from asgiref.sync import sync_to_async
@@ -13,6 +13,9 @@ from ... import django_setup  # noqa: F401  # pylint: disable=unused-import
 from ..models import Player
 
 logger = logging.getLogger(__name__)
+
+
+ClickCallback: TypeAlias = Callable[[str, float, float], None]
 
 
 async def get_twitch_app_token() -> str:
@@ -162,3 +165,59 @@ async def get_user_name(user_id: int, twitch_client: Client) -> str:
         username = user.name
 
     return username
+
+
+async def standalone_runner(catch_clicks: Callable[[str, ClickCallback], Awaitable[Any]]) -> None:
+    """Run the catch_clicks coroutine alone."""
+
+    def on_click(username: str, x_relative: float, y_relative: float) -> None:
+        """Display a message when a click is received."""
+        logger.info("%s clicked at (%s, %s)", username, x_relative, y_relative)
+
+    twitch_app_token = await get_twitch_app_token()
+    await catch_clicks(twitch_app_token, on_click)
+
+
+async def handle_click(
+    user_id: str,
+    x_relative: float,
+    y_relative: float,
+    twitch_client: Client,
+    refused_ids: set[str],
+    callback: ClickCallback,
+) -> None:
+    """Handle a click.
+
+    Parameters
+    ----------
+    user_id: str
+        The user_id of the user who clicked.
+    x_relative: float
+        The x coordinate of the click, relative to the screen size.
+    y_relative: float
+        The y coordinate of the click, relative to the screen size.
+    twitch_client: Client
+        The Twitch client to use to get the username.
+    refused_ids: set[str]
+        The set of refused user IDs.
+    callback: ClickCallback
+        The callback to call when a click from a valid user is received.
+
+    """
+    if user_id in refused_ids:
+        return
+
+    try:
+        final_user_id = await validate_user_id(user_id)
+    except ValueError as exc:
+        logger.error(str(exc), user_id)
+        refused_ids.add(user_id)
+        return
+
+    try:
+        username = await get_user_name(final_user_id, twitch_client)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("Failed to get username for user %s: %s", user_id, str(exc))
+        return
+
+    callback(username, x_relative, y_relative)

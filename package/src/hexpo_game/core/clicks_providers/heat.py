@@ -17,13 +17,7 @@ from typing import Callable
 from websockets.exceptions import ConnectionClosed
 from websockets.legacy.client import connect
 
-from .utils import (
-    get_twitch_app_token,
-    get_twitch_client,
-    get_user_name,
-    init_refused_ids,
-    validate_user_id,
-)
+from .utils import get_twitch_client, handle_click, init_refused_ids, standalone_runner
 
 CHANNEL_ID = 229962991
 WS_URL = f"wss://heat-api.j38.net/channel/{CHANNEL_ID}"
@@ -54,7 +48,7 @@ def get_data(raw_data: bytes | str) -> tuple[str, float, float]:
         - The specific data that caused the error to be raised.
         - The user id found inn the message if any (for example to store it to ignore its next messages)
     """
-    # pylint warns us that we have a unused `%s` in the error message, but it's to let the called handled the message +
+    # pylint warns us that we have an unused `%s` in the error message, but it's to let the called handled the message +
     # value like it wants (using `%` or not, for example with logging)
     # pylint: disable=raising-format-tuple
 
@@ -124,45 +118,18 @@ async def catch_clicks(twitch_app_token: str, callback: Callable[[str, float, fl
                 # logger.debug("Received: %s", raw_data)
                 try:
                     try:
-                        user_id_str, x_relative, y_relative = get_data(raw_data)
+                        user_id, x_relative, y_relative = get_data(raw_data)
                     except ValueError as exc:
                         logger.error(str(exc.args[0]), *exc.args[1:])
                         if len(exc.args) > 2:
                             refused_ids.add(exc.args[2])
                         continue
 
-                    if user_id_str in refused_ids:
-                        continue
-
-                    try:
-                        user_id = await validate_user_id(user_id_str)
-                    except ValueError as exc:
-                        logger.error(str(exc), user_id_str)
-                        refused_ids.add(user_id_str)
-                        continue
-
-                    try:
-                        username = await get_user_name(user_id, twitch_client)
-                    except Exception as exc:  # pylint: disable=broad-except
-                        logger.error("Failed to get username for user %s: %s", user_id, str(exc))
-                        continue
-
-                    callback(username, x_relative, y_relative)
+                    await handle_click(user_id, x_relative, y_relative, twitch_client, refused_ids, callback)
 
                 except Exception:  # pylint: disable=broad-except
                     logger.exception("Unhandled exception while trying to process WS message: %s", raw_data)
 
 
-async def main() -> None:
-    """Run the catch_clicks coroutine alone."""
-
-    def on_click(username: str, x_relative: float, y_relative: float) -> None:
-        """Display a message when a click is received."""
-        logger.info("%s clicked at (%s, %s)", username, x_relative, y_relative)
-
-    twitch_app_token = await get_twitch_app_token()
-    await catch_clicks(twitch_app_token, on_click)
-
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(standalone_runner(catch_clicks))
