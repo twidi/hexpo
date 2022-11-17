@@ -264,3 +264,8 @@ class ConcreteGrid:
         hex_map[:, :, :3] = color  # sadly we cannot do things like hex_map[mask][:,:3] = color
         # we update the map with only the pixels that are not fully transparent, i.e. where the tiles are drawn
         self.map[mask] = hex_map[mask]
+
+    def map_as_base64_png(self) -> bytes:
+        """Return the map as an image encoded in base64."""
+        array = cv2.imencode(".png", self.map)[1]  # pylint: disable=no-member
+        return base64.b64encode(array.tobytes())

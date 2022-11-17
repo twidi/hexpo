@@ -227,3 +227,17 @@ def test_fill_many_areas():
     grid.map[8:19, 0:12] = 0
     grid.map[25:37, 14:26] = 0
     np.testing.assert_equal(grid.map, np.zeros((40, 26, 4), dtype=np.int32))
+
+
+def test_map_as_base64_png():
+    """Test rendering map as a base64 encoded PNG."""
+    grid = ConcreteGrid(Grid(3, 4), 5.0)
+    grid.reset_map()
+    grid.fill_tiles([Tile(0, 1)], Color(60, 240, 120).as_bgr())
+    grid.fill_tiles([Tile(2, 3)], Color(240, 120, 60).as_bgr())
+
+    # pylint: disable=line-too-long
+    # fmt: off
+    assert grid.map_as_base64_png() == b'iVBORw0KGgoAAAANSUhEUgAAABoAAAAoCAYAAADg+OpoAAABmElEQVRYCb3Bv2pUURDA4d+sYqVkOklg2SJmsbGxUIgTRImYR/BBFKaw0+KAvoWNTyARg3/wKGhhYyOsEhE3YDcBiyCiXnBBwnK94Z7lfJ9QiVCJUIlQiVCJUIlQiVCJMGPhy8AKMOCwvaxpSiGhYeFD4AvtzmRNnyggNCx8G7hOu8dZ0xYFxMLXgW3gFP93KWt6TU9i4U+ATbrtZE3X6Eks/DdHt5E1ZXoQC38OXKbbC2ArazqgB7HwK8BTul3Nmp7Rk1j4CWAH2KDdS2Aza/pBT0LDwleBj7QbZ00TCggzFj4ChsAv/hkA06xpl0JCJUIlQiVCJUIlQiXCgoTbMrACDPhrT1OeMiMsQLiNgM/MG2vKExpCoXA7DXwAlHkBnNWUvwmFwu0NcIF2bzXli0KBcLsD3KbbXaGncFsHXnFEQk/hdhx4ANyg20OhQLgNgffAEu32gXNCoXC7Cdyj3S1N+b5QKNxOAu+ANeZNgPOa8ndhAcJtFXgEjDlsrClPaAgLEm4jYAT8BI4BXzXlXWaESoRKhEr+AGY/cf+pFmQeAAAAAElFTkSuQmCC'
+    # fmt: on
+    # pylint: enable=line-too-long
