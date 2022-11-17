@@ -63,7 +63,7 @@ def get_data(raw_data: bytes | str) -> tuple[str, str, float, float]:
         user_id = data["data"]["user"].get("id", data["data"]["user"]["opaqueId"])
         # that's a lot of data :D
         x_relative = data["data"]["data"]["percentX"]
-        y_relative = data["data"]["data"]["percentX"]
+        y_relative = data["data"]["data"]["percentY"]
     except KeyError as exc:
         raise ValueError("Invalid data: %s", data, user_id) from exc
 
