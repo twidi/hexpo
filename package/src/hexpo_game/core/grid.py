@@ -12,6 +12,7 @@ import base64
 import enum
 from dataclasses import dataclass, field
 from math import ceil, floor, sqrt
+from random import randint
 from textwrap import wrap
 from typing import Any, Iterator, NamedTuple, Sequence, TypeAlias
 
@@ -209,6 +210,11 @@ class Color(NamedTuple):
             hex_color = f"{hex_color[0]}{hex_color[0]}{hex_color[1]}{hex_color[1]}{hex_color[2]}{hex_color[2]}"
         return Color(*[int(part, 16) for part in wrap(hex_color, 2)])
 
+    @classmethod
+    def random(cls) -> Color:
+        """Create a random color."""
+        return Color(randint(0, 255), randint(0, 255), randint(0, 255))
+
 
 TilePoints: TypeAlias = tuple[Point, Point, Point, Point, Point, Point]
 
@@ -345,10 +351,10 @@ class ConcreteGrid:
         # we update the map with only the pixels that are not fully transparent, i.e. where the tiles are drawn
         self.map[mask] = hex_map[mask]
 
-    def map_as_base64_png(self) -> bytes:
+    def map_as_base64_png(self) -> str:
         """Return the map as an image encoded in base64."""
         array = cv2.imencode(".png", self.map)[1]  # pylint: disable=no-member
-        return base64.b64encode(array.tobytes())
+        return base64.b64encode(array.tobytes()).decode()
 
     @classmethod
     def compute_tile_size(cls, nb_cols: int, nb_rows: int, width: int, height: int) -> float:

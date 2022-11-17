@@ -4,6 +4,9 @@ from aiohttp import web
 from aiohttp.web import Response
 from django.template import loader
 
+from hexpo_game.core.click_handler import COORDINATES
+from hexpo_game.core.grid import Color, ConcreteGrid, Grid
+
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 
 
@@ -19,7 +22,21 @@ from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 #
 async def index(request: web.Request) -> web.Response:  # pylint: disable=unused-argument
     """Display the index page."""
-    html = loader.render_to_string("core/index.html")
+    area = COORDINATES["grid-area"]
+    width = area[1][0] - area[0][0]
+    height = area[1][1] - area[0][1]
+    nb_cols, nb_rows, tile_size = ConcreteGrid.compute_grid_size(1000, width, height)
+    grid = ConcreteGrid(Grid(nb_cols, nb_rows), tile_size)
+
+    for tile in grid:
+        color = Color.random()
+        grid.fill_tiles([tile.tile], color)
+
+    context = {
+        "grid_base64": grid.map_as_base64_png(),
+    }
+
+    html = loader.render_to_string("core/index.html", context)
     return Response(text=html, content_type="text/html")
 
 

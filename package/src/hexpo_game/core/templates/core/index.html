@@ -60,6 +60,9 @@ body {
     align-items: center;
     /*font-size: 90;*/
 }
+#grid {
+    opacity: 0.25;
+}
 
 #right-bar {
     grid-area: right-bar;
@@ -87,7 +90,9 @@ body {
                     <div class="action-btn positioned" id="action-btn-bank">Bank</div>
                 </div>
             </div>
-            <div id="grid-area" class="positioned"></div>
+            <div id="grid-area" class="positioned">
+                <img id="grid" src="data:image/png;base64,{{ grid_base64 }}">
+            </div>
             <div id="right-bar"></div>
             <div id="bottom-bar"></div>
         </div>

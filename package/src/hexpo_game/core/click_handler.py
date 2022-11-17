@@ -4,10 +4,10 @@ from typing import Optional
 
 SCREEN_SIZE = (2560, 1440)
 COORDINATES: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {  # ((left, top), (right, bottom))
-    'action-btn-attack': ((10, 210), (92, 251)),
-    'action-btn-defend': ((102, 210), (184, 251)),
-    'action-btn-grow': ((194, 210), (276, 251)),
-    'action-btn-bank': ((286, 210), (368, 251)),
+    "action-btn-attack": ((10, 210), (92, 251)),
+    "action-btn-defend": ((102, 210), (184, 251)),
+    "action-btn-grow": ((194, 210), (276, 251)),
+    "action-btn-bank": ((286, 210), (368, 251)),
     "grid-area": ((400, 216), (2176, 1224)),
 }
 
