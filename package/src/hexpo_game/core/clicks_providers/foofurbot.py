@@ -9,10 +9,12 @@ See also a http fork: https://dashboard.twitch.tv/extensions/qillvtd91t2sywoxafy
 import asyncio
 import json
 import logging
+from contextlib import suppress
 from functools import partial
 from typing import Callable
 
 from twitchio import Client  # type: ignore[import]
+from websockets.exceptions import ConnectionClosedError
 from websockets.legacy.server import WebSocketServerProtocol, serve
 
 from hexpo_game.core.clicks_providers.utils import (
@@ -84,24 +86,26 @@ async def on_connection(
     callback: Callable[[str, float, float], None],
 ) -> None:
     """Handle message received via the websocket."""
-    async for raw_data in websocket:
-        try:
-
+    # connection is closed relatively quickly, so we don't need to log this
+    with suppress(ConnectionClosedError):
+        async for raw_data in websocket:
             try:
-                user_id, event, x_relative, y_relative = get_data(raw_data)
-            except ValueError as exc:
-                logger.error(str(exc.args[0]), exc.args[1])
-                if len(exc.args) > 2:
-                    refused_ids.add(exc.args[2])
-                continue
 
-            if event != "click":
-                continue
+                try:
+                    user_id, event, x_relative, y_relative = get_data(raw_data)
+                except ValueError as exc:
+                    logger.error(str(exc.args[0]), exc.args[1])
+                    if len(exc.args) > 2:
+                        refused_ids.add(exc.args[2])
+                    continue
 
-            await handle_click(user_id, x_relative, y_relative, twitch_client, refused_ids, callback)
+                if event != "click":
+                    continue
 
-        except Exception:  # pylint: disable=broad-except
-            logger.exception("Unhandled exception while trying to process WS message: %s", raw_data)
+                await handle_click(user_id, x_relative, y_relative, twitch_client, refused_ids, callback)
+
+            except Exception:  # pylint: disable=broad-except
+                logger.exception("Unhandled exception while trying to process WS message: %s", raw_data)
 
 
 async def catch_clicks(twitch_app_token: str, callback: Callable[[str, float, float], None]) -> None:
