@@ -12,18 +12,35 @@ html, body {
 body {
     background-color: #333;
 }
-#container {
-    display: flex;
+
+#main-container {
     height: 100%;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 400px 1fr 15%;
+    grid-template-rows: 15% 1fr 15%;
+    grid-column-gap: 0;
+    grid-row-gap: 0;
+    grid-template-areas:
+        "left-bar top-bar top-bar"
+        "left-bar grid-area right-bar"
+        "left-bar bottom-bar bottom-bar";
 }
-#controls-area {
-    width: 400px;
-    height: 300px;
-}
-#actions {
-    margin: 10px;
-    margin-top: 200px;
+
+#left-bar {
+    grid-area: left-bar;
+    background-color: #2226;
     display: flex;
+    flex-direction: column;
+}
+
+#info {
+    height: 200px;
+}
+
+#actions {
+    display: flex;
+    margin: 10px;
     gap: 10px;
 }
 .action-btn {
@@ -34,32 +51,34 @@ body {
     text-align: center;
     background-color: #000;
 }
-#game-area-container {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 1fr 15%;
-    grid-template-rows: 15% 1fr 15%;
-    grid-column-gap: 0;
-    grid-row-gap: 0;
-    grid-template-areas:
-        "top-bar top-bar"
-        "game-area right-bar"
-        "bottom-bar bottom-bar";
-}
 
-#game-area {
-    grid-area: game-area;
+#grid-area {
+    grid-area: grid-area;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
 }
 
+#right-bar {
+    grid-area: right-bar;
+}
+#top-bar {
+    grid-area: top-bar;
+}
+#bottom-bar {
+    grid-area: bottom-bar;
+}
+
         </style>
     </head>
     <body>
-        <div id="container">
-            <div id="controls-area">
+        <div id="main-container">
+            <div id="top-bar"></div>
+            <div id="left-bar">
+                <div id="info">
+                    blah blah blah
+                </div>
                 <div id="actions">
                     <div class="action-btn positioned" id="action-btn-attack">Attack</div>
                     <div class="action-btn positioned" id="action-btn-defend">Defend</div>
@@ -67,12 +86,9 @@ body {
                     <div class="action-btn positioned" id="action-btn-bank">Bank</div>
                 </div>
             </div>
-            <div id="game-area-container">
-                <div id="top-bar"></div>
-                <div id="game-area" class="positioned"></div>
-                <div id="right-bar"></div>
-                <div id="bottom-bar"></div>
-            </div>
+            <div id="grid-area" class="positioned"></div>
+            <div id="right-bar"></div>
+            <div id="bottom-bar"></div>
         </div>
     <script>
         /**
