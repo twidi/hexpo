@@ -11,7 +11,7 @@ from __future__ import annotations
 import base64
 import enum
 from dataclasses import dataclass, field
-from math import ceil, sqrt
+from math import ceil, floor, sqrt
 from textwrap import wrap
 from typing import Any, Iterator, NamedTuple, Sequence, TypeAlias
 
@@ -44,6 +44,9 @@ DIRECTION_DIFFERENCES = (
     # odd cols
     [Tile(0, -1), Tile(1, 0), Tile(1, 1), Tile(0, 1), Tile(-1, 1), Tile(-1, 0)],
 )
+
+# height = width * HEX_WIDTH_TO_HEIGHT_RATIO
+HEX_WIDTH_TO_HEIGHT_RATIO = sqrt(3) / 2
 
 
 RenderedMap: TypeAlias = npt.NDArray[np.uint8]
@@ -82,6 +85,83 @@ class Grid:
             if 0 <= col < self.nb_cols and 0 <= row < self.nb_rows:
                 neighbors.append(self.tiles[row][col])
         return tuple(neighbors)
+
+    @classmethod
+    def compute_grid_size(cls, nb_tiles: int, width_to_height_ratio: float) -> tuple[int, int]:
+        # pylint: disable=line-too-long
+        """Compute the size of the grid (nb cols, nb_rows) to fit the given number of tiles.
+
+        Parameters
+        ----------
+        nb_tiles: int
+            The approximate number of tiles we want in the grid.
+        width_to_height_ratio: float
+            The ratio between the height and the width of a tile.
+            height = width * width_to_height_ratio
+
+        Returns
+        -------
+        tuple[int, int]
+            The size of the grid (nb cols, nb_rows) to fit the given number of tiles respecting the given ratio.
+
+        Notes
+        -----
+        Calculus:
+
+        # Assuming the tile size is 1, we have:
+        height = (nb_rows * 2 + 1) * HEX_WIDTH_TO_HEIGHT_RATIO
+        width = (nb_cols - 1) * 1.5 + 2 = nb_cols * 1.5 + 0.5
+
+        # We also know that:
+        nb_cols * nb_rows = nb_tiles
+        width * width_to_height_ratio = height
+
+        # So we can reduce:
+        (nb_cols * 1.5 + 0.5) * width_to_height_ratio = height
+        nb_cols * 1.5 + 0.5 == height / width_to_height_ratio
+        nb_cols * 1.5 = height / width_to_height_ratio - 0.5
+        nb_cols = (height / width_to_height_ratio - 0.5) / 1.5
+
+        # And we get this first equation:
+        nb_cols = (((nb_rows * 2 + 1) * HEX_WIDTH_TO_HEIGHT_RATIO) / width_to_height_ratio - 0.5) / 1.5
+        # And this other one from above
+        nb_cols = nb_tiles / nb_rows
+
+        # So we can solve for nb_rows:
+        (((nb_rows * 2 + 1) * HEX_WIDTH_TO_HEIGHT_RATIO) / width_to_height_ratio - 0.5) / 1.5 = nb_tiles / nb_rows
+        ((nb_rows * 2 + 1) * HEX_WIDTH_TO_HEIGHT_RATIO) / width_to_height_ratio - 0.5 = nb_tiles / nb_rows * 1.5
+        ((nb_rows * 2 + 1) * HEX_WIDTH_TO_HEIGHT_RATIO) / width_to_height_ratio = nb_tiles / nb_rows * 1.5 + 0.5
+        (nb_rows * 2 + 1) * HEX_WIDTH_TO_HEIGHT_RATIO = nb_tiles / nb_rows * 1.5 * width_to_height_ratio + 0.5 * width_to_height_ratio
+        nb_rows * 2 + 1 = nb_tiles / nb_rows * 1.5 * width_to_height_ratio / HEX_WIDTH_TO_HEIGHT_RATIO + 0.5 * width_to_height_ratio / HEX_WIDTH_TO_HEIGHT_RATIO
+        nb_rows² * 2 + 1 = nb_tiles * 1.5 * width_to_height_ratio / HEX_WIDTH_TO_HEIGHT_RATIO + nb_rows * (0.5 * width_to_height_ratio / HEX_WIDTH_TO_HEIGHT_RATIO)
+        nb_rows² * 2 = nb_tiles * 1.5 * width_to_height_ratio / HEX_WIDTH_TO_HEIGHT_RATIO + nb_rows * (0.5 * width_to_height_ratio / HEX_WIDTH_TO_HEIGHT_RATIO) - 1
+
+        # Which give us this second degree equation (ax2 + bx + c = 0):
+        nb_rows² * 2 + nb_rows * (-0.5 * width_to_height_ratio / HEX_WIDTH_TO_HEIGHT_RATIO) + nb_tiles * - 1.5 * width_to_height_ratio / HEX_WIDTH_TO_HEIGHT_RATIO + 1 = 0
+
+        # Which we can solve with the quadratic formula starting by computing d with:
+        a = 2
+        b = (-0.5 * width_to_height_ratio / HEX_WIDTH_TO_HEIGHT_RATIO)
+        c = nb_tiles * - 1.5 * width_to_height_ratio / HEX_WIDTH_TO_HEIGHT_RATIO + 1
+
+        # So we get d:
+        d = b² − 4 * a * c
+
+        # We can now get the maximum value of nb_rows:
+        nb_rows = (-b + sqrt(d)) / (2 * a)
+
+        # And we deduce the nb of cols:
+        nb_cols = nb_tiles / nb_rows
+
+        """
+        # pylint: enable=line-too-long
+        val_a = 2
+        val_b = -0.5 * width_to_height_ratio / HEX_WIDTH_TO_HEIGHT_RATIO
+        val_c = nb_tiles * -1.5 * width_to_height_ratio / HEX_WIDTH_TO_HEIGHT_RATIO + 1
+        delta = val_a**2 - 4 * val_a * val_c
+        nb_rows = (-val_b + sqrt(delta)) / (2 * val_a)
+        nb_cols = nb_tiles / nb_rows
+        return floor(nb_cols), floor(nb_rows)
 
 
 class Point(NamedTuple):
@@ -269,3 +349,21 @@ class ConcreteGrid:
         """Return the map as an image encoded in base64."""
         array = cv2.imencode(".png", self.map)[1]  # pylint: disable=no-member
         return base64.b64encode(array.tobytes())
+
+    @classmethod
+    def compute_grid_size(cls, nb_tiles: int, width: int, height: int) -> tuple[int, int, float]:
+        """Compute the size of the grid (nb cols, rows, tile size) to fit the given number of tiles in the given area.
+
+        Parameters
+        ----------
+        nb_tiles: int
+            The approximate number of tiles we want in the grid.
+        width: int
+            The width of the area.
+        height: int
+            The height of the area.
+
+        """
+        nb_cols, nb_rows = Grid.compute_grid_size(nb_tiles, height / width)
+        tile_size = min(width / (nb_cols * 3 / 2 + 1 / 2), height / (nb_rows * sqrt(3) + 1))
+        return nb_cols, nb_rows, tile_size

@@ -241,3 +241,14 @@ def test_map_as_base64_png():
     assert grid.map_as_base64_png() == b'iVBORw0KGgoAAAANSUhEUgAAABoAAAAoCAYAAADg+OpoAAABmElEQVRYCb3Bv2pUURDA4d+sYqVkOklg2SJmsbGxUIgTRImYR/BBFKaw0+KAvoWNTyARg3/wKGhhYyOsEhE3YDcBiyCiXnBBwnK94Z7lfJ9QiVCJUIlQiVCJUIlQiVCJMGPhy8AKMOCwvaxpSiGhYeFD4AvtzmRNnyggNCx8G7hOu8dZ0xYFxMLXgW3gFP93KWt6TU9i4U+ATbrtZE3X6Eks/DdHt5E1ZXoQC38OXKbbC2ArazqgB7HwK8BTul3Nmp7Rk1j4CWAH2KDdS2Aza/pBT0LDwleBj7QbZ00TCggzFj4ChsAv/hkA06xpl0JCJUIlQiVCJUIlQiXCgoTbMrACDPhrT1OeMiMsQLiNgM/MG2vKExpCoXA7DXwAlHkBnNWUvwmFwu0NcIF2bzXli0KBcLsD3KbbXaGncFsHXnFEQk/hdhx4ANyg20OhQLgNgffAEu32gXNCoXC7Cdyj3S1N+b5QKNxOAu+ANeZNgPOa8ndhAcJtFXgEjDlsrClPaAgLEm4jYAT8BI4BXzXlXWaESoRKhEr+AGY/cf+pFmQeAAAAAElFTkSuQmCC'
     # fmt: on
     # pylint: enable=line-too-long
+
+
+def test_compute_grid_size():
+    """Test computing the grid size."""
+    nb_cols, nb_rows, tile_size = ConcreteGrid.compute_grid_size(1000, 1920, 1280)
+    assert nb_cols == 41
+    assert nb_rows == 24
+    assert tile_size == pytest.approx(30.068674469320158)
+    grid = ConcreteGrid(Grid(nb_cols, nb_rows), tile_size)
+    assert grid.max_coordinates.x == pytest.approx(1864.2578170978495)
+    assert grid.max_coordinates.y == pytest.approx(1275.9715614792356)
