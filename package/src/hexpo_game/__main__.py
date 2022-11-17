@@ -9,9 +9,12 @@ from aiohttp import web
 
 from . import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .core.click_handler import get_click_target
+from .core.clicks_providers.foofurbot import (  # noqa: E402
+    catch_clicks as foofurbot_catch_clicks,
+)
 
 # pylint: disable=wrong-import-position
-from .core.clicks_providers.heat import catch_clicks  # noqa: E402
+from .core.clicks_providers.heat import catch_clicks as heat_catch_clicks  # noqa: E402
 from .core.clicks_providers.utils import get_twitch_app_token  # noqa: E402
 from .core.views import add_routes  # noqa: E402
 
@@ -33,7 +36,8 @@ def main() -> None:
     twitch_app_token = asyncio.run(get_twitch_app_token())
 
     async def on_web_startup(app: web.Application) -> None:  # pylint: disable=unused-argument
-        async_tasks.append(ensure_future(catch_clicks(twitch_app_token, on_click)))
+        async_tasks.append(ensure_future(heat_catch_clicks(twitch_app_token, on_click)))
+        async_tasks.append(ensure_future(foofurbot_catch_clicks(twitch_app_token, on_click)))
 
     async def on_web_shutdown(app: web.Application) -> None:  # pylint: disable=unused-argument
         for task in async_tasks:
