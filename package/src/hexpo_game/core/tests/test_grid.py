@@ -243,6 +243,12 @@ def test_map_as_base64_png():
     # pylint: enable=line-too-long
 
 
+def test_compute_tile_size():
+    """Test computing the tile size."""
+    tile_size = ConcreteGrid.compute_tile_size(41, 24, 1920, 1280)
+    assert tile_size == pytest.approx(30.068674469320158)
+
+
 def test_compute_grid_size():
     """Test computing the grid size."""
     nb_cols, nb_rows, tile_size = ConcreteGrid.compute_grid_size(1000, 1920, 1280)

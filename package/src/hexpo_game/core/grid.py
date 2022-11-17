@@ -351,6 +351,29 @@ class ConcreteGrid:
         return base64.b64encode(array.tobytes())
 
     @classmethod
+    def compute_tile_size(cls, nb_cols: int, nb_rows: int, width: int, height: int) -> float:
+        """Compute the size of a tile to fit the given number of tiles in the given area.
+
+        Parameters
+        ----------
+        nb_cols: int
+            The number of columns in the grid.
+        nb_rows: int
+            The number of rows in the grid.
+        width: int
+            The width of the area.
+        height: int
+            The height of the area.
+
+        Returns
+        -------
+        float
+            The size of a tile.
+
+        """
+        return min(width / (nb_cols * 1.5 + 0.5), height / (nb_rows * sqrt(3) + 1))
+
+    @classmethod
     def compute_grid_size(cls, nb_tiles: int, width: int, height: int) -> tuple[int, int, float]:
         """Compute the size of the grid (nb cols, rows, tile size) to fit the given number of tiles in the given area.
 
@@ -365,5 +388,5 @@ class ConcreteGrid:
 
         """
         nb_cols, nb_rows = Grid.compute_grid_size(nb_tiles, height / width)
-        tile_size = min(width / (nb_cols * 3 / 2 + 1 / 2), height / (nb_rows * sqrt(3) + 1))
+        tile_size = cls.compute_tile_size(nb_cols, nb_rows, width, height)
         return nb_cols, nb_rows, tile_size
