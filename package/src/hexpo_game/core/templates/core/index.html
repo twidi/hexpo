@@ -34,9 +34,27 @@ body {
     text-align: center;
     background-color: #000;
 }
-#game-area  {
-    flex: 1;
+#game-area-container {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 15%;
+    grid-template-rows: 15% 1fr 15%;
+    grid-column-gap: 0;
+    grid-row-gap: 0;
+    grid-template-areas:
+        "top-bar top-bar"
+        "game-area right-bar"
+        "bottom-bar bottom-bar";
 }
+
+#game-area {
+    grid-area: game-area;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
         </style>
     </head>
     <body>
@@ -49,16 +67,23 @@ body {
                     <div class="action-btn positioned" id="action-btn-bank">Bank</div>
                 </div>
             </div>
-            <div id="game-area">
+            <div id="game-area-container">
+                <div id="top-bar"></div>
+                <div id="game-area" class="positioned"></div>
+                <div id="right-bar"></div>
+                <div id="bottom-bar"></div>
             </div>
         </div>
     <script>
+        /**
         let log = '\n';
         document.querySelectorAll('.positioned').forEach((el) => {
             const boundingRect = el.getBoundingClientRect();
             log += `    '${el.id}': ((${boundingRect.left}, ${boundingRect.top}), (${boundingRect.right}, ${boundingRect.bottom})),\n`;
         });
+        document.querySelector('#game-area').innerHTML = log;
         console.log(log);
+         **/
     </script>
     </body>
 </html>
