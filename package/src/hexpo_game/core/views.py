@@ -1,11 +1,10 @@
 """Views for the hexpo_game.core app."""
 
-import django
 from aiohttp import web
 from aiohttp.web import Response
 from django.template import loader
 
-django.setup()
+from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 
 
 # async def sse(request):
