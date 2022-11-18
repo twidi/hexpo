@@ -4,15 +4,16 @@ import logging
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES, get_click_target
+from .constants import NB_COLORS, PALETTE
 from .grid import ConcreteGrid, Grid
-from .models import Game
+from .models import Game, OccupiedTile, Player, PlayerInGame
 from .types import Point
 
 logger = logging.getLogger("hexpo_game.game")
 
 
-def on_click(  # pylint: disable=unused-argument
-    username: str, x_relative: float, y_relative: float, game: Game, grid: ConcreteGrid
+async def on_click(  # pylint: disable=unused-argument
+    player: Player, x_relative: float, y_relative: float, game: Game, grid: ConcreteGrid
 ) -> None:
     """Display a message when a click is received."""
     target, point = get_click_target(x_relative, y_relative)
@@ -20,9 +21,29 @@ def on_click(  # pylint: disable=unused-argument
         area = COORDINATES["grid-area"]
         tile = grid.get_tile_at_point(Point(x=point.x - area[0][0], y=point.y - area[0][1]))
         if tile is not None:
-            logger.info("%s clicked on %s (%s)", username, tile, point)
+            logger.info("%s clicked on %s (%s)", player.name, tile, point)
+            color_index = player.id % NB_COLORS
+
+            await PlayerInGame.objects.aget_or_create(
+                player=player,
+                game=game,
+                defaults=dict(  # noqa: C408
+                    started_turn=0,
+                    start_tile_col=0,
+                    start_tile_row=0,
+                    color=PALETTE[color_index].as_hex,
+                ),
+            )
+            await OccupiedTile.objects.aupdate_or_create(
+                game=game,
+                col=tile.col,
+                row=tile.row,
+                defaults=dict(  # noqa: C408
+                    player=player,
+                ),
+            )
             return
-    logger.info("%s clicked on %s (%s)", username, target, point)
+    logger.info("%s clicked on %s (%s)", player.name, target, point)
 
 
 def get_game_and_grid() -> tuple[Game, ConcreteGrid]:

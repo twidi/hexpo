@@ -7,7 +7,7 @@ from datetime import timedelta
 from django.db import models
 from django.utils import timezone
 
-from .constants import ActionType, RandomEventTurnMoment, PALETTE
+from .constants import NB_COLORS, ActionType, RandomEventTurnMoment
 
 
 class Game(models.Model):
@@ -29,7 +29,7 @@ class Game(models.Model):
 
     @classmethod
     def get_current(
-        cls, nb_cols: int, nb_rows: int, max_players_allowed: int = len(PALETTE), turn_duration_minutes: int = 5
+        cls, nb_cols: int, nb_rows: int, max_players_allowed: int = NB_COLORS, turn_duration_minutes: int = 5
     ) -> Game:
         """Get the current game (or create one if no current one).
 

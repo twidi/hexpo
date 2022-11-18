@@ -12,12 +12,17 @@ import asyncio
 import json
 import logging
 import re
-from typing import Callable
 
 from websockets.exceptions import ConnectionClosed
 from websockets.legacy.client import connect
 
-from .utils import get_twitch_client, handle_click, init_refused_ids, standalone_runner
+from .utils import (
+    ClickCallback,
+    get_twitch_client,
+    handle_click,
+    init_refused_ids,
+    standalone_runner,
+)
 
 CHANNEL_ID = 229962991
 WS_URL = f"wss://heat-api.j38.net/channel/{CHANNEL_ID}"
@@ -89,13 +94,15 @@ def get_data(raw_data: bytes | str) -> tuple[str, float, float]:
     return user_id, x_relative, y_relative
 
 
-async def catch_clicks(twitch_app_token: str, callback: Callable[[str, float, float], None]) -> None:
+async def catch_clicks(twitch_app_token: str, callback: ClickCallback) -> None:
     """Catch clicks on the screen and print the targets.
 
     Parameters
     ----------
     twitch_app_token: str
         The Twitch app token to use.
+    callback: ClickCallback
+        The callback to call when a click is received.
 
     Raises
     ------

@@ -11,13 +11,13 @@ import json
 import logging
 from contextlib import suppress
 from functools import partial
-from typing import Callable
 
 from twitchio import Client  # type: ignore[import]
 from websockets.exceptions import ConnectionClosedError
 from websockets.legacy.server import WebSocketServerProtocol, serve
 
 from hexpo_game.core.clicks_providers.utils import (
+    ClickCallback,
     get_twitch_client,
     handle_click,
     init_refused_ids,
@@ -83,7 +83,7 @@ async def on_connection(
     websocket: WebSocketServerProtocol,
     twitch_client: Client,
     refused_ids: set[str],
-    callback: Callable[[str, float, float], None],
+    callback: ClickCallback,
 ) -> None:
     """Handle message received via the websocket."""
     # connection is closed relatively quickly, so we don't need to log this
@@ -108,7 +108,7 @@ async def on_connection(
                 logger.exception("Unhandled exception while trying to process WS message: %s", raw_data)
 
 
-async def catch_clicks(twitch_app_token: str, callback: Callable[[str, float, float], None]) -> None:
+async def catch_clicks(twitch_app_token: str, callback: ClickCallback) -> None:
     """Listen on the websocket forever."""
     twitch_client = await get_twitch_client(twitch_app_token)
     refused_ids: set[str] = await init_refused_ids()

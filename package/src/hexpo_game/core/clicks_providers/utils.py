@@ -1,8 +1,7 @@
 """Utils functions to be used by the different clicks providers."""
-
 import logging
 import os
-from typing import Any, Awaitable, Callable, Optional, TypeAlias, cast
+from typing import Awaitable, Callable, Optional, TypeAlias, cast
 
 import aiohttp
 from asgiref.sync import sync_to_async
@@ -15,7 +14,7 @@ from ..models import Player
 logger = logging.getLogger(__name__)
 
 
-ClickCallback: TypeAlias = Callable[[str, float, float], None]
+ClickCallback: TypeAlias = Callable[[Player, float, float], Awaitable[None]]
 
 
 async def get_twitch_app_token() -> str:
@@ -130,8 +129,8 @@ async def fetch_user_name(user_id: int, twitch_client: Client) -> str:
         raise ValueError("Failed to get user %s from Twitch API") from exc
 
 
-async def get_user_name(user_id: int, twitch_client: Client) -> str:
-    """Get the username of a user from their ID.
+async def get_player(user_id: int, twitch_client: Client) -> Player:
+    """Get the player from their twitch ID.
 
     Parameters
     ----------
@@ -142,37 +141,35 @@ async def get_user_name(user_id: int, twitch_client: Client) -> str:
 
     Returns
     -------
-    str
-        The user's name.
+    Player
+        The player we got or created for the given user ID.
 
     """
-    user: Optional[Player]
+    player: Optional[Player]
     try:
-        user = await Player.objects.aget(external_id=user_id)
+        player = await Player.objects.aget(external_id=user_id)
     except Player.DoesNotExist:
-        user = username = None
+        player = username = None
     else:
-        username = user.name
+        username = player.name
 
-    if user is None or not username:
+    if player is None or not username:
         username = await fetch_user_name(user_id, twitch_client)
-        if user is None:
-            await Player.objects.acreate(external_id=user_id, name=username)
+        if player is None:
+            player = await Player.objects.acreate(external_id=user_id, name=username)
         else:
-            user.name = username
-            await user.asave(update_fields=["name"])  # type: ignore[attr-defined]
-    else:
-        username = user.name
+            player.name = username
+            await player.asave(update_fields=["name"])  # type: ignore[attr-defined]
 
-    return username
+    return player
 
 
-async def standalone_runner(catch_clicks: Callable[[str, ClickCallback], Awaitable[Any]]) -> None:
+async def standalone_runner(catch_clicks: Callable[[str, ClickCallback], Awaitable[None]]) -> None:
     """Run the catch_clicks coroutine alone."""
 
-    def on_click(username: str, x_relative: float, y_relative: float) -> None:
+    async def on_click(player: Player, x_relative: float, y_relative: float) -> None:
         """Display a message when a click is received."""
-        logger.info("%s clicked at (%s, %s)", username, x_relative, y_relative)
+        logger.info("%s clicked at (%s, %s)", player.name, x_relative, y_relative)
 
     twitch_app_token = await get_twitch_app_token()
     await catch_clicks(twitch_app_token, on_click)
@@ -215,9 +212,9 @@ async def handle_click(
         return
 
     try:
-        username = await get_user_name(final_user_id, twitch_client)
+        player = await get_player(final_user_id, twitch_client)
     except Exception as exc:  # pylint: disable=broad-except
         logger.error("Failed to get username for user %s: %s", user_id, str(exc))
         return
 
-    callback(username, x_relative, y_relative)
+    await callback(player, x_relative, y_relative)

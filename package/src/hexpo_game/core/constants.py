@@ -61,5 +61,6 @@ PALETTE = [
     Color(156, 119, 158),
     Color(135, 160, 86),
 ]
+NB_COLORS = len(PALETTE)
 
 PALETTE_BGR = [color.as_bgr() for color in PALETTE]

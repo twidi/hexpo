@@ -7,7 +7,8 @@ from django.template import loader
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .game import get_game_and_grid
-from .types import Color
+from .models import Player
+from .types import Color, Tile
 
 
 # async def sse(request):
@@ -22,10 +23,21 @@ from .types import Color
 #
 async def index(request: web.Request) -> web.Response:  # pylint: disable=unused-argument
     """Display the index page."""
-    _, grid = await sync_to_async(get_game_and_grid)()
+    game, grid = await sync_to_async(get_game_and_grid)()
 
     grid.draw_map_contour(Color(0, 0, 0))
-    grid.example_draw_one_map_by_color()
+
+    def get_players_in_game() -> list[Player]:
+        return list(game.playeringame_set.select_related("player").prefetch_related("player__occupiedtile_set").all())
+
+    for player_in_game in await sync_to_async(get_players_in_game)():
+        grid.draw_areas(
+            (
+                Tile(occupied_tile.col, occupied_tile.row)
+                for occupied_tile in player_in_game.player.occupiedtile_set.all()
+            ),
+            Color.from_hex(player_in_game.color),
+        )
 
     context = {
         "grid_base64": grid.map_as_base64_png(),
