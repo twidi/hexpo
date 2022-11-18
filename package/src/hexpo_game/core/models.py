@@ -1,8 +1,13 @@
 """Models for the hexpo_game.core app."""
 
-from django.db import models
+from __future__ import annotations
 
-from hexpo_game.core.constants import ActionType, RandomEventTurnMoment
+from datetime import timedelta
+
+from django.db import models
+from django.utils import timezone
+
+from .constants import ActionType, RandomEventTurnMoment, PALETTE
 
 
 class Game(models.Model):
@@ -14,8 +19,41 @@ class Game(models.Model):
     grid_nb_rows = models.PositiveIntegerField(help_text="Number of rows in the grid.")
     max_players_allowed = models.PositiveIntegerField(help_text="Maximum number of players allowed.")
     current_turn = models.PositiveIntegerField(default=0, help_text="Current turn number.")
-    current_turn_started_at = models.DateTimeField(help_text="When the current turn started.")
+    current_turn_started_at = models.DateTimeField(auto_now_add=True, help_text="When the current turn started.")
     current_turn_end = models.DateTimeField(help_text="When the current turn ends.")
+
+    def end_game(self) -> None:
+        """End the game."""
+        self.ended_at = timezone.now()
+        self.save(update_fields=["ended_at"])
+
+    @classmethod
+    def get_current(
+        cls, nb_cols: int, nb_rows: int, max_players_allowed: int = len(PALETTE), turn_duration_minutes: int = 5
+    ) -> Game:
+        """Get the current game (or create one if no current one).
+
+        Parameters
+        ----------
+        nb_cols : int
+            Number of columns in the grid. Only used if no current game.
+        nb_rows : int
+            Number of rows in the grid. Only used if no current game.
+        max_players_allowed : int, optional
+            Maximum number of players allowed, by default 20. Only used if no current game.
+        turn_duration_minutes : int, optional
+            Duration of a turn, in minutes, by default 5. Only used if no current game.
+
+        """
+        game = cls.objects.filter(ended_at=None).order_by("-started_at").first()
+        if game is None:
+            game = Game.objects.create(
+                grid_nb_cols=nb_cols,
+                grid_nb_rows=nb_rows,
+                max_players_allowed=max_players_allowed,
+                current_turn_end=timezone.now() + timedelta(minutes=turn_duration_minutes),
+            )
+        return game
 
 
 class Player(models.Model):

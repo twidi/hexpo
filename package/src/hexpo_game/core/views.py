@@ -2,12 +2,12 @@
 
 from aiohttp import web
 from aiohttp.web import Response
+from asgiref.sync import sync_to_async
 from django.template import loader
 
-from hexpo_game.core.click_handler import COORDINATES
-from hexpo_game.core.grid import Color, ConcreteGrid, Grid
-
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
+from .game import get_game_and_grid
+from .types import Color
 
 
 # async def sse(request):
@@ -22,15 +22,10 @@ from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 #
 async def index(request: web.Request) -> web.Response:  # pylint: disable=unused-argument
     """Display the index page."""
-    area = COORDINATES["grid-area"]
-    width = area[1][0] - area[0][0]
-    height = area[1][1] - area[0][1]
-    nb_cols, nb_rows, tile_size = ConcreteGrid.compute_grid_size(1000, width, height)
-    grid = ConcreteGrid(Grid(nb_cols, nb_rows), tile_size)
+    _, grid = await sync_to_async(get_game_and_grid)()
 
-    for tile in grid:
-        color = Color.random()
-        grid.fill_tiles([tile.tile], color)
+    grid.draw_map_contour(Color(0, 0, 0))
+    grid.example_draw_one_map_by_color()
 
     context = {
         "grid_base64": grid.map_as_base64_png(),

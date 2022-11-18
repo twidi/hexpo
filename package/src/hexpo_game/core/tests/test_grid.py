@@ -3,7 +3,8 @@
 import numpy as np
 import pytest
 
-from hexpo_game.core.grid import Color, ConcreteGrid, ConcreteTile, Grid, Point, Tile
+from hexpo_game.core.grid import ConcreteGrid, ConcreteTile, Grid
+from hexpo_game.core.types import Color, Point, Tile
 
 
 def assert_points_equal(point1: Point, point2: Point) -> None:
@@ -38,6 +39,23 @@ def test_tile_neighbors() -> None:
     assert grid.neighbors[Tile(0, 2)] == (Tile(0, 1), Tile(1, 1), Tile(1, 2), None, None, None)
     assert grid.neighbors[Tile(1, 2)] == (Tile(1, 1), Tile(2, 2), None, None, None, Tile(0, 2))
     assert grid.neighbors[Tile(2, 2)] == (Tile(2, 1), None, None, None, Tile(1, 2), Tile(1, 1))
+
+
+def test_contour_tiles():
+    """Test the contour tiles."""
+    grid = Grid(3, 4)
+    assert grid.contour_tiles == {
+        Tile(0, 0),
+        Tile(1, 0),
+        Tile(2, 0),
+        Tile(2, 1),
+        Tile(2, 2),
+        Tile(2, 3),
+        Tile(1, 3),
+        Tile(0, 3),
+        Tile(0, 2),
+        Tile(0, 1),
+    }
 
 
 def test_point_add() -> None:

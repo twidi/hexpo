@@ -9,25 +9,17 @@ We use the "odd-q" grid (flat top and top left tile filled) with the simple offs
 from __future__ import annotations
 
 import base64
+import math
 from dataclasses import dataclass, field
 from math import ceil, floor, sqrt
-from random import randint
-from textwrap import wrap
-from typing import Any, Iterator, NamedTuple, Optional, Sequence, TypeAlias
+from typing import Iterable, Iterator, NamedTuple, Optional, TypeAlias
 
 import cv2  # type: ignore[import]
 import numpy as np
 import numpy.typing as npt
 
-
-class Tile(NamedTuple):
-    """Represent a tile."""
-
-    col: int
-    row: int
-
-
-MaybeTile: TypeAlias = Optional[Tile]
+from .constants import PALETTE_BGR
+from .types import Color, Point, Tile
 
 
 class AxialCoordinate(NamedTuple):
@@ -78,27 +70,6 @@ class CubicCoordinate(NamedTuple):
         return CubicCoordinate(q=q, r=r, s=s)
 
 
-class Point(NamedTuple):
-    """Represent a point in the grid."""
-
-    x: float
-    y: float
-
-    def __add__(self, other: Any) -> Point:
-        """Add something to a point to get another one.
-
-        Parameters
-        ----------
-        other : Any
-            - Can be a Point, the values of the other point will be added to the current one.
-            - Any other kind of value will raise a TypeError.
-
-        """
-        if isinstance(other, Point):
-            return Point(self.x + other.x, self.y + other.y)
-        return NotImplemented
-
-
 THICKNESS = 3
 SEGMENTS_OFFSET = 6
 SEGMENTS_OFFSETS: tuple[
@@ -136,6 +107,8 @@ HEX_WIDTH_TO_HEIGHT_RATIO = sqrt(3) / 2
 
 
 RenderedMap: TypeAlias = npt.NDArray[np.uint8]
+MaybeTile: TypeAlias = Optional[Tile]
+Neighbors: TypeAlias = tuple[MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTile]
 
 
 @dataclass
@@ -147,23 +120,21 @@ class Grid:
     tiles: tuple[tuple[Tile, ...], ...] = field(
         default_factory=tuple, init=False, repr=False, compare=False, hash=False
     )
-    neighbors: dict[Tile, tuple[MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTile]] = field(
-        default_factory=dict, init=False, repr=False, compare=False, hash=False
-    )
+    neighbors: dict[Tile, Neighbors] = field(default_factory=dict, init=False, repr=False, compare=False, hash=False)
+    contour_tiles: set[Tile] = field(default_factory=set, init=False, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         """Create the grid."""
         self.tiles = tuple(tuple(Tile(col, row) for col in range(self.nb_cols)) for row in range(self.nb_rows))
         self.neighbors = {tile: self.compute_neighbors(tile) for tile in self}
+        self.contour_tiles = self.compute_contour_tiles()
 
     def __iter__(self) -> Iterator[Tile]:
         """Iterate over the tiles."""
         for row in self.tiles:
             yield from row
 
-    def compute_neighbors(
-        self, tile: Tile
-    ) -> tuple[MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTile]:
+    def compute_neighbors(self, tile: Tile) -> Neighbors:
         """Return the neighbors of a tile."""
         neighbors: list[MaybeTile] = []
         for direction in range(6):
@@ -253,35 +224,9 @@ class Grid:
         nb_cols = nb_tiles / nb_rows
         return floor(nb_cols), floor(nb_rows)
 
-
-class Color(NamedTuple):
-    """A color with red/green/blue values."""
-
-    red: int = 0
-    green: int = 0
-    blue: int = 0
-
-    @property
-    def as_hex(self) -> str:
-        """Return the color as a hex string."""
-        return f"#{self.red:02x}{self.green:02x}{self.blue:02x}".upper()
-
-    def as_bgr(self) -> Color:
-        """Return the color as a BGR one."""
-        return Color(self.blue, self.green, self.red)
-
-    @classmethod
-    def from_hex(cls, hex_color: str) -> Color:
-        """Create a color from a hex string."""
-        hex_color = hex_color.removeprefix("#")
-        if len(hex_color) == 3:
-            hex_color = f"{hex_color[0]}{hex_color[0]}{hex_color[1]}{hex_color[1]}{hex_color[2]}{hex_color[2]}"
-        return Color(*[int(part, 16) for part in wrap(hex_color, 2)])
-
-    @classmethod
-    def random(cls) -> Color:
-        """Create a random color."""
-        return Color(randint(0, 255), randint(0, 255), randint(0, 255))
+    def compute_contour_tiles(self) -> set[Tile]:
+        """Return the tiles on the contour of the grid."""
+        return {tile for tile in self if tile.col in (0, self.nb_cols - 1) or tile.row in (0, self.nb_rows - 1)}
 
 
 TilePoints: TypeAlias = tuple[Point, Point, Point, Point, Point, Point]
@@ -400,7 +345,7 @@ class ConcreteGrid:
         """Reset the map to 0."""
         self.map.fill(0)
 
-    def draw_areas(self, tiles: Sequence[Tile], color: Color) -> None:
+    def draw_areas(self, tiles: Iterable[Tile], color: Color) -> None:
         """Draw the (perimeters of the) areas of the given tiles."""
         if not tiles:
             return
@@ -493,3 +438,25 @@ class ConcreteGrid:
         if 0 <= tile.row < self.grid.nb_rows and 0 <= tile.col < self.grid.nb_cols:
             return tile
         return None
+
+    def draw_map_contour(self, color: Color) -> None:
+        """Draw the contour of the map."""
+        self.draw_areas(self.grid, color)
+
+    def example_draw_one_map_by_color(self) -> None:
+        """Draw one map by color."""
+        grid_array = np.array(self.grid.tiles)
+        nb_blocks = len(PALETTE_BGR)
+        nb_hor_blocks = math.ceil(math.sqrt(nb_blocks))
+        nb_ver_blocks = math.ceil(nb_blocks / nb_hor_blocks)
+        block_height = math.ceil(self.nb_rows / nb_ver_blocks)
+        block_width = math.ceil(self.nb_cols / nb_hor_blocks)
+        color_index = 0
+        for start_row in range(0, grid_array.shape[0], block_height):
+            for start_col in range(0, grid_array.shape[1], block_width):
+                block = grid_array[start_row : start_row + block_height, start_col : start_col + block_width]
+                self.draw_areas(
+                    (Tile(col, row) for col, row in block.reshape(block.shape[0] * block.shape[1], 2)),
+                    PALETTE_BGR[color_index % nb_blocks],
+                )
+                color_index += 1
