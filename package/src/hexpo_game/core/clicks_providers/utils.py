@@ -96,7 +96,7 @@ async def validate_user_id(user_id: str) -> int:
     if user_id.startswith("A"):
         raise ValueError("User %s is not logged in on Twitch.")
     if user_id.startswith("U"):
-        raise ValueError("User %s did no accept to share it's ID")
+        raise ValueError("User %s did no accept to share its ID")
     try:
         return int(user_id)
     except ValueError:
@@ -215,6 +215,10 @@ async def handle_click(
         player = await get_player(final_user_id, twitch_client)
     except Exception as exc:  # pylint: disable=broad-except
         logger.error("Failed to get username for user %s: %s", user_id, str(exc))
+        return
+
+    if not player.allowed:
+        logger.warning("Player %s is not allowed to play", player.name)
         return
 
     await callback(player, x_relative, y_relative)

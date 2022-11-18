@@ -115,6 +115,7 @@ class OccupiedTile(models.Model):
     level = models.PositiveSmallIntegerField(
         default=20, help_text="Current level of the tile. Max 100. Destroyed at 0."
     )
+    updated_at = models.DateTimeField(auto_now=True, help_text="When the tile was last updated.")
 
 
 class Drop(models.Model):
