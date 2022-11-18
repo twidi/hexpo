@@ -1,0 +1,11 @@
+{% for player in players %}
+    <div class="player" style="--player-color: {{ player.color }}">
+        <div class="player-info">
+            <div class="player-color"></div>
+            <div class="player-rank">{{ player.rank }}</div>
+            <div class="player-name">{{ player.name }}</div>
+            <div class="player-nb-tiles">{{ player.nb_tiles }}</div>
+            <div class="player-percent-tiles">{{ player.percent_tiles }}%</div>
+        </div>
+    </div>
+{% endfor %}

@@ -134,6 +134,11 @@ class Grid:
         for row in self.tiles:
             yield from row
 
+    @property
+    def nb_tiles(self) -> int:
+        """Return the number of tiles."""
+        return self.nb_cols * self.nb_rows
+
     def compute_neighbors(self, tile: Tile) -> Neighbors:
         """Return the neighbors of a tile."""
         neighbors: list[MaybeTile] = []
@@ -300,6 +305,11 @@ class ConcreteGrid:
     def nb_cols(self) -> int:
         """Return the number of columns."""
         return self.grid.nb_cols
+
+    @property
+    def nb_tiles(self) -> int:
+        """Return the number of tiles."""
+        return self.grid.nb_tiles
 
     def compute_tile_center(self, tile: Tile) -> Point:
         """Compute the center of a tile.

@@ -9,6 +9,9 @@ html, body {
     height: 100%;
     overflow: hidden;
 }
+:root {
+    --grid-opacity: 0.4;
+}
 body {
     background-color: #333;
 }
@@ -32,7 +35,6 @@ body {
     background-color: #2226;
     display: flex;
     flex-direction: column;
-    visibility: hidden;
 }
 
 #info {
@@ -43,6 +45,7 @@ body {
     display: flex;
     margin: 10px;
     gap: 10px;
+    visibility: hidden;
 }
 .action-btn {
     width: 60px;
@@ -53,12 +56,89 @@ body {
     background-color: #000;
 }
 
+#players {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.player {
+    display: flex;
+    flex-direction: column;
+    row-gap: 5px;
+}
+
+.player-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: larger;
+    color: #eee;
+    padding-left: 40px;
+    column-gap: 10px;
+    padding-right: 5px;
+}
+
+.player-color {
+    width: 100px;
+    height: 55px;
+    background: var(--player-color);
+    transform: rotate(90deg) scale(0.3);
+    position: absolute;
+    left: -30px;
+    opacity: var(--grid-opacity);
+}
+
+.player-color:before, .player-color:after {
+    content: "";
+    position: absolute;
+    width: 0;
+    height: 0;
+}
+
+.player-color:before {
+    top: -25px;
+    left: 0;
+    border-left: 50px solid transparent;
+    border-right: 50px solid transparent;
+    border-bottom: 25px solid var(--player-color);
+}
+
+.player-color:after {
+    bottom: -25px;
+    left: 0;
+    border-left: 50px solid transparent;
+    border-right: 50px solid transparent;
+    border-top: 25px solid var(--player-color);
+}
+
+.player-rank {
+    width: 1.4em;
+    flex-grow: 0;
+    text-align: right;
+}
+.player-name {
+    flex-grow: 1;
+    text-align: left;
+}
+.player-nb-tiles {
+    width: 2.5em;
+    flex-grow: 0;
+    text-align: right;
+}
+.player-percent-tiles {
+    width: 5em;
+    flex-grow: 0;
+    text-align: right;
+}
+
+
 #grid-area {
     grid-area: grid-area;
     /*font-size: 90;*/
 }
 #grid {
-    opacity: 0.4;
+    opacity: var(--grid-opacity);
 }
 
 #right-bar {
@@ -86,9 +166,12 @@ body {
                     <div class="action-btn positioned" id="action-btn-grow">Grow</div>
                     <div class="action-btn positioned" id="action-btn-bank">Bank</div>
                 </div>
+                <div id="players">
+                    {% include "core/include_players.html" with players=players %}
+                </div>
             </div>
             <div id="grid-area" class="positioned">
-                <img id="grid" src="data:image/png;base64,{{ grid_base64 }}">
+                <img id="grid" src="data:image/png;base64,{{ grid_base64 }}" />
             </div>
             <div id="right-bar"></div>
             <div id="bottom-bar"></div>
@@ -104,7 +187,8 @@ body {
         console.log(log);
         */
 
-        let grid = document.querySelector('#grid');
+        let grid = document.querySelector('#grid'),
+            players = document.querySelector('#players');
         setInterval(async () => {
             const response = await fetch('/grid', {cache: 'no-cache'});
             if (response.ok) {
@@ -112,7 +196,12 @@ body {
                 grid.setAttribute('src', 'data:image/png;base64,' + data);
             }
         }, 1000);
-
+        if (true) setInterval(async () => {
+            const response = await fetch('/players', {cache: 'no-cache'});
+            if (response.ok) {
+                players.innerHTML = await response.text();
+            }
+        }, 1000);
     </script>
     </body>
 </html>

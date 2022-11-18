@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 from aiohttp import web
 from aiohttp.web import Response
 from asgiref.sync import sync_to_async
-from django.db.models import Max
+from django.db.models import Count, Max, Q
 from django.template import loader
 
 from hexpo_game.core.grid import ConcreteGrid
@@ -81,22 +81,49 @@ class GameState:
                     Tile(occupied_tile.col, occupied_tile.row)
                     for occupied_tile in player_in_game.player.occupiedtile_set.all()
                 ),
-                Color.from_hex(player_in_game.color),
+                Color.from_hex(player_in_game.color).as_bgr(),
             )
 
         return True
 
-    async def index(self, request: web.Request) -> web.Response:  # pylint: disable=unused-argument
+    def get_players_context(self) -> list[dict[str, Any]]:
+        """Get the context for the players left bar."""
+        players_in_game = (
+            self.game.playeringame_set.all()
+            .select_related("player")
+            .annotate(nb_tiles=Count("player__occupiedtile", filter=Q(player__occupiedtile__game=self.game)))
+            .order_by("-nb_tiles", "-id")[:20]
+        )
+        return [
+            {
+                "name": player_in_game.player.name,
+                "color": player_in_game.color,
+                "rank": index,
+                "nb_tiles": player_in_game.nb_tiles,
+                "percent_tiles": f"{player_in_game.nb_tiles / self.grid.nb_tiles * 100:.2f}",
+                "id": player_in_game.id,
+            }
+            for index, player_in_game in enumerate(players_in_game, 1)
+        ]
+
+    async def http_get_players(self, request: web.Request) -> web.Response:
+        """Return the players partial html."""
+        context = {"players": await sync_to_async(self.get_players_context)()}
+        html = loader.render_to_string("core/include_players.html", context)
+        return Response(text=html, content_type="text/html")
+
+    async def http_get_index(self, request: web.Request) -> web.Response:  # pylint: disable=unused-argument
         """Display the index page."""
         await self.draw_grid()
         context = {
             "grid_base64": self.grid.map_as_base64_png(),
+            "players": await sync_to_async(self.get_players_context)(),
         }
 
         html = loader.render_to_string("core/index.html", context)
         return Response(text=html, content_type="text/html")
 
-    async def get_grid_base64(self, request: web.Request) -> web.Response:
+    async def http_get_grid_base64(self, request: web.Request) -> web.Response:
         """Return the base64 encoded grid as a plain text response."""
         grid_updated = await self.draw_grid()
         if grid_updated:
@@ -107,8 +134,9 @@ class GameState:
 def add_routes(router: web.UrlDispatcher) -> None:
     """Add routes to the router."""
     game_state = GameState.load_from_db()
-    router.add_get("/", game_state.index)
-    router.add_get("/grid", game_state.get_grid_base64)
+    router.add_get("/", game_state.http_get_index)
+    router.add_get("/grid", game_state.http_get_grid_base64)
+    router.add_get("/players", game_state.http_get_players)
     # router.add_get('/sse', sse)
 
 
