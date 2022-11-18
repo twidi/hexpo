@@ -2,11 +2,14 @@
 
 import logging
 
+from django.db.models import F
+from django.utils import timezone
+
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES, get_click_target
-from .constants import NB_COLORS, PALETTE
+from .constants import NB_COLORS, PALETTE, ActionType
 from .grid import ConcreteGrid, Grid
-from .models import Game, OccupiedTile, Player, PlayerInGame
+from .models import Action, Game, OccupiedTile, Player, PlayerInGame
 from .types import Point
 
 logger = logging.getLogger("hexpo_game.game")
@@ -34,13 +37,26 @@ async def on_click(  # pylint: disable=unused-argument
                     color=PALETTE[color_index].as_hex,
                 ),
             )
-            await OccupiedTile.objects.aupdate_or_create(
+
+            occupied_tile, occupied_tile_created = await OccupiedTile.objects.aupdate_or_create(
                 game=game,
                 col=tile.col,
                 row=tile.row,
                 defaults=dict(  # noqa: C408
                     player=player,
                 ),
+            )
+            if not occupied_tile_created:
+                await OccupiedTile.objects.filter(pk=occupied_tile.pk).aupdate(nb_updates=F("nb_updates") + 1)
+
+            await Action.objects.acreate(
+                player=player,
+                game=game,
+                turn=game.current_turn,
+                action_type=ActionType.GROW,
+                tile_col=tile.col,
+                tile_row=tile.row,
+                confirmed_at=timezone.now(),
             )
             return
     logger.info("%s clicked on %s (%s)", player.name, target, point)
