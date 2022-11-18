@@ -258,3 +258,92 @@ def test_compute_grid_size():
     grid = ConcreteGrid(Grid(nb_cols, nb_rows), tile_size)
     assert grid.max_coordinates.x == pytest.approx(1864.2578170978495)
     assert grid.max_coordinates.y == pytest.approx(1275.9715614792356)
+
+
+def test_get_tile_at_point():  # pylint: disable=too-many-statements
+    """Test getting the tile at a point."""
+    grid = ConcreteGrid(Grid(2, 2), 20.0)
+    assert grid.get_tile_at_point(Point(0, 0)) is None
+
+    # perimeter points
+
+    point = grid.tiles[0][0].points[5]
+    assert grid.get_tile_at_point(Point(point.x - 2, point.y)) is None
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y - 2)) is None
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y + 2)) == Tile(0, 0)
+
+    point = grid.tiles[0][0].points[0]
+    assert grid.get_tile_at_point(Point(point.x, point.y - 2)) is None
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y)) is None
+    assert grid.get_tile_at_point(Point(point.x, point.y + 2)) == Tile(0, 0)
+
+    point = grid.tiles[0][0].points[1]
+    assert grid.get_tile_at_point(Point(point.x - 2, point.y)) == Tile(0, 0)
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y - 2)) is None
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y + 2)) == Tile(1, 0)
+
+    point = grid.tiles[0][1].points[0]
+    assert grid.get_tile_at_point(Point(point.x, point.y - 2)) is None
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y)) is None
+    assert grid.get_tile_at_point(Point(point.x, point.y + 2)) == Tile(1, 0)
+
+    point = grid.tiles[0][1].points[1]
+    assert grid.get_tile_at_point(Point(point.x - 2, point.y)) == Tile(1, 0)
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y - 2)) is None
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y + 2)) is None
+
+    point = grid.tiles[0][1].points[2]
+    assert grid.get_tile_at_point(Point(point.x, point.y - 2)) == Tile(1, 0)
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y)) is None
+    assert grid.get_tile_at_point(Point(point.x, point.y + 2)) == Tile(1, 1)
+
+    point = grid.tiles[1][1].points[1]
+    assert grid.get_tile_at_point(Point(point.x - 2, point.y)) == Tile(1, 1)
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y - 2)) is None
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y + 2)) is None
+
+    point = grid.tiles[1][1].points[2]
+    assert grid.get_tile_at_point(Point(point.x, point.y - 2)) == Tile(1, 1)
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y)) is None
+    assert grid.get_tile_at_point(Point(point.x, point.y + 2)) is None
+
+    point = grid.tiles[1][1].points[3]
+    assert grid.get_tile_at_point(Point(point.x - 2, point.y)) is None
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y - 2)) == Tile(1, 1)
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y + 2)) is None
+
+    point = grid.tiles[1][1].points[4]
+    assert grid.get_tile_at_point(Point(point.x, point.y - 2)) == Tile(0, 1)
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y)) == Tile(1, 1)
+    assert grid.get_tile_at_point(Point(point.x, point.y + 2)) is None
+
+    point = grid.tiles[1][0].points[3]
+    assert grid.get_tile_at_point(Point(point.x - 2, point.y)) is None
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y - 2)) == Tile(0, 1)
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y + 2)) is None
+
+    point = grid.tiles[1][0].points[4]
+    assert grid.get_tile_at_point(Point(point.x, point.y - 2)) is None
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y)) == Tile(0, 1)
+    assert grid.get_tile_at_point(Point(point.x, point.y + 2)) is None
+
+    point = grid.tiles[1][0].points[5]
+    assert grid.get_tile_at_point(Point(point.x - 2, point.y)) is None
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y - 2)) == Tile(0, 0)
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y + 2)) == Tile(0, 1)
+
+    point = grid.tiles[0][0].points[4]
+    assert grid.get_tile_at_point(Point(point.x, point.y - 2)) is None
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y)) == Tile(0, 0)
+    assert grid.get_tile_at_point(Point(point.x, point.y + 2)) is None
+
+    # now center points
+    point = grid.tiles[0][0].points[2]
+    assert grid.get_tile_at_point(Point(point.x, point.y - 2)) == Tile(0, 0)
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y)) == Tile(1, 0)
+    assert grid.get_tile_at_point(Point(point.x, point.y + 2)) == Tile(0, 1)
+
+    point = grid.tiles[1][0].points[1]
+    assert grid.get_tile_at_point(Point(point.x - 2, point.y)) == Tile(0, 1)
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y - 2)) == Tile(1, 0)
+    assert grid.get_tile_at_point(Point(point.x + 2, point.y + 2)) == Tile(1, 1)

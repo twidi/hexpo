@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from math import ceil, floor, sqrt
 from random import randint
 from textwrap import wrap
-from typing import Any, Iterator, NamedTuple, Sequence, TypeAlias
+from typing import Any, Iterator, NamedTuple, Optional, Sequence, TypeAlias
 
 import cv2  # type: ignore[import]
 import numpy as np
@@ -26,6 +26,54 @@ class Tile(NamedTuple):
 
     col: int
     row: int
+
+
+class AxialCoordinate(NamedTuple):
+    """Tile coordinate in the axial coordinate space."""
+
+    q: float
+    r: float
+
+    def to_cubic(self) -> CubicCoordinate:
+        """Convert to cubic coordinate."""
+        return CubicCoordinate(q=self.q, r=self.r, s=-self.q - self.r)
+
+    def to_tile(self) -> Tile:
+        """Convert to tile."""
+        return Tile(col=round(self.q), row=round(self.r + (self.q - (self.q % 2)) / 2))
+
+    def round(self) -> AxialCoordinate:
+        """Round the axial coordinate to the nearest integer one."""
+        return self.to_cubic().round().to_axial()
+
+
+class CubicCoordinate(NamedTuple):
+    """Tile coordinate in the cubic coordinate space."""
+
+    q: float
+    r: float
+    s: float
+
+    def to_axial(self) -> AxialCoordinate:
+        """Convert to axial coordinate."""
+        return AxialCoordinate(q=self.q, r=self.r)
+
+    def round(self) -> CubicCoordinate:
+        """Round the cubic coordinate to the nearest integer one."""
+        # pylint: disable=invalid-name
+        q = round(self.q)
+        r = round(self.r)
+        s = round(self.s)
+        q_diff = abs(q - self.q)
+        r_diff = abs(r - self.r)
+        s_diff = abs(s - self.s)
+        if q_diff > r_diff and q_diff > s_diff:
+            q = -r - s
+        elif r_diff > s_diff:
+            r = -q - s
+        else:
+            s = -q - r
+        return CubicCoordinate(q=q, r=r, s=s)
 
 
 class Direction(enum.IntEnum):
@@ -252,11 +300,13 @@ class ConcreteGrid:
                     tile,
                     center := self.compute_tile_center(tile),
                     points := self.compute_tile_points(center),
-                    np.array(tuple((round(point.x), round(point.y)) for point in points), dtype=np.int32),
+                    points_array=np.array(
+                        tuple((round(point.x), round(point.y)) for point in points), dtype=np.int32
+                    ),
                 )
-                for tile in col
+                for tile in row
             )
-            for col in self.grid.tiles
+            for row in self.grid.tiles
         )
         self.max_coordinates = self.compute_max_coordinates()
         self.map = self.create_map()
@@ -396,3 +446,20 @@ class ConcreteGrid:
         nb_cols, nb_rows = Grid.compute_grid_size(nb_tiles, height / width)
         tile_size = cls.compute_tile_size(nb_cols, nb_rows, width, height)
         return nb_cols, nb_rows, tile_size
+
+    def get_tile_at_point(self, point: Point) -> Optional[Tile]:
+        """Return the tile at the given point, or None if there is no tile at this position."""
+        # computation is done assuming that the coordinate (0, 0) is at the center of the tile (0, 0)
+        adjusted_point = Point(point.x - self.tile_width / 2, point.y - self.tile_height / 2)
+
+        tile = (
+            AxialCoordinate(
+                q=(2.0 / 3 * adjusted_point.x) / self.tile_size,
+                r=(-1.0 / 3 * adjusted_point.x + sqrt(3) / 3 * adjusted_point.y) / self.tile_size,
+            )
+            .round()
+            .to_tile()
+        )
+        if 0 <= tile.row < self.grid.nb_rows and 0 <= tile.col < self.grid.nb_cols:
+            return tile
+        return None
