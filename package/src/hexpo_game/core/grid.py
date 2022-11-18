@@ -9,7 +9,6 @@ We use the "odd-q" grid (flat top and top left tile filled) with the simple offs
 from __future__ import annotations
 
 import base64
-import enum
 from dataclasses import dataclass, field
 from math import ceil, floor, sqrt
 from random import randint
@@ -26,6 +25,9 @@ class Tile(NamedTuple):
 
     col: int
     row: int
+
+
+MaybeTile: TypeAlias = Optional[Tile]
 
 
 class AxialCoordinate(NamedTuple):
@@ -76,15 +78,50 @@ class CubicCoordinate(NamedTuple):
         return CubicCoordinate(q=q, r=r, s=s)
 
 
-class Direction(enum.IntEnum):
-    """Represent a direction in the grid."""
+class Point(NamedTuple):
+    """Represent a point in the grid."""
 
-    NORTH = 0
-    NORTH_EAST = 1
-    SOUTH_EAST = 2
-    SOUTH = 3
-    SOUTH_WEST = 4
-    NORTH_WEST = 5
+    x: float
+    y: float
+
+    def __add__(self, other: Any) -> Point:
+        """Add something to a point to get another one.
+
+        Parameters
+        ----------
+        other : Any
+            - Can be a Point, the values of the other point will be added to the current one.
+            - Any other kind of value will raise a TypeError.
+
+        """
+        if isinstance(other, Point):
+            return Point(self.x + other.x, self.y + other.y)
+        return NotImplemented
+
+
+THICKNESS = 3
+SEGMENTS_OFFSET = 6
+SEGMENTS_OFFSETS: tuple[
+    tuple[Point, Point],
+    tuple[Point, Point],
+    tuple[Point, Point],
+    tuple[Point, Point],
+    tuple[Point, Point],
+    tuple[Point, Point],
+] = (
+    # north
+    (Point(SEGMENTS_OFFSET, SEGMENTS_OFFSET), Point(-SEGMENTS_OFFSET, SEGMENTS_OFFSET)),
+    # north_east
+    (Point(-SEGMENTS_OFFSET, SEGMENTS_OFFSET), Point(-SEGMENTS_OFFSET, 0)),
+    # south_east
+    (Point(-SEGMENTS_OFFSET, 0), Point(-SEGMENTS_OFFSET, -SEGMENTS_OFFSET)),
+    # south
+    (Point(-SEGMENTS_OFFSET, -SEGMENTS_OFFSET), Point(SEGMENTS_OFFSET, -SEGMENTS_OFFSET)),
+    # south_west
+    (Point(SEGMENTS_OFFSET, -SEGMENTS_OFFSET), Point(SEGMENTS_OFFSET, 0)),
+    # north_west
+    (Point(SEGMENTS_OFFSET, 0), Point(SEGMENTS_OFFSET, SEGMENTS_OFFSET)),
+)
 
 
 DIRECTION_DIFFERENCES = (
@@ -110,7 +147,7 @@ class Grid:
     tiles: tuple[tuple[Tile, ...], ...] = field(
         default_factory=tuple, init=False, repr=False, compare=False, hash=False
     )
-    neighbors: dict[Tile, tuple[Tile, ...]] = field(
+    neighbors: dict[Tile, tuple[MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTile]] = field(
         default_factory=dict, init=False, repr=False, compare=False, hash=False
     )
 
@@ -124,16 +161,20 @@ class Grid:
         for row in self.tiles:
             yield from row
 
-    def compute_neighbors(self, tile: Tile) -> tuple[Tile, ...]:
+    def compute_neighbors(
+        self, tile: Tile
+    ) -> tuple[MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTile]:
         """Return the neighbors of a tile."""
-        neighbors: list[Tile] = []
-        for direction in Direction:
-            col_diff, row_diff = DIRECTION_DIFFERENCES[tile.col % 2][direction.value]
+        neighbors: list[MaybeTile] = []
+        for direction in range(6):
+            col_diff, row_diff = DIRECTION_DIFFERENCES[tile.col % 2][direction]
             col = tile.col + col_diff
             row = tile.row + row_diff
             if 0 <= col < self.nb_cols and 0 <= row < self.nb_rows:
                 neighbors.append(self.tiles[row][col])
-        return tuple(neighbors)
+            else:
+                neighbors.append(None)
+        return neighbors[0], neighbors[1], neighbors[2], neighbors[3], neighbors[4], neighbors[5]  # thanks mypy
 
     @classmethod
     def compute_grid_size(cls, nb_tiles: int, width_to_height_ratio: float) -> tuple[int, int]:
@@ -213,27 +254,6 @@ class Grid:
         return floor(nb_cols), floor(nb_rows)
 
 
-class Point(NamedTuple):
-    """Represent a point in the grid."""
-
-    x: float
-    y: float
-
-    def __add__(self, other: Any) -> Point:
-        """Add something to a point to get another one.
-
-        Parameters
-        ----------
-        other : Any
-            - Can be a Point, the values of the other point will be added to the current one.
-            - Any other kind of value will raise a TypeError.
-
-        """
-        if isinstance(other, Point):
-            return Point(self.x + other.x, self.y + other.y)
-        return NotImplemented
-
-
 class Color(NamedTuple):
     """A color with red/green/blue values."""
 
@@ -275,6 +295,16 @@ class ConcreteTile(NamedTuple):
     points: TilePoints
     points_array: npt.NDArray[np.int32] = field(repr=False, compare=False, hash=False)
 
+    @property
+    def col(self) -> int:
+        """Return the column of the tile."""
+        return self.tile.col
+
+    @property
+    def row(self) -> int:
+        """Return the row of the tile."""
+        return self.tile.row
+
 
 @dataclass
 class ConcreteGrid:
@@ -315,6 +345,16 @@ class ConcreteGrid:
         """Iterate over the concrete tiles."""
         for row in self.tiles:
             yield from row
+
+    @property
+    def nb_rows(self) -> int:
+        """Return the number of rows."""
+        return self.grid.nb_rows
+
+    @property
+    def nb_cols(self) -> int:
+        """Return the number of columns."""
+        return self.grid.nb_cols
 
     def compute_tile_center(self, tile: Tile) -> Point:
         """Compute the center of a tile.
@@ -360,44 +400,34 @@ class ConcreteGrid:
         """Reset the map to 0."""
         self.map.fill(0)
 
-    def fill_tiles(self, tiles: Sequence[Tile], color: Color) -> None:
-        """Fill the area occupied by the given tiles with the given color.
-
-        Parameters
-        ----------
-        tiles : Sequence[Tile]
-            The tiles to fill.
-        color : Color
-            The color to use.
-
-        Notes
-        -----
-        It's faster with `fillConvexPoly`, and even if it doesn't work with concave polygons, it's not a problem
-        for hexagons.
-        The code to render the same with `fillPoly` is:
-
-        >>> cv2.fillPoly(self.map, np.stack(tuple(
-        ...     self.tiles[row][col].points_array
-        ...     for col, row in tiles
-        ... )), tuple(color), cv2.LINE_AA)
-
-        Optimization idea: generate a mask (values between 0 and 1) of a polygon only once and apply the mask
-        multiplied by the color for each polygon.
-
-        """
+    def draw_areas(self, tiles: Sequence[Tile], color: Color) -> None:
+        """Draw the (perimeters of the) areas of the given tiles."""
         if not tiles:
             return
 
         hex_map = self.create_map()
 
-        # we only draw the tiles in the alpha channel
-        for col, row in tiles:
-            cv2.fillConvexPoly(  # pylint: disable=no-member
-                hex_map, self.tiles[row][col].points_array, (0, 0, 0, 255), cv2.LINE_AA  # pylint: disable=no-member
-            )
+        tiles_set = set(tiles)
+        for tile in tiles_set:
+            for direction, neighbor in enumerate(self.grid.neighbors[tile]):
+                if neighbor and neighbor in tiles_set:
+                    continue
+                concrete_tile = self.tiles[tile.row][tile.col]
+                offsets = SEGMENTS_OFFSETS[direction]
+                cv2.line(  # pylint: disable=no-member
+                    hex_map,
+                    offsets[0] + concrete_tile.points_array[(direction - 1) % 6],
+                    offsets[1] + concrete_tile.points_array[direction],
+                    (0, 0, 0, 255),
+                    THICKNESS,
+                    cv2.LINE_AA,  # pylint: disable=no-member
+                )
+
         # we set the same color
         mask = np.where(hex_map[:, :, 3] != 0)
-        hex_map[:, :, :3] = color  # sadly we cannot do things like hex_map[mask][:,:3] = color
+        # sadly we cannot do things like hex_map[mask][:,:3] = color
+        # hex_map[:, :, 3] = hex_map[:, :, 3] // 2 + 128  # reduce transparency when we have tiles
+        hex_map[:, :, :3] = color
         # we update the map with only the pixels that are not fully transparent, i.e. where the tiles are drawn
         self.map[mask] = hex_map[mask]
 
