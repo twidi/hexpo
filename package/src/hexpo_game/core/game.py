@@ -2,7 +2,6 @@
 
 import logging
 
-from django.db.models import F
 from django.utils import timezone
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
@@ -38,7 +37,7 @@ async def on_click(  # pylint: disable=unused-argument
                 ),
             )
 
-            occupied_tile, occupied_tile_created = await OccupiedTile.objects.aupdate_or_create(
+            await OccupiedTile.objects.aupdate_or_create(
                 game=game,
                 col=tile.col,
                 row=tile.row,
@@ -46,8 +45,6 @@ async def on_click(  # pylint: disable=unused-argument
                     player=player,
                 ),
             )
-            if not occupied_tile_created:
-                await OccupiedTile.objects.filter(pk=occupied_tile.pk).aupdate(nb_updates=F("nb_updates") + 1)
 
             await Action.objects.acreate(
                 player=player,

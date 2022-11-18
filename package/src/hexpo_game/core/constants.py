@@ -5,6 +5,13 @@ from django.db import models
 from .types import Color
 
 
+class GameMode(models.TextChoices):
+    """The mode of the game."""
+
+    FREE_FULL = "free-full", "Free full"
+    FREE_NEIGHBOR = "free-neighbor", "Free neighbor"
+
+
 class ActionType(models.TextChoices):
     """Represent the different types of actions."""
 
