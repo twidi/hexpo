@@ -47,7 +47,7 @@ async def on_click(  # pylint: disable=unused-argument
             logger.info("%s clicked on %s (%s)", player.name, tile, point)
 
             await OccupiedTile.objects.aupdate_or_create(
-                player_in_game__game=game,
+                game=game,
                 col=tile.col,
                 row=tile.row,
                 defaults=dict(  # noqa: C408

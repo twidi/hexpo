@@ -5,19 +5,18 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Optional, cast
+from typing import Any
 
 from aiohttp import web
 from aiohttp.web import Response
 from asgiref.sync import sync_to_async
-from django.db.models import Count, Max, Q
 from django.template import loader
 
 from hexpo_game.core.grid import ConcreteGrid
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .game import get_game_and_grid
-from .models import Game, OccupiedTile, PlayerInGame
+from .models import Game
 from .types import Color, Tile
 
 logger = logging.getLogger(__name__)
@@ -48,20 +47,9 @@ class GameState:
         game, grid = get_game_and_grid()
         return cls(game=game, grid=grid, last_updated=game.started_at)
 
-    def get_game_last_updated(self) -> Optional[datetime]:
-        """Get the last updated time of the game, i.e. the date of the last updated tile."""
-        return cast(
-            Optional[datetime],
-            (
-                OccupiedTile.objects.filter(player_in_game__game=self.game)
-                .exclude(updated_at__isnull=True)
-                .aggregate(max_last_updated=Max("updated_at"))["max_last_updated"]
-            ),
-        )
-
     async def draw_grid(self) -> bool:
         """Redraw the grid."""
-        max_last_updated = await sync_to_async(self.get_game_last_updated)()
+        max_last_updated = await sync_to_async(self.game.get_last_tile_update_at)()
         if max_last_updated is not None and max_last_updated > self.last_updated:
             self.last_updated = max_last_updated
         else:
@@ -70,12 +58,7 @@ class GameState:
         self.grid.reset_map()
         self.grid.draw_map_contour(Color(0, 0, 0))
 
-        def get_players_in_game() -> list[PlayerInGame]:
-            return list(
-                self.game.playeringame_set.prefetch_related("occupiedtile_set").all()
-            )
-
-        for player_in_game in await sync_to_async(get_players_in_game)():
+        for player_in_game in await sync_to_async(self.game.get_players_in_game_with_occupied_tiles)():
             self.grid.draw_areas(
                 (
                     Tile(occupied_tile.col, occupied_tile.row)
@@ -88,19 +71,14 @@ class GameState:
 
     def get_players_context(self) -> list[dict[str, Any]]:
         """Get the context for the players left bar."""
-        players_in_game = (
-            self.game.playeringame_set.all()
-            .select_related("player")
-            .annotate(nb_tiles=Count("occupiedtile"))
-            .order_by("-nb_tiles", "-id")[:20]
-        )
+        players_in_game = self.game.get_players_in_game_for_leader_board(20)
         return [
             {
                 "name": player_in_game.player.name,
                 "color": player_in_game.color,
                 "rank": index,
-                "nb_tiles": player_in_game.nb_tiles,
-                "percent_tiles": f"{player_in_game.nb_tiles / self.grid.nb_tiles * 100:.2f}",
+                "nb_tiles": player_in_game.nb_tiles,  # type: ignore[attr-defined]
+                "percent_tiles": f"{player_in_game.nb_tiles / self.grid.nb_tiles * 100:.2f}",  # type: ignore[attr-defined]  # pylint: disable=line-too-long
                 "id": player_in_game.id,
             }
             for index, player_in_game in enumerate(players_in_game, 1)

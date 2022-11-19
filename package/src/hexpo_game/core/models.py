@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from typing import Optional, cast
 
 from django.db import models
-from django.db.models import Q
+from django.db.models import Count, Max, Q, QuerySet
 from django.utils import timezone
 
 from .constants import NB_COLORS, ActionType, GameMode, RandomEventTurnMoment
@@ -59,6 +60,33 @@ class Game(models.Model):
             )
         return game
 
+    def get_last_tile_update_at(self) -> Optional[datetime]:
+        """Get the date of the last updated tile of the game."""
+        return cast(
+            Optional[datetime],
+            (
+                OccupiedTile.objects.filter(game=self)
+                .exclude(updated_at__isnull=True)
+                .aggregate(max_last_updated=Max("updated_at"))["max_last_updated"]
+            ),
+        )
+
+    def get_players_in_game_with_occupied_tiles(self) -> list[PlayerInGame]:
+        """Get the players in game with their occupied tiles prefeteched."""
+        return list(self.playeringame_set.prefetch_related("occupiedtile_set").all())
+
+    def get_players_in_game_for_leader_board(self, limit: Optional[int] = None) -> QuerySet[PlayerInGame]:
+        """Get the players in game for the leader board."""
+        queryset = (
+            self.playeringame_set.all()
+            .select_related("player")
+            .annotate(nb_tiles=Count("occupiedtile"))
+            .order_by("-nb_tiles", "-id")
+        )
+        if limit is not None:
+            queryset = queryset[:limit]
+        return queryset
+
 
 class Player(models.Model):
     """Represent a player that played at least one game."""
@@ -108,6 +136,12 @@ class PlayerInGame(models.Model):
     coins = models.PositiveIntegerField(default=0, help_text="Current number of coins of the player.")
     is_alive = models.BooleanField(default=True, help_text="Whether the player is alive or not.")
 
+    class Meta:
+        """Meta class for PlayerInGame."""
+
+        # we'll need postgresql to add a condition on `is_alive=True`
+        unique_together = ("player", "game")
+
 
 class OccupiedTile(models.Model):
     """Represent a tile that is occupied by a player."""
@@ -115,12 +149,18 @@ class OccupiedTile(models.Model):
     player_in_game = models.ForeignKey(
         PlayerInGame, on_delete=models.CASCADE, help_text="Player in game that occupies the tile."
     )
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the tile is in.")
     col = models.IntegerField(help_text="The grid column of the tile in the offset `odd-q` coordinate system.")
     row = models.IntegerField(help_text="The grid row of the tile in the offset `odd-q` coordinate system.")
     level = models.PositiveSmallIntegerField(
         default=20, help_text="Current level of the tile. Max 100. Destroyed at 0."
     )
-    updated_at = models.DateTimeField(auto_now=True, help_text="When the tile was last updated.")
+    updated_at = models.DateTimeField(auto_now=True, help_text="When the tile was last updated.", db_index=True)
+
+    class Meta:
+        """Meta class for OccupiedTile."""
+
+        unique_together = ("game", "col", "row")
 
     @classmethod
     def has_tiles(cls, player_in_game_id: int) -> bool:
