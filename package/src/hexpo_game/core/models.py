@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional, cast
 
 from django.db import models
-from django.db.models import Count, Max, Q, QuerySet
+from django.db.models import Count, Max, OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
 
 from .constants import NB_COLORS, ActionType, GameMode, RandomEventTurnMoment
@@ -80,7 +80,17 @@ class Game(models.Model):
         queryset = (
             self.playeringame_set.all()
             .select_related("player")
-            .annotate(nb_tiles=Count("occupiedtile"))
+            .annotate(
+                nb_tiles=Count("occupiedtile"),
+                nb_actions=Subquery(
+                    Action.objects.filter(player_in_game=OuterRef("id"))
+                    .values("player_in_game_id")
+                    .order_by()
+                    .annotate(nb_actions=Count("*"))
+                    .values("nb_actions"),
+                    output_fields=models.IntegerField(),
+                ),
+            )
             .order_by("-nb_tiles", "-id")
         )
         if limit is not None:

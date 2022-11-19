@@ -79,6 +79,7 @@ class GameState:
                 "rank": index,
                 "nb_tiles": player_in_game.nb_tiles,  # type: ignore[attr-defined]
                 "percent_tiles": f"{player_in_game.nb_tiles / self.grid.nb_tiles * 100:.2f}",  # type: ignore[attr-defined]  # pylint: disable=line-too-long
+                "nb_actions": player_in_game.nb_actions,  # type: ignore[attr-defined]
                 "id": player_in_game.id,
             }
             for index, player_in_game in enumerate(players_in_game, 1)
