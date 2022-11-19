@@ -10,6 +10,7 @@ class GameMode(models.TextChoices):
 
     FREE_FULL = "free-full", "Free full"
     FREE_NEIGHBOR = "free-neighbor", "Free neighbor"
+    TURN_BY_TURN = "turn-by-turn", "Turn by turn"
 
 
 class ActionType(models.TextChoices):

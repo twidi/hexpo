@@ -2,11 +2,12 @@
 
 import logging
 
+from asgiref.sync import sync_to_async
 from django.utils import timezone
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES, get_click_target
-from .constants import NB_COLORS, PALETTE, ActionType
+from .constants import NB_COLORS, PALETTE, ActionType, GameMode
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame
 from .types import Point
@@ -23,6 +24,15 @@ async def on_click(  # pylint: disable=unused-argument
         area = COORDINATES["grid-area"]
         tile = grid.get_tile_at_point(Point(x=point.x - area[0][0], y=point.y - area[0][1]))
         if tile is not None:
+
+            if (
+                game.mode == GameMode.FREE_NEIGHBOR
+                and await sync_to_async(OccupiedTile.has_tiles)(game.id, player.id)
+                and not await sync_to_async(OccupiedTile.has_occupied_neighbors)(game.id, player.id, tile, grid.grid)
+            ):
+                logger.warning("%s clicked on %s (%s) but has no neighbors", player.name, tile, point)
+                return
+
             logger.info("%s clicked on %s (%s)", player.name, tile, point)
             color_index = player.id % NB_COLORS
 
@@ -56,6 +66,7 @@ async def on_click(  # pylint: disable=unused-argument
                 confirmed_at=timezone.now(),
             )
             return
+
     logger.info("%s clicked on %s (%s)", player.name, target, point)
 
 

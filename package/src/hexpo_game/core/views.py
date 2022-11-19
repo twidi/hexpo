@@ -10,7 +10,7 @@ from typing import Any, Optional, cast
 from aiohttp import web
 from aiohttp.web import Response
 from asgiref.sync import sync_to_async
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, Prefetch, Q
 from django.template import loader
 
 from hexpo_game.core.grid import ConcreteGrid
@@ -72,7 +72,9 @@ class GameState:
 
         def get_players_in_game() -> list[PlayerInGame]:
             return list(
-                self.game.playeringame_set.select_related("player").prefetch_related("player__occupiedtile_set").all()
+                self.game.playeringame_set.select_related("player")
+                .prefetch_related(Prefetch("player__occupiedtile_set", queryset=self.game.occupiedtile_set.all()))
+                .all()
             )
 
         for player_in_game in await sync_to_async(get_players_in_game)():

@@ -5,14 +5,18 @@ from __future__ import annotations
 from datetime import timedelta
 
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
-from .constants import NB_COLORS, ActionType, RandomEventTurnMoment
+from .constants import NB_COLORS, ActionType, GameMode, RandomEventTurnMoment
+from .grid import Grid
+from .types import Tile
 
 
 class Game(models.Model):
     """Represent a playing game."""
 
+    mode = models.CharField(max_length=255, choices=GameMode.choices, default=GameMode.FREE_FULL)
     started_at = models.DateTimeField(auto_now_add=True, help_text="When the game started.")
     ended_at = models.DateTimeField(null=True, blank=True, help_text="When the game ended.")
     grid_nb_cols = models.PositiveIntegerField(help_text="Number of columns in the grid.")
@@ -116,6 +120,20 @@ class OccupiedTile(models.Model):
         default=20, help_text="Current level of the tile. Max 100. Destroyed at 0."
     )
     updated_at = models.DateTimeField(auto_now=True, help_text="When the tile was last updated.")
+
+    @classmethod
+    def has_tiles(cls, game_id: int, player_id: int) -> bool:
+        """Return whether the player has tiles or not."""
+        return cls.objects.filter(game_id=game_id, player_id=player_id).exists()
+
+    @classmethod
+    def has_occupied_neighbors(cls, game_id: int, player_id: int, tile: Tile, grid: Grid) -> bool:
+        """Check if the tile has at least one neighbor that is occupied by the player."""
+        neighbors: tuple[Tile, ...] = tuple(neighbor for neighbor in grid.neighbors[tile] if neighbor)
+        neighbor_filter = Q(col=neighbors[0].col, row=neighbors[0].row)
+        for neighbor in neighbors[1:]:
+            neighbor_filter |= Q(col=neighbor.col, row=neighbor.row)
+        return cls.objects.filter(game_id=game_id, player_id=player_id).filter(neighbor_filter).exists()
 
 
 class Drop(models.Model):
