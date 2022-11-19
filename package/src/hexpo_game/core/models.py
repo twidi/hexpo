@@ -193,7 +193,7 @@ class Drop(models.Model):
     game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the drop is in.")
     tile_col = models.IntegerField(help_text="The grid column of the drop in the offset `odd-q` coordinate system.")
     tile_row = models.IntegerField(help_text="The grid row of the drop in the offset `odd-q` coordinate system.")
-    coins = models.PositiveIntegerField(help_text="Number of coins in the drop.")
+    nb_actions = models.FloatField(help_text="Number of action points in the drop.")
 
 
 class Action(models.Model):
@@ -229,8 +229,7 @@ class RandomEvent(models.Model):
     tile_row = models.IntegerField(
         help_text="The grid row of the event in the offset `odd-q` coordinate system.", null=True
     )
-    confirmed_at = models.DateTimeField(help_text="When the event was confirmed.", null=True)
     lightning_damage = models.PositiveIntegerField(help_text="Damage of the lightning.", null=True)
     earthquake_damage = models.PositiveIntegerField(help_text="Damage of the earthquake.", null=True)
     earthquake_radius = models.PositiveIntegerField(help_text="Radius of the earthquake.", null=True)
-    drop_coins_amount = models.PositiveIntegerField(help_text="Amount of coins in the drop.", null=True)
+    drop_actions_amount = models.FloatField(help_text="Amount of coins in the drop.", null=True)
