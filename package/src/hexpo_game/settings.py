@@ -14,7 +14,11 @@ import logging.config
 import os
 from pathlib import Path
 
+import dj_database_url
 import yaml
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Build paths inside the project like this: PROJECT_DIR / 'subdir'.
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -80,11 +84,7 @@ WSGI_APPLICATION = "hexpo_game.wsgi.application"
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        # to configure one day with environment variable
-        "NAME": os.environ["DATABASE_URL"],
-    }
+    "default": dj_database_url.parse(os.environ["DATABASE_URL"], conn_max_age=None),
 }
 
 

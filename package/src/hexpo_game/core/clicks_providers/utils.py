@@ -5,7 +5,6 @@ from typing import Awaitable, Callable, Optional, TypeAlias, cast
 
 import aiohttp
 from asgiref.sync import sync_to_async
-from dotenv import load_dotenv
 from twitchio import Client  # type: ignore[import]
 
 from ... import django_setup  # noqa: F401  # pylint: disable=unused-import
@@ -26,8 +25,6 @@ async def get_twitch_app_token() -> str:
         The Twitch app token.
 
     """
-    load_dotenv()
-
     if not os.environ.get("TWITCH_CLIENT_ID"):
         raise RuntimeError("TWITCH_CLIENT_ID is not set. Please set it in .env or as an environment variable.")
 
