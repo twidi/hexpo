@@ -112,8 +112,9 @@ class PlayerInGame(models.Model):
 class OccupiedTile(models.Model):
     """Represent a tile that is occupied by a player."""
 
-    game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the tile is in.")
-    player = models.ForeignKey(Player, on_delete=models.CASCADE, help_text="Player that occupies the tile.")
+    player_in_game = models.ForeignKey(
+        PlayerInGame, on_delete=models.CASCADE, help_text="Player in game that occupies the tile."
+    )
     col = models.IntegerField(help_text="The grid column of the tile in the offset `odd-q` coordinate system.")
     row = models.IntegerField(help_text="The grid row of the tile in the offset `odd-q` coordinate system.")
     level = models.PositiveSmallIntegerField(
@@ -122,18 +123,18 @@ class OccupiedTile(models.Model):
     updated_at = models.DateTimeField(auto_now=True, help_text="When the tile was last updated.")
 
     @classmethod
-    def has_tiles(cls, game_id: int, player_id: int) -> bool:
+    def has_tiles(cls, player_in_game_id: int) -> bool:
         """Return whether the player has tiles or not."""
-        return cls.objects.filter(game_id=game_id, player_id=player_id).exists()
+        return cls.objects.filter(player_in_game_id=player_in_game_id).exists()
 
     @classmethod
-    def has_occupied_neighbors(cls, game_id: int, player_id: int, tile: Tile, grid: Grid) -> bool:
+    def has_occupied_neighbors(cls, player_in_game_id: int, tile: Tile, grid: Grid) -> bool:
         """Check if the tile has at least one neighbor that is occupied by the player."""
         neighbors: tuple[Tile, ...] = tuple(neighbor for neighbor in grid.neighbors[tile] if neighbor)
         neighbor_filter = Q(col=neighbors[0].col, row=neighbors[0].row)
         for neighbor in neighbors[1:]:
             neighbor_filter |= Q(col=neighbor.col, row=neighbor.row)
-        return cls.objects.filter(game_id=game_id, player_id=player_id).filter(neighbor_filter).exists()
+        return cls.objects.filter(player_in_game_id=player_in_game_id).filter(neighbor_filter).exists()
 
 
 class Drop(models.Model):
@@ -148,8 +149,9 @@ class Drop(models.Model):
 class Action(models.Model):
     """Represent an action done by a player."""
 
-    player = models.ForeignKey(Player, on_delete=models.CASCADE, help_text="Player that did the action.")
-    game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the action is in.")
+    player_in_game = models.ForeignKey(
+        PlayerInGame, on_delete=models.CASCADE, help_text="Player in game that did the action."
+    )
     turn = models.PositiveIntegerField(help_text="Turn number when the action was done.")
     action_type = models.CharField(max_length=255, help_text="Type of the action.", choices=ActionType.choices)
     tile_col = models.IntegerField(

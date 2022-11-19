@@ -10,14 +10,14 @@ from typing import Any, Optional, cast
 from aiohttp import web
 from aiohttp.web import Response
 from asgiref.sync import sync_to_async
-from django.db.models import Count, Max, Prefetch, Q
+from django.db.models import Count, Max, Q
 from django.template import loader
 
 from hexpo_game.core.grid import ConcreteGrid
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .game import get_game_and_grid
-from .models import Game, PlayerInGame
+from .models import Game, OccupiedTile, PlayerInGame
 from .types import Color, Tile
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ class GameState:
         return cast(
             Optional[datetime],
             (
-                self.game.occupiedtile_set.all()
+                OccupiedTile.objects.filter(player_in_game__game=self.game)
                 .exclude(updated_at__isnull=True)
                 .aggregate(max_last_updated=Max("updated_at"))["max_last_updated"]
             ),
@@ -72,16 +72,14 @@ class GameState:
 
         def get_players_in_game() -> list[PlayerInGame]:
             return list(
-                self.game.playeringame_set.select_related("player")
-                .prefetch_related(Prefetch("player__occupiedtile_set", queryset=self.game.occupiedtile_set.all()))
-                .all()
+                self.game.playeringame_set.prefetch_related("occupiedtile_set").all()
             )
 
         for player_in_game in await sync_to_async(get_players_in_game)():
             self.grid.draw_areas(
                 (
                     Tile(occupied_tile.col, occupied_tile.row)
-                    for occupied_tile in player_in_game.player.occupiedtile_set.all()
+                    for occupied_tile in player_in_game.occupiedtile_set.all()
                 ),
                 Color.from_hex(player_in_game.color).as_bgr(),
             )
@@ -93,7 +91,7 @@ class GameState:
         players_in_game = (
             self.game.playeringame_set.all()
             .select_related("player")
-            .annotate(nb_tiles=Count("player__occupiedtile", filter=Q(player__occupiedtile__game=self.game)))
+            .annotate(nb_tiles=Count("occupiedtile"))
             .order_by("-nb_tiles", "-id")[:20]
         )
         return [
