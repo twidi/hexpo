@@ -90,8 +90,16 @@ class Game(models.Model):
                     .values("nb_actions"),
                     output_fields=models.IntegerField(),
                 ),
+                max_action_id=Subquery(
+                    Action.objects.filter(player_in_game=OuterRef("id"))
+                    .values("player_in_game_id")
+                    .order_by()
+                    .annotate(max_id=Max("id"))
+                    .values("max_id"),
+                    output_fields=models.IntegerField(),
+                ),
             )
-            .order_by("-nb_tiles", "-id")
+            .order_by("-nb_tiles", "-max_action_id")
         )
         if limit is not None:
             queryset = queryset[:limit]
