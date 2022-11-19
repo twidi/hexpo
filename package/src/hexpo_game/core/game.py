@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES, get_click_target
-from .constants import NB_COLORS, ActionType, GameMode
+from .constants import NB_COLORS, ActionType, GameMode, PALETTE
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame
 from .types import Point
@@ -32,7 +32,7 @@ async def on_click(  # pylint: disable=unused-argument
                     started_turn=0,
                     start_tile_col=0,
                     start_tile_row=0,
-                    color=player.id % NB_COLORS,
+                    color=PALETTE[player.id % NB_COLORS].as_hex,
                 ),
             )
 
