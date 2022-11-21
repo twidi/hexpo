@@ -6,11 +6,11 @@ from .types import Point
 
 SCREEN_SIZE = (2560, 1440)
 COORDINATES: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {  # ((left, top), (right, bottom))
-    "action-btn-attack": ((10, 226), (92, 266)),
-    "action-btn-defend": ((102, 226), (184, 266)),
-    "action-btn-grow": ((194, 226), (276, 266)),
-    "action-btn-bank": ((286, 226), (368, 266)),
-    "grid-area": ((450, 216), (2226, 1224)),
+    "action-btn-attack": ((10, 192), (92, 232)),
+    "action-btn-defend": ((102, 192), (184, 232)),
+    "action-btn-grow": ((194, 192), (276, 232)),
+    "action-btn-bank": ((286, 192), (368, 232)),
+    "grid-area": ((416+30, 182+34), (2226, 1224)),
 }
 
 
