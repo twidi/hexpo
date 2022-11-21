@@ -242,3 +242,29 @@ body {
 #bottom-bar {
     grid-area: bottom-bar;
 }
+
+.extension {
+  animation: 2s linear infinite condemed_blink_effect;
+}
+@-webkit-keyframes condemed_blink_effect {
+  0% {
+    visibility: hidden;
+  }
+  50% {
+    visibility: hidden;
+  }
+  100% {
+    visibility: visible;
+  }
+}
+@keyframes condemed_blink_effect {
+  0% {
+    visibility: hidden;
+  }
+  50% {
+    visibility: hidden;
+  }
+  100% {
+    visibility: visible;
+  }
+}
