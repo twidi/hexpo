@@ -1,7 +1,8 @@
 """Main game loop and functions."""
 
 import logging
-from typing import Optional
+from asyncio import Queue
+from typing import Optional, TypeAlias
 
 from asgiref.sync import sync_to_async
 from django.utils import timezone
@@ -14,6 +15,20 @@ from .models import Action, Game, OccupiedTile, Player, PlayerInGame
 from .types import Point, Tile
 
 logger = logging.getLogger("hexpo_game.game")
+
+
+GameQueue: TypeAlias = Queue[tuple[Player, Game, ConcreteGrid, Optional[Tile]]]
+
+
+async def dequeue_clicks(queue: GameQueue) -> None:
+    """Dequeue clicks and process them."""
+    while True:
+        player, game, grid, tile = await queue.get()
+        try:
+            await sync_to_async(on_maybe_tile_click)(player, game, grid.grid, tile)
+        except Exception:  # pylint:disable=broad-except
+            logger.exception("Error while processing click for %s", player.name)
+        queue.task_done()
 
 
 def on_maybe_tile_click(player: Player, game: Game, grid: Grid, tile: Optional[Tile]) -> Optional[PlayerInGame]:
@@ -111,7 +126,7 @@ def on_maybe_tile_click(player: Player, game: Game, grid: Grid, tile: Optional[T
 
 
 async def on_click(  # pylint: disable=unused-argument
-    player: Player, x_relative: float, y_relative: float, game: Game, grid: ConcreteGrid
+    player: Player, x_relative: float, y_relative: float, game: Game, grid: ConcreteGrid, queue: GameQueue
 ) -> None:
     """Display a message when a click is received."""
     target, point = get_click_target(x_relative, y_relative)
@@ -119,9 +134,7 @@ async def on_click(  # pylint: disable=unused-argument
         area = COORDINATES["grid-area"]
         tile = grid.get_tile_at_point(Point(x=point.x - area[0][0], y=point.y - area[0][1]))
 
-        # push this in a queue and let another process dequeue clicks in order?
-
-        await sync_to_async(on_maybe_tile_click)(player, game, grid.grid, tile)
+        await queue.put((player, game, grid, tile))
         if tile is not None:
             return
 
