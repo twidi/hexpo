@@ -11,7 +11,10 @@ html, body {
     --shell-shadow: #0a051366
 }
 body {
-    background-color: #333;
+    background-color: #11091f;
+    font-size: 16px;
+    color: #eee;
+    font-family: 'Roboto', sans-serif;
 }
 
 #main-container {
@@ -43,10 +46,36 @@ body {
     grid-area: empty-bottom;
 }
 #top-bar {
+    padding-left: 20px;
+    padding-right: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     grid-area: top-bar;
     background-color: var(--shell-background);
     box-shadow: 0 14px 11px 2px var(--shell-shadow), 0 -14px 11px 2px var(--shell-shadow);
+    font-size: 32px;
 }
+#top-bar .extension {
+    width: 7.5em;
+    display: grid;
+    grid-template-columns: 50px 1fr;
+    grid-template-rows: repeat(2, 1fr);
+    grid-column-gap: 10px;
+    grid-row-gap: 0;
+    grid-template-areas:
+        "icon manage"
+        "icon accept";
+    align-items: center;
+    text-align: right;
+}
+#top-bar p {
+    margin: 0;
+}
+#top-bar p ~ p {
+    margin-top: 16px;
+}
+
 #top-left-corner {
     grid-area: top-left-corner;
     background-color: var(--shell-background);
@@ -70,8 +99,8 @@ body {
 }
 .action-btn {
     width: 60px;
-    padding: 10px;
     color: #ccc;
+    padding: 10px;
     border: 1px solid red;
     text-align: center;
     background-color: #000;
@@ -93,8 +122,6 @@ body {
         "rank info"
         "rank extra";
     align-items: center;
-    font-size: 16px;
-    color: #eee;
 }
 .player.cannot-play {
     background-color: #480b0a;
