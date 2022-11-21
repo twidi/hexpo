@@ -20,25 +20,26 @@ body {
     height: 100%;
     width: 100%;
     display: grid;
-    grid-template-columns: 400px 1fr 15%;
-    grid-template-rows: 15% 1fr 15%;
+    grid-template-columns: 450px 1fr calc(15% - 50px);
+    grid-template-rows: 15% 1fr calc(15%  - 36px) 36px;
     grid-column-gap: 0;
     grid-row-gap: 0;
     grid-template-areas:
-        "left-bar top-bar top-bar"
+        "top-left-corner top-bar top-bar"
         "left-bar grid-area right-bar"
-        "left-bar bottom-bar bottom-bar";
+        "left-bar bottom-bar bottom-bar"
+        "empty empty empty";
 }
 
 #left-bar {
     grid-area: left-bar;
-    background-color: #2226;
+    background-color: #222;
     display: flex;
     flex-direction: column;
+    box-shadow: 14px 0px 11px 2px rgba(0,0,0,0.5);
 }
 
-#info {
-    height: 200px;
+#top-left-corner {
 }
 
 #actions {
@@ -72,7 +73,7 @@ body {
         "rank info"
         "rank extra";
     align-items: center;
-    font-size: larger;
+    font-size: 16px;
     color: #eee;
 }
 .player.cannot-play {
@@ -87,7 +88,7 @@ body {
     justify-content: space-between;
     align-items: center;
     column-gap: 10px;
-    padding-right: 5px;
+    padding-right: 10px;
     grid-area: info;
 }
 
@@ -152,7 +153,10 @@ body {
 
 #grid-area {
     grid-area: grid-area;
-    /*font-size: 90;*/
+}
+#grid-area.debug {
+    font-size: 90;
+    white-space: pre;
 }
 #grid {
     opacity: var(--grid-opacity);
@@ -173,10 +177,8 @@ body {
     <body>
         <div id="main-container">
             <div id="top-bar"></div>
+            <div id="top-left-corner"></div>
             <div id="left-bar">
-                <div id="info">
-                    blah blah blah
-                </div>
                 <div id="actions">
                     <div class="action-btn positioned" id="action-btn-attack">Attack</div>
                     <div class="action-btn positioned" id="action-btn-defend">Defend</div>
@@ -194,26 +196,28 @@ body {
             <div id="bottom-bar"></div>
         </div>
     <script>
-        /*
-        let log = '\n';
-        document.querySelectorAll('.positioned').forEach((el) => {
-            const boundingRect = el.getBoundingClientRect();
-            log += `    '${el.id}': ((${boundingRect.left}, ${boundingRect.top}), (${boundingRect.right}, ${boundingRect.bottom})),\n`;
-        });
-        document.querySelector('#grid-area').innerHTML = log;
-        console.log(log);
-        */
+        if (false) {
+            let log = '\n';
+            document.querySelectorAll('.positioned').forEach((el) => {
+                const boundingRect = el.getBoundingClientRect();
+                log += `    '${el.id}': ((${boundingRect.left}, ${boundingRect.top}), (${boundingRect.right}, ${boundingRect.bottom})),\n`;
+            });
+            let grid_area = document.querySelector('#grid-area');
+            grid_area.classList.add('debug');
+            grid_area.innerHTML = log;
+            console.log(log);
+        }
 
         let grid = document.querySelector('#grid'),
             players = document.querySelector('#players');
-        if (true) setInterval(async () => {
+        if (false) setInterval(async () => {
             const response = await fetch('/grid', {cache: 'no-cache'});
             if (response.ok) {
                 const data = await response.text();
                 grid.setAttribute('src', 'data:image/png;base64,' + data);
             }
         }, 1000);
-        if (true) setInterval(async () => {
+        if (false) setInterval(async () => {
             const response = await fetch('/players', {cache: 'no-cache'});
             if (response.ok) {
                 players.innerHTML = await response.text();

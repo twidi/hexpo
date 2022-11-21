@@ -75,7 +75,7 @@ class GameState:
 
     def get_players_context(self) -> list[dict[str, Any]]:
         """Get the context for the players left bar."""
-        players_in_game = self.game.get_players_in_game_for_leader_board(20)
+        players_in_game = self.game.get_players_in_game_for_leader_board(15)
         now = timezone.now()
         alive_time = now - RESPAWN_FORBID_DURATION
 
