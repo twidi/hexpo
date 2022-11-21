@@ -58,6 +58,7 @@ dev = [
     'django-stubs',
     'mypy',
     'mypy-extensions',
+    'types-dj-database-url',
 ]
 
 lint = [
@@ -76,7 +77,9 @@ lint = [
 tests = [
     'mock',
     'pytest',
+    'pytest-asyncio',
     'pytest-cov',
+    'pytest-django',
     'pytest-lazy-fixture',
     'pytest-sugar',
     'types-mock',

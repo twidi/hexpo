@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional, cast
 
 from django.db import models
-from django.db.models import Count, Max, OuterRef, Q, QuerySet, Subquery
+from django.db.models import Count, F, Max, OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
 
 from .constants import NB_COLORS, ActionType, GameMode, RandomEventTurnMoment
@@ -71,35 +71,42 @@ class Game(models.Model):
             ),
         )
 
+    def get_all_players_in_games(self) -> QuerySet[PlayerInGame]:
+        """Get the players in the game, dead or alive."""
+        return self.playeringame_set.alias(
+            last_playeringame_id=Subquery(
+                PlayerInGame.objects.filter(game_id=self.id, player_id=OuterRef("player_id"))
+                .values("player_id")
+                .order_by()
+                .annotate(last_id=Max("id"))
+                .values("last_id"),
+                output_fields=models.IntegerField(),
+            ),
+        ).filter(id=F("last_playeringame_id"))
+
     def get_players_in_game_with_occupied_tiles(self) -> list[PlayerInGame]:
         """Get the players in game with their occupied tiles prefeteched."""
-        return list(self.playeringame_set.prefetch_related("occupiedtile_set").all())
+        return list(self.playeringame_set.filter(dead_at__isnull=True).prefetch_related("occupiedtile_set").all())
 
     def get_players_in_game_for_leader_board(self, limit: Optional[int] = None) -> QuerySet[PlayerInGame]:
         """Get the players in game for the leader board."""
         queryset = (
-            self.playeringame_set.all()
-            .select_related("player")
+            self.get_all_players_in_games()
             .annotate(
-                nb_tiles=Count("occupiedtile"),
                 nb_actions=Subquery(
-                    Action.objects.filter(player_in_game=OuterRef("id"))
-                    .values("player_in_game_id")
-                    .order_by()
-                    .annotate(nb_actions=Count("*"))
-                    .values("nb_actions"),
-                    output_fields=models.IntegerField(),
+                    Player.objects.filter(id=OuterRef("player_id"))
+                    .annotate(count=Count("playeringame__action", filter=Q(playeringame__game_id=self.id)))
+                    .values("count")[:1]
                 ),
-                max_action_id=Subquery(
-                    Action.objects.filter(player_in_game=OuterRef("id"))
-                    .values("player_in_game_id")
-                    .order_by()
-                    .annotate(max_id=Max("id"))
-                    .values("max_id"),
-                    output_fields=models.IntegerField(),
+                nb_games=Subquery(
+                    Player.objects.filter(id=OuterRef("player_id"))
+                    .annotate(count=Count("playeringame", filter=Q(playeringame__game_id=self.id)))
+                    .values("count")[:1]
                 ),
+                nb_tiles=Count("occupiedtile"),
             )
-            .order_by("-nb_tiles", "-max_action_id")
+            .select_related("player")
+            .order_by("-nb_tiles", "-dead_at")
         )
         if limit is not None:
             queryset = queryset[:limit]
@@ -142,7 +149,7 @@ class PlayerInGame(models.Model):
     player = models.ForeignKey(Player, on_delete=models.CASCADE, help_text="Player in the game.")
     game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the player is in.")
     started_turn = models.PositiveIntegerField(help_text="Turn number when the player started.")
-    ended_turn = models.PositiveIntegerField(null=True, blank=True, help_text="Turn number when the player ended.")
+    ended_turn = models.PositiveIntegerField(null=True, blank=True, help_text="Turn number when the player died.")
     color = models.CharField(max_length=7, help_text="Color of the player.")
     start_tile_col = models.IntegerField(
         help_text="The grid column of the start tile in the offset `odd-q` coordinate system."
@@ -151,14 +158,32 @@ class PlayerInGame(models.Model):
         help_text="The grid row of the start tile in the offset `odd-q` coordinate system."
     )
     level = models.PositiveIntegerField(default=1, help_text="Current level of the player.")
-    coins = models.PositiveIntegerField(default=0, help_text="Current number of coins of the player.")
-    is_alive = models.BooleanField(default=True, help_text="Whether the player is alive or not.")
+    banked_actions = models.PositiveIntegerField(default=0, help_text="Current number of banked actions points of the player.")
+    dead_at = models.DateTimeField(null=True, help_text="When the player died. Null if the player is alive.")
 
     class Meta:
         """Meta class for PlayerInGame."""
 
-        # we'll need postgresql to add a condition on `is_alive=True`
-        unique_together = ("player", "game")
+        constraints = [
+            models.UniqueConstraint(
+                name="%(app_label)s_%(class)s_game_player_is_alive",
+                fields=(
+                    "game",
+                    "player",
+                ),
+                condition=Q(dead_at__isnull=True),
+            ),
+        ]
+
+    def has_tiles(self) -> bool:
+        """Return whether the player has tiles or not."""
+        return self.occupiedtile_set.exists()
+
+    def die(self) -> None:
+        """Set the player as dead."""
+        self.ended_turn = self.game.current_turn
+        self.dead_at = timezone.now()
+        self.save(update_fields=["dead_at"])
 
 
 class OccupiedTile(models.Model):
@@ -179,11 +204,6 @@ class OccupiedTile(models.Model):
         """Meta class for OccupiedTile."""
 
         unique_together = ("game", "col", "row")
-
-    @classmethod
-    def has_tiles(cls, player_in_game_id: int) -> bool:
-        """Return whether the player has tiles or not."""
-        return cls.objects.filter(player_in_game_id=player_in_game_id).exists()
 
     @classmethod
     def has_occupied_neighbors(cls, player_in_game_id: int, tile: Tile, grid: Grid) -> bool:
@@ -240,4 +260,4 @@ class RandomEvent(models.Model):
     lightning_damage = models.PositiveIntegerField(help_text="Damage of the lightning.", null=True)
     earthquake_damage = models.PositiveIntegerField(help_text="Damage of the earthquake.", null=True)
     earthquake_radius = models.PositiveIntegerField(help_text="Radius of the earthquake.", null=True)
-    drop_actions_amount = models.FloatField(help_text="Amount of coins in the drop.", null=True)
+    drop_actions_amount = models.FloatField(help_text="Amount of actions points in the drop.", null=True)

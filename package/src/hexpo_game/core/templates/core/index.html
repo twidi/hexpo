@@ -63,32 +63,38 @@ body {
 }
 
 .player {
-    display: flex;
-    flex-direction: column;
-    row-gap: 5px;
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    grid-template-rows: repeat(2, 1fr);
+    grid-column-gap: 5px;
+    grid-row-gap: 5px;
+    grid-template-areas:
+        "rank info"
+        "rank extra";
+    align-items: center;
+    font-size: larger;
+    color: #eee;
 }
 
 .player-info {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: larger;
-    color: #eee;
-    padding-left: 40px;
     column-gap: 10px;
     padding-right: 5px;
+    grid-area: info;
 }
 
 .player-color {
     width: 100px;
     height: 55px;
     background: var(--player-color);
-    transform: rotate(90deg) scale(0.3);
+    transform: rotate(90deg) scale(0.4);
     position: absolute;
-    left: -30px;
+    left: -28px;
     opacity: var(--grid-opacity);
+    grid-area: rank;
 }
-
 .player-color:before, .player-color:after {
     content: "";
     position: absolute;
@@ -113,13 +119,17 @@ body {
 }
 
 .player-rank {
-    width: 1.4em;
-    flex-grow: 0;
-    text-align: right;
+    grid-area: rank;
+    text-align: center;
+    z-index: 1;
 }
+
 .player-name {
     flex-grow: 1;
     text-align: left;
+}
+.player-name span.cannot_play {
+    background-color: #810f0b;
 }
 .player-nb-tiles {
     width: 2.5em;
@@ -127,9 +137,13 @@ body {
     text-align: right;
 }
 .player-percent-tiles {
-    width: 5em;
+    width: 3.5em;
     flex-grow: 0;
     text-align: right;
+}
+.player-extra {
+    grid-area: extra;
+    color: #999;
 }
 
 
@@ -189,7 +203,7 @@ body {
 
         let grid = document.querySelector('#grid'),
             players = document.querySelector('#players');
-        setInterval(async () => {
+        if (true) setInterval(async () => {
             const response = await fetch('/grid', {cache: 'no-cache'});
             if (response.ok) {
                 const data = await response.text();

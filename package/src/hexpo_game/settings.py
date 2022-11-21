@@ -84,7 +84,7 @@ WSGI_APPLICATION = "hexpo_game.wsgi.application"
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
 DATABASES = {
-    "default": dj_database_url.parse(os.environ["DATABASE_URL"], conn_max_age=None),
+    "default": dj_database_url.parse(os.environ["DATABASE_URL"], conn_max_age=None),  # type: ignore[arg-type]
 }
 
 

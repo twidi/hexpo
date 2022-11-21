@@ -11,7 +11,9 @@ from aiohttp import web
 from aiohttp.web import Response
 from asgiref.sync import sync_to_async
 from django.template import loader
+from django.utils import timezone
 
+from hexpo_game.core.constants import RESPAWN_WAIT_DURATION
 from hexpo_game.core.grid import ConcreteGrid
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
@@ -72,15 +74,20 @@ class GameState:
     def get_players_context(self) -> list[dict[str, Any]]:
         """Get the context for the players left bar."""
         players_in_game = self.game.get_players_in_game_for_leader_board(20)
+        alive_time = timezone.now() - RESPAWN_WAIT_DURATION
+
         return [
             {
                 "name": player_in_game.player.name,
                 "color": player_in_game.color,
                 "rank": index,
                 "nb_tiles": player_in_game.nb_tiles,  # type: ignore[attr-defined]
-                "percent_tiles": f"{player_in_game.nb_tiles / self.grid.nb_tiles * 100:.2f}",  # type: ignore[attr-defined]  # pylint: disable=line-too-long
+                "percent_tiles": f"{player_in_game.nb_tiles / self.grid.nb_tiles * 100:.1f}%"  # type: ignore[attr-defined]  # pylint: disable=line-too-long
+                if player_in_game.nb_tiles  # type: ignore[attr-defined]
+                else "",
                 "nb_actions": player_in_game.nb_actions,  # type: ignore[attr-defined]
-                "id": player_in_game.id,
+                "nb_games": player_in_game.nb_games,  # type: ignore[attr-defined]
+                "can_play": not player_in_game.dead_at or player_in_game.dead_at < alive_time,
             }
             for index, player_in_game in enumerate(players_in_game, 1)
         ]

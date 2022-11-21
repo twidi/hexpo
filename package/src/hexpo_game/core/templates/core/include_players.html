@@ -1,14 +1,16 @@
 {% for player in players %}
     <div class="player" style="--player-color: {{ player.color }}">
+        <div class="player-color"></div>
+        <div class="player-rank">{{ player.rank }}</div>
         <div class="player-info">
-            <div class="player-color"></div>
-            <div class="player-rank">{{ player.rank }}</div>
             <div class="player-name">
-                {{ player.name }}
-                <br/> ({{ player.nb_actions }} clicks)
+                <span class="{% if player.can_play %}can_play{% else %}cannot_play{% endif %}">{{ player.name }}</span>
             </div>
             <div class="player-nb-tiles">{{ player.nb_tiles }}</div>
-            <div class="player-percent-tiles">{{ player.percent_tiles }}%</div>
+            <div class="player-percent-tiles">{{ player.percent_tiles }}</div>
+        </div>
+        <div class="player-extra">
+            (total: {{ player.nb_games }} essai{{ player.nb_games|pluralize }}, {{ player.nb_actions }} case{{ player.nb_actions|pluralize }})
         </div>
     </div>
 {% endfor %}
