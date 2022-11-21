@@ -148,6 +148,7 @@ class PlayerInGame(models.Model):
 
     player = models.ForeignKey(Player, on_delete=models.CASCADE, help_text="Player in the game.")
     game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the player is in.")
+    started_at = models.DateTimeField(auto_now_add=True, help_text="When the player joined the game.")
     started_turn = models.PositiveIntegerField(help_text="Turn number when the player started.")
     ended_turn = models.PositiveIntegerField(null=True, blank=True, help_text="Turn number when the player died.")
     color = models.CharField(max_length=7, help_text="Color of the player.")
@@ -158,7 +159,9 @@ class PlayerInGame(models.Model):
         help_text="The grid row of the start tile in the offset `odd-q` coordinate system."
     )
     level = models.PositiveIntegerField(default=1, help_text="Current level of the player.")
-    banked_actions = models.PositiveIntegerField(default=0, help_text="Current number of banked actions points of the player.")
+    banked_actions = models.PositiveIntegerField(
+        default=0, help_text="Current number of banked actions points of the player."
+    )
     dead_at = models.DateTimeField(null=True, help_text="When the player died. Null if the player is alive.")
 
     class Meta:

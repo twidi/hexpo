@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from random import randint
 from textwrap import wrap
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Optional
 
 
 class Point(NamedTuple):
@@ -25,6 +25,24 @@ class Point(NamedTuple):
         """
         if isinstance(other, Point):
             return Point(self.x + other.x, self.y + other.y)
+        return NotImplemented
+
+    def __round__(self, ndigits: Optional[int] = None) -> Point:
+        """Round the point to the nearest integer."""
+        return Point(round(self.x, ndigits), round(self.y, ndigits))
+
+    def __mul__(self, other: Any) -> Point:
+        """Multiply a point by a value.
+
+        Parameters
+        ----------
+        other : Any
+            - Can be a number, the values of the point will be multiplied by the number.
+            - Any other kind of value will raise a TypeError.
+
+        """
+        if isinstance(other, (float, int)):
+            return Point(self.x * other, self.y * other)
         return NotImplemented
 
 

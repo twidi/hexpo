@@ -70,8 +70,13 @@ class CubicCoordinate(NamedTuple):
         return CubicCoordinate(q=q, r=r, s=s)
 
 
+SQRT3 = sqrt(3)
+HEX_WIDTH_TO_HEIGHT_RATIO = SQRT3 / 2  # height = width * HEX_WIDTH_TO_HEIGHT_RATIO
+
 THICKNESS = 3
-SEGMENTS_OFFSET = 6
+SEGMENTS_OFFSET = 10
+SEGMENTS_OFFSET_X = SEGMENTS_OFFSET / 2
+SEGMENTS_OFFSET_Y = SEGMENTS_OFFSET * SQRT3 / 2
 SEGMENTS_OFFSETS: tuple[
     tuple[Point, Point],
     tuple[Point, Point],
@@ -81,17 +86,17 @@ SEGMENTS_OFFSETS: tuple[
     tuple[Point, Point],
 ] = (
     # north
-    (Point(SEGMENTS_OFFSET, SEGMENTS_OFFSET), Point(-SEGMENTS_OFFSET, SEGMENTS_OFFSET)),
+    (Point(SEGMENTS_OFFSET_X, SEGMENTS_OFFSET_Y), Point(-SEGMENTS_OFFSET_X, SEGMENTS_OFFSET_Y)),
     # north_east
-    (Point(-SEGMENTS_OFFSET, SEGMENTS_OFFSET), Point(-SEGMENTS_OFFSET, 0)),
+    (Point(-SEGMENTS_OFFSET_X, SEGMENTS_OFFSET_Y), Point(-SEGMENTS_OFFSET_X * 2, 0)),
     # south_east
-    (Point(-SEGMENTS_OFFSET, 0), Point(-SEGMENTS_OFFSET, -SEGMENTS_OFFSET)),
+    (Point(-SEGMENTS_OFFSET_X * 2, 0), Point(-SEGMENTS_OFFSET_X, -SEGMENTS_OFFSET_Y)),
     # south
-    (Point(-SEGMENTS_OFFSET, -SEGMENTS_OFFSET), Point(SEGMENTS_OFFSET, -SEGMENTS_OFFSET)),
+    (Point(-SEGMENTS_OFFSET_X, -SEGMENTS_OFFSET_Y), Point(SEGMENTS_OFFSET_X, -SEGMENTS_OFFSET_Y)),
     # south_west
-    (Point(SEGMENTS_OFFSET, -SEGMENTS_OFFSET), Point(SEGMENTS_OFFSET, 0)),
+    (Point(SEGMENTS_OFFSET_X, -SEGMENTS_OFFSET_Y), Point(SEGMENTS_OFFSET_X * 2, 0)),
     # north_west
-    (Point(SEGMENTS_OFFSET, 0), Point(SEGMENTS_OFFSET, SEGMENTS_OFFSET)),
+    (Point(SEGMENTS_OFFSET_X * 2, 0), Point(SEGMENTS_OFFSET_X, SEGMENTS_OFFSET_Y)),
 )
 
 
@@ -101,9 +106,6 @@ DIRECTION_DIFFERENCES = (
     # odd cols
     [Tile(0, -1), Tile(1, 0), Tile(1, 1), Tile(0, 1), Tile(-1, 1), Tile(-1, 0)],
 )
-
-# height = width * HEX_WIDTH_TO_HEIGHT_RATIO
-HEX_WIDTH_TO_HEIGHT_RATIO = sqrt(3) / 2
 
 
 RenderedMap: TypeAlias = npt.NDArray[np.uint8]
@@ -243,7 +245,6 @@ class ConcreteTile(NamedTuple):
     tile: Tile
     center: Point
     points: TilePoints
-    points_array: npt.NDArray[np.int32] = field(repr=False, compare=False, hash=False)
 
     @property
     def col(self) -> int:
@@ -273,16 +274,13 @@ class ConcreteGrid:
     def __post_init__(self) -> None:
         """Create the concrete grid."""
         self.tile_width = self.tile_size * 2
-        self.tile_height = self.tile_size * sqrt(3)
+        self.tile_height = self.tile_size * SQRT3
         self.tiles = tuple(
             tuple(
                 ConcreteTile(
                     tile,
                     center := self.compute_tile_center(tile),
-                    points := self.compute_tile_points(center),
-                    points_array=np.array(
-                        tuple((round(point.x), round(point.y)) for point in points), dtype=np.int32
-                    ),
+                    self.compute_tile_points(center),
                 )
                 for tile in row
             )
@@ -319,7 +317,7 @@ class ConcreteGrid:
         """
         return Point(
             self.tile_size * 3 / 2 * tile.col + self.tile_width * 1 / 2,
-            self.tile_size * sqrt(3) * (tile.row + 0.5 * (tile.col % 2)) + self.tile_height * 1 / 2,
+            self.tile_size * SQRT3 * (tile.row + 0.5 * (tile.col % 2)) + self.tile_height * 1 / 2,
         )
 
     def compute_tile_points(self, center: Point) -> TilePoints:
@@ -355,8 +353,19 @@ class ConcreteGrid:
         """Reset the map to 0."""
         self.map.fill(0)
 
-    def draw_areas(self, tiles: Iterable[Tile], color: Color) -> None:
-        """Draw the (perimeters of the) areas of the given tiles."""
+    def draw_areas(self, tiles: Iterable[Tile], color: Color, mark: bool = False) -> None:
+        """Draw the (perimeters of the) areas of the given tiles.
+
+        Parameters
+        ----------
+        tiles : Iterable[Tile]
+            The tiles to draw.
+        color : Color
+            The color to use.
+        mark : bool, optional
+            Whether to mark the tiles, by default False.
+
+        """
         if not tiles:
             return
 
@@ -364,15 +373,24 @@ class ConcreteGrid:
 
         tiles_set = set(tiles)
         for tile in tiles_set:
+            concrete_tile = self.tiles[tile.row][tile.col]
+            if mark:
+                cv2.circle(  # pylint: disable=no-member
+                    hex_map,
+                    round(concrete_tile.center),  # type: ignore[call-overload]
+                    SEGMENTS_OFFSET,
+                    (0, 0, 0, 255),
+                    THICKNESS,
+                    cv2.LINE_AA,  # pylint: disable=no-member
+                )
             for direction, neighbor in enumerate(self.grid.neighbors[tile]):
                 if neighbor and neighbor in tiles_set:
                     continue
-                concrete_tile = self.tiles[tile.row][tile.col]
                 offsets = SEGMENTS_OFFSETS[direction]
                 cv2.line(  # pylint: disable=no-member
                     hex_map,
-                    offsets[0] + concrete_tile.points_array[(direction - 1) % 6],
-                    offsets[1] + concrete_tile.points_array[direction],
+                    round(offsets[0] + concrete_tile.points[(direction - 1) % 6]),  # type: ignore[call-overload]
+                    round(offsets[1] + concrete_tile.points[direction]),  # type: ignore[call-overload]
                     (0, 0, 0, 255),
                     THICKNESS,
                     cv2.LINE_AA,  # pylint: disable=no-member
@@ -412,7 +430,7 @@ class ConcreteGrid:
             The size of a tile.
 
         """
-        return min(width / (nb_cols * 1.5 + 0.5), height / (nb_rows * sqrt(3) + 1))
+        return min(width / (nb_cols * 1.5 + 0.5), height / (nb_rows * SQRT3 + 1))
 
     @classmethod
     def compute_grid_size(cls, nb_tiles: int, width: int, height: int) -> tuple[int, int, float]:
@@ -440,7 +458,7 @@ class ConcreteGrid:
         tile = (
             AxialCoordinate(
                 q=(2.0 / 3 * adjusted_point.x) / self.tile_size,
-                r=(-1.0 / 3 * adjusted_point.x + sqrt(3) / 3 * adjusted_point.y) / self.tile_size,
+                r=(-1.0 / 3 * adjusted_point.x + SQRT3 / 3 * adjusted_point.y) / self.tile_size,
             )
             .round()
             .to_tile()

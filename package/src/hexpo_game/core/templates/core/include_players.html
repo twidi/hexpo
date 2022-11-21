@@ -1,10 +1,10 @@
 {% for player in players %}
-    <div class="player" style="--player-color: {{ player.color }}">
+    <div class="player {% if not player.can_play %}cannot-play{% elif player.is_protected %}is-protected{% endif %}" style="--player-color: {{ player.color }}">
         <div class="player-color"></div>
         <div class="player-rank">{{ player.rank }}</div>
         <div class="player-info">
             <div class="player-name">
-                <span class="{% if player.can_play %}can_play{% else %}cannot_play{% endif %}">{{ player.name }}</span>
+                <span>{{ player.name }}</span>
             </div>
             <div class="player-nb-tiles">{{ player.nb_tiles }}</div>
             <div class="player-percent-tiles">{{ player.percent_tiles }}</div>

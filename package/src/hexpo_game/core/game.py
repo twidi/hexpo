@@ -8,7 +8,14 @@ from django.utils import timezone
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES, get_click_target
-from .constants import NB_COLORS, PALETTE, RESPAWN_WAIT_DURATION, ActionType, GameMode
+from .constants import (
+    NB_COLORS,
+    PALETTE,
+    RESPAWN_FORBID_DURATION,
+    RESPAWN_PROTECTED_DURATION,
+    ActionType,
+    GameMode,
+)
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame
 from .types import Point, Tile
@@ -46,7 +53,7 @@ def on_maybe_tile_click(player: Player, game: Game, grid: Grid, tile: Optional[T
         )
         player_just_created = True
     elif player_in_game.dead_at:
-        if player_in_game.dead_at + RESPAWN_WAIT_DURATION > timezone.now():
+        if player_in_game.dead_at + RESPAWN_FORBID_DURATION > timezone.now():
             logger.warning("%s clicked on %s but IS STILL DEAD", player.name, tile)
             return player_in_game
 
@@ -63,9 +70,18 @@ def on_maybe_tile_click(player: Player, game: Game, grid: Grid, tile: Optional[T
         .select_related("player_in_game__player")
         .first()
     )
-    if occupied_tile is not None and occupied_tile.player_in_game.player_id == player.id:
-        logger.info("%s clicked on %s but it's already his tile", player.name, tile)
-        return player_in_game
+    if occupied_tile is not None:
+        if occupied_tile.player_in_game.player_id == player.id:
+            logger.info("%s clicked on %s but it's already his tile", player.name, tile)
+            return player_in_game
+        if timezone.now() < occupied_tile.player_in_game.started_at + RESPAWN_PROTECTED_DURATION:
+            logger.info(
+                "%s clicked on %s but is occupied by %s and protected",
+                player.name,
+                tile,
+                occupied_tile.player_in_game.player.name,
+            )
+            return player_in_game
 
     if (
         game.mode == GameMode.FREE_NEIGHBOR

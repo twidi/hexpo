@@ -6,8 +6,14 @@ from typing import Optional, Sequence
 import pytest
 from asgiref.sync import sync_to_async
 from django.utils import timezone
+from freezegun import freeze_time
 
-from hexpo_game.core.constants import RESPAWN_WAIT_DURATION, ActionType, GameMode
+from hexpo_game.core.constants import (
+    RESPAWN_FORBID_DURATION,
+    RESPAWN_PROTECTED_DURATION,
+    ActionType,
+    GameMode,
+)
 from hexpo_game.core.game import on_maybe_tile_click
 from hexpo_game.core.grid import Grid
 from hexpo_game.core.models import Action, Game, OccupiedTile, Player, PlayerInGame
@@ -169,13 +175,39 @@ async def test_on_click_self_occupied_tile():
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
+async def test_on_click_protected_tile():
+    """Test that a player cannot click on a protected tile."""
+    game = await make_game()
+    player = await make_player()
+    player_in_game = await make_player_in_game(game, player, [Tile(0, 0)])
+    assert await player_in_game.action_set.acount() == 1
+    assert await player_in_game.occupiedtile_set.acount() == 1
+    player2 = await make_player(2)
+    player_in_game2 = await make_player_in_game(game, player2, [Tile(0, 1)])
+    assert await player_in_game2.action_set.acount() == 1
+    assert await player_in_game2.occupiedtile_set.acount() == 1
+    returned_player_in_game = await sync_to_async(on_maybe_tile_click)(player, game, get_grid(game), Tile(0, 0))
+    assert returned_player_in_game == player_in_game
+    assert await player_in_game.action_set.acount() == 1
+    assert await player_in_game.action_set.filter(tile_col=0, tile_row=0).acount() == 1
+    assert await player_in_game.occupiedtile_set.acount() == 1
+    assert await player_in_game.occupiedtile_set.filter(col=0, row=0).acount() == 1
+    assert await player_in_game2.action_set.acount() == 1
+    assert await player_in_game2.action_set.filter(tile_col=0, tile_row=1).acount() == 1
+    assert await player_in_game2.occupiedtile_set.acount() == 1
+    assert await player_in_game2.occupiedtile_set.filter(col=0, row=1).acount() == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
 async def test_on_click_tile_occupied_by_other():
     """Test that a player can click on a tile (among others) occupied by another player."""
     game = await make_game()
     player = await make_player()
-    player_in_game = await make_player_in_game(game, player, [Tile(0, 1)])
-    player2 = await make_player(2)
-    player_in_game2 = await make_player_in_game(game, player2, [Tile(0, 0), Tile(1, 1)])
+    with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 2):
+        player_in_game = await make_player_in_game(game, player, [Tile(0, 1)])
+        player2 = await make_player(2)
+        player_in_game2 = await make_player_in_game(game, player2, [Tile(0, 0), Tile(1, 1)])
     assert await player_in_game.action_set.acount() == 1
     assert await player_in_game.occupiedtile_set.acount() == 1
     assert await player_in_game2.action_set.acount() == 2
@@ -202,9 +234,10 @@ async def test_on_click_tile_last_occupied_by_other():
     """Test that a player can click on the last tile occupied by another player."""
     game = await make_game()
     player = await make_player()
-    player_in_game = await make_player_in_game(game, player, [Tile(0, 1)])
-    player2 = await make_player(2)
-    player_in_game2 = await make_player_in_game(game, player2, [Tile(0, 0)])
+    with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 2):
+        player_in_game = await make_player_in_game(game, player, [Tile(0, 1)])
+        player2 = await make_player(2)
+        player_in_game2 = await make_player_in_game(game, player2, [Tile(0, 0)])
     assert await player_in_game.action_set.acount() == 1
     assert await player_in_game.occupiedtile_set.acount() == 1
     assert await player_in_game2.action_set.acount() == 1
@@ -230,9 +263,10 @@ async def test_on_click_tile_after_recent_death():
     """Test that a player cannot click on a tile if recently dead."""
     game = await make_game()
     player = await make_player()
-    player_in_game = await make_player_in_game(game, player, [Tile(0, 0)])
-    player2 = await make_player(2)
-    await make_player_in_game(game, player2, [Tile(1, 0)])
+    with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 2):
+        player_in_game = await make_player_in_game(game, player, [Tile(0, 0)])
+        player2 = await make_player(2)
+        await make_player_in_game(game, player2, [Tile(1, 0)])
     await sync_to_async(on_maybe_tile_click)(player2, game, get_grid(game), Tile(0, 0))
     await sync_to_async(player_in_game.refresh_from_db)()
     assert player_in_game.dead_at is not None
@@ -253,15 +287,17 @@ async def test_on_click_tile_after_not_recent_death():
     """Test that a player can click on a tile if dead but not recently."""
     game = await make_game()
     player = await make_player()
-    player_in_game = await make_player_in_game(game, player, [Tile(0, 0)])
+    with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 4):
+        player_in_game = await make_player_in_game(game, player, [Tile(0, 0)])
     player2 = await make_player(2)
-    await make_player_in_game(game, player2, [Tile(1, 0)])
-    await sync_to_async(on_maybe_tile_click)(player2, game, get_grid(game), Tile(0, 0))
+    with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 2):
+        await make_player_in_game(game, player2, [Tile(1, 0)])
+        await sync_to_async(on_maybe_tile_click)(player2, game, get_grid(game), Tile(0, 0))
     await sync_to_async(player_in_game.refresh_from_db)()
     assert player_in_game.dead_at is not None
     assert await player_in_game.action_set.acount() == 1
     assert await player_in_game.occupiedtile_set.acount() == 0
-    player_in_game.dead_at = timezone.now() - RESPAWN_WAIT_DURATION * 2
+    player_in_game.dead_at = timezone.now() - RESPAWN_FORBID_DURATION * 2
     await sync_to_async(player_in_game.save)()
     returned_player_in_game = await sync_to_async(on_maybe_tile_click)(player, game, get_grid(game), Tile(0, 1))
     assert returned_player_in_game != player_in_game
