@@ -48,29 +48,29 @@ class RandomEventTurnMoment(models.TextChoices):
 
 
 # this palette was generated glasbey (using the command next line), removing the first one, white
-# ./glasbey.py --no-black --lightness-range 30,70 --view --format byte 21 testpalette
+# ./glasbey.py --no-black --lightness-range 50,100 --chroma-range 40,100 --view --format byte 21 testpalette
 # https://github.com/taketwo/glasbey/ (cannot be installed via pypi)
 PALETTE = [
-    Color(178, 0, 0),
-    Color(0, 140, 0),
-    Color(187, 78, 255),
-    Color(0, 173, 200),
-    Color(236, 156, 0),
-    Color(100, 92, 94),
-    Color(255, 115, 156),
-    Color(10, 225, 145),
-    Color(166, 1, 124),
-    Color(173, 165, 159),
-    Color(175, 178, 255),
-    Color(139, 106, 0),
-    Color(0, 124, 106),
-    Color(174, 206, 0),
-    Color(255, 82, 12),
-    Color(247, 149, 255),
-    Color(176, 99, 88),
-    Color(244, 0, 213),
-    Color(156, 119, 158),
-    Color(135, 160, 86),
+    Color(255, 60, 0),
+    Color(0, 175, 0),
+    Color(208, 79, 255),
+    Color(244, 255, 0),
+    Color(0, 220, 197),
+    Color(199, 160, 76),
+    Color(255, 159, 192),
+    Color(255, 0, 165),
+    Color(0, 255, 112),
+    Color(221, 168, 255),
+    Color(205, 116, 105),
+    Color(142, 196, 123),
+    Color(255, 219, 125),
+    Color(193, 116, 170),
+    Color(12, 170, 126),
+    Color(201, 255, 174),
+    Color(195, 197, 0),
+    Color(255, 129, 0),
+    Color(141, 154, 15),
+    Color(156, 255, 255),
 ]
 NB_COLORS = len(PALETTE)
 
