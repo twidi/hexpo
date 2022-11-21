@@ -24,7 +24,7 @@ from .utils import (
     standalone_runner,
 )
 
-CHANNEL_ID = 820553075
+CHANNEL_ID = 229962991
 WS_URL = f"wss://heat-api.j38.net/channel/{CHANNEL_ID}"
 GET_USER_URL = "https://heat-api.j38.net/user/{}"
 valid_number_re = re.compile(r"^((1(\.0)?)|(0(\.\d+)?))$")
