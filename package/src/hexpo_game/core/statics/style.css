@@ -7,13 +7,15 @@ html, body {
 }
 :root {
     --grid-opacity: 0.5;
+    --text-color: #eee;
+    --bright-color: #ae15c8;
     --shell-background: #0a0513;
     --shell-shadow: #0a051366
 }
 body {
     background-color: #11091f;
     font-size: 16px;
-    color: #eee;
+    color: var(--text-color);
     font-family: 'Roboto', sans-serif;
 }
 
@@ -56,6 +58,26 @@ body {
     box-shadow: 0 14px 11px 2px var(--shell-shadow), 0 -14px 11px 2px var(--shell-shadow);
     font-size: 32px;
 }
+
+#main-name {
+    color: var(--bright-color);
+    font-weight: bold;
+    font-style: italic;
+}
+#main-name-later {
+  display: inline-block;
+  position: relative;
+}
+#main-name-later:after {
+    content: "";
+    position: absolute;
+    border: 1px solid var(--text-color);
+    top: 50%;
+    left: -10%;
+    right: -10%;
+    transform: rotate(-9deg)
+}
+
 #top-bar .extension {
     width: 7.5em;
     display: grid;
