@@ -128,7 +128,7 @@ def add_routes(router: web.UrlDispatcher) -> None:
     router.add_get("/", game_state.http_get_index)
     router.add_get("/grid", game_state.http_get_grid_base64)
     router.add_get("/players", game_state.http_get_players)
-    router.add_static('/statics', Path(__file__).parent / 'statics')
+    router.add_static("/statics", Path(__file__).parent / "statics")
     # router.add_get('/sse', sse)
 
 

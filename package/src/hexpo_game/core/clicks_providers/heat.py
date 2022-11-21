@@ -25,6 +25,7 @@ from .utils import (
 )
 
 CHANNEL_ID = 229962991
+MAX_WAIT_DELAY = 5
 WS_URL = f"wss://heat-api.j38.net/channel/{CHANNEL_ID}"
 GET_USER_URL = "https://heat-api.j38.net/user/{}"
 valid_number_re = re.compile(r"^((1(\.0)?)|(0(\.\d+)?))$")
@@ -120,7 +121,10 @@ async def catch_clicks(twitch_app_token: str, callback: ClickCallback) -> None:
         async with connect(WS_URL) as websocket:
             while True:
                 try:
-                    raw_data = await websocket.recv()
+                    raw_data = await asyncio.wait_for(websocket.recv(), MAX_WAIT_DELAY)
+                except asyncio.TimeoutError:
+                    logger.error("Timeout while waiting for a message")
+                    break
                 except ConnectionClosed:
                     logger.exception("WebSocket connection closed")
                     break

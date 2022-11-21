@@ -138,6 +138,8 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 addopts = "--cov=hexpo_game --cov-report term-missing:skip-covered --ignore setup.py --ignore docs --ignore ci --pyargs"
+#log_cli = true
+#log_cli_level = "DEBUG"
 
 [tool.flake8]
 ignore = [
