@@ -107,7 +107,7 @@ def on_maybe_tile_click(player: Player, game: Game, grid: Grid, tile: Optional[T
 
         if not old_player_in_game.has_tiles():
             logger.warning("%s IS NOW  DEAD", old_player_in_game.player.name)
-            old_player_in_game.die()
+            old_player_in_game.die(killer=player_in_game)
 
     else:
         logger.info("%s clicked on %s", player.name, tile)

@@ -110,6 +110,11 @@ class Game(models.Model):
                     .annotate(count=Count("playeringame", filter=Q(playeringame__game_id=self.id)))
                     .values("count")[:1]
                 ),
+                nb_kills=Subquery(
+                    Player.objects.filter(id=OuterRef("player_id"))
+                    .annotate(count=Count("playeringame__kills", filter=Q(playeringame__game_id=self.id)))
+                    .values("count")[:1]
+                ),
                 nb_tiles=Count("occupiedtile"),
             )
             .select_related("player")
@@ -170,6 +175,14 @@ class PlayerInGame(models.Model):
         default=0, help_text="Current number of banked actions points of the player."
     )
     dead_at = models.DateTimeField(null=True, help_text="When the player died. Null if the player is alive.")
+    killed_by = models.ForeignKey(
+        "self",
+        related_query_name="kills",
+        related_name="kills",
+        null=True,
+        on_delete=models.SET_NULL,
+        help_text="Who killed the player.",
+    )
 
     class Meta:
         """Meta class for PlayerInGame."""
@@ -201,11 +214,12 @@ class PlayerInGame(models.Model):
             when < self.started_at + RESPAWN_PROTECTED_DURATION and self.count_tiles() <= RESPAWN_PROTECTED_QUANTITY
         )
 
-    def die(self) -> None:
+    def die(self, killer: Optional[PlayerInGame] = None) -> None:
         """Set the player as dead."""
         self.ended_turn = self.game.current_turn
         self.dead_at = timezone.now()
-        self.save(update_fields=["dead_at"])
+        self.killed_by = killer
+        self.save()
 
 
 class OccupiedTile(models.Model):

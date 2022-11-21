@@ -192,6 +192,9 @@ async def test_on_click_protected_tile():
     assert await player_in_game.action_set.filter(tile_col=0, tile_row=0).acount() == 1
     assert await player_in_game.occupiedtile_set.acount() == 1
     assert await player_in_game.occupiedtile_set.filter(col=0, row=0).acount() == 1
+    await sync_to_async(player_in_game.refresh_from_db)()
+    assert player_in_game.dead_at is None
+    assert player_in_game.killed_by is None
     assert await player_in_game2.action_set.acount() == 1
     assert await player_in_game2.action_set.filter(tile_col=0, tile_row=1).acount() == 1
     assert await player_in_game2.occupiedtile_set.acount() == 1
@@ -225,6 +228,7 @@ async def test_on_click_tile_occupied_by_other():
     assert await player_in_game2.occupiedtile_set.filter(col=1, row=1).acount() == 1
     await sync_to_async(player_in_game2.refresh_from_db)()
     assert player_in_game2.dead_at is None
+    assert player_in_game2.killed_by is None
     assert await PlayerInGame.objects.filter(player=player2).acount() == 1
 
 
@@ -254,6 +258,7 @@ async def test_on_click_tile_last_occupied_by_other():
     assert await player_in_game2.occupiedtile_set.filter(col=0, row=0).acount() == 0
     await sync_to_async(player_in_game2.refresh_from_db)()
     assert player_in_game2.dead_at is not None
+    assert player_in_game2.killed_by_id == player_in_game.id
     assert await PlayerInGame.objects.filter(player=player2).acount() == 1
 
 
@@ -266,10 +271,11 @@ async def test_on_click_tile_after_recent_death():
     with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 2):
         player_in_game = await make_player_in_game(game, player, [Tile(0, 0)])
         player2 = await make_player(2)
-        await make_player_in_game(game, player2, [Tile(1, 0)])
+        player_in_game2 = await make_player_in_game(game, player2, [Tile(1, 0)])
     await sync_to_async(on_maybe_tile_click)(player2, game, get_grid(game), Tile(0, 0))
     await sync_to_async(player_in_game.refresh_from_db)()
     assert player_in_game.dead_at is not None
+    assert player_in_game.killed_by_id == player_in_game2.id
     assert await player_in_game.action_set.acount() == 1
     assert await player_in_game.occupiedtile_set.acount() == 0
     returned_player_in_game = await sync_to_async(on_maybe_tile_click)(player, game, get_grid(game), Tile(0, 1))
@@ -278,6 +284,7 @@ async def test_on_click_tile_after_recent_death():
     assert await player_in_game.occupiedtile_set.acount() == 0
     await sync_to_async(player_in_game.refresh_from_db)()
     assert player_in_game.dead_at is not None
+    assert player_in_game.killed_by_id == player_in_game2.id
     assert await PlayerInGame.objects.filter(player=player).acount() == 1
 
 
@@ -292,9 +299,10 @@ async def test_on_click_tile_after_not_recent_death():
     player2 = await make_player(2)
     with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 2):
         await make_player_in_game(game, player2, [Tile(1, 0)])
-        await sync_to_async(on_maybe_tile_click)(player2, game, get_grid(game), Tile(0, 0))
+        player_in_game2 = await sync_to_async(on_maybe_tile_click)(player2, game, get_grid(game), Tile(0, 0))
     await sync_to_async(player_in_game.refresh_from_db)()
     assert player_in_game.dead_at is not None
+    assert player_in_game.killed_by_id == player_in_game2.id
     assert await player_in_game.action_set.acount() == 1
     assert await player_in_game.occupiedtile_set.acount() == 0
     player_in_game.dead_at = timezone.now() - RESPAWN_FORBID_DURATION * 2
@@ -308,6 +316,8 @@ async def test_on_click_tile_after_not_recent_death():
     assert await returned_player_in_game.occupiedtile_set.acount() == 1
     await sync_to_async(player_in_game.refresh_from_db)()
     assert player_in_game.dead_at is not None
+    assert player_in_game.killed_by_id == player_in_game2.id
     await sync_to_async(returned_player_in_game.refresh_from_db)()
     assert returned_player_in_game.dead_at is None
+    assert returned_player_in_game.killed_by is None
     assert await PlayerInGame.objects.filter(player=player).acount() == 2

@@ -91,6 +91,7 @@ class GameState:
                 else "",
                 "nb_actions": player_in_game.nb_actions,  # type: ignore[attr-defined]
                 "nb_games": player_in_game.nb_games,  # type: ignore[attr-defined]
+                "nb_kills": player_in_game.nb_kills,  # type: ignore[attr-defined]
                 "can_play": not player_in_game.dead_at or player_in_game.dead_at < alive_time,
                 "is_protected": player_in_game.is_protected(now),
             }
