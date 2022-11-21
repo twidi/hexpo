@@ -62,6 +62,8 @@ def get_data(raw_data: bytes | str) -> tuple[str, float, float]:
     except json.JSONDecodeError as exc:
         raise ValueError("Invalid JSON: %s", raw_data) from exc
 
+    data.pop("modifier", None)
+    data.pop("modifiers", None)
     if (
         not all(isinstance(key, str) for key in data)
         or not all(isinstance(value, str) for value in data.values())
