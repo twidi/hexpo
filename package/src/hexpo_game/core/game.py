@@ -8,14 +8,7 @@ from django.utils import timezone
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES, get_click_target
-from .constants import (
-    NB_COLORS,
-    PALETTE,
-    RESPAWN_FORBID_DURATION,
-    RESPAWN_PROTECTED_DURATION,
-    ActionType,
-    GameMode,
-)
+from .constants import NB_COLORS, PALETTE, RESPAWN_FORBID_DURATION, ActionType, GameMode
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame
 from .types import Point, Tile
@@ -74,7 +67,7 @@ def on_maybe_tile_click(player: Player, game: Game, grid: Grid, tile: Optional[T
         if occupied_tile.player_in_game.player_id == player.id:
             logger.info("%s clicked on %s but it's already his tile", player.name, tile)
             return player_in_game
-        if timezone.now() < occupied_tile.player_in_game.started_at + RESPAWN_PROTECTED_DURATION:
+        if occupied_tile.player_in_game.is_protected():
             logger.info(
                 "%s clicked on %s but is occupied by %s and protected",
                 player.name,
@@ -93,19 +86,17 @@ def on_maybe_tile_click(player: Player, game: Game, grid: Grid, tile: Optional[T
 
     if occupied_tile is not None:
         old_player_in_game = occupied_tile.player_in_game
-        logger.warning("%s clicked on %s that was occupied by %s", player.name, tile, old_player_in_game.player.name)
-        logger.warning("%s IS NOW  DEAD", old_player_in_game.player.name)
+        logger.info("%s clicked on %s that was occupied by %s", player.name, tile, old_player_in_game.player.name)
         occupied_tile.player_in_game = player_in_game
         occupied_tile.save()
 
         if not old_player_in_game.has_tiles():
+            logger.warning("%s IS NOW  DEAD", old_player_in_game.player.name)
             old_player_in_game.die()
 
     else:
         logger.info("%s clicked on %s", player.name, tile)
         OccupiedTile.objects.create(game=game, col=tile.col, row=tile.row, player_in_game=player_in_game)
-
-    logger.info("%s clicked on %s", player.name, tile)
 
     Action.objects.create(
         player_in_game=player_in_game,

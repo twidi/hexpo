@@ -9,7 +9,14 @@ from django.db import models
 from django.db.models import Count, F, Max, OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
 
-from .constants import NB_COLORS, ActionType, GameMode, RandomEventTurnMoment
+from .constants import (
+    NB_COLORS,
+    RESPAWN_PROTECTED_DURATION,
+    RESPAWN_PROTECTED_QUANTITY,
+    ActionType,
+    GameMode,
+    RandomEventTurnMoment,
+)
 from .grid import Grid
 from .types import Tile
 
@@ -181,6 +188,18 @@ class PlayerInGame(models.Model):
     def has_tiles(self) -> bool:
         """Return whether the player has tiles or not."""
         return self.occupiedtile_set.exists()
+
+    def count_tiles(self) -> int:
+        """Return the number of tiles the player has."""
+        return self.occupiedtile_set.count()
+
+    def is_protected(self, when: Optional[datetime] = None) -> bool:
+        """Return whether the player is protected or not."""
+        if when is None:
+            when = timezone.now()
+        return (
+            when < self.started_at + RESPAWN_PROTECTED_DURATION and self.count_tiles() <= RESPAWN_PROTECTED_QUANTITY
+        )
 
     def die(self) -> None:
         """Set the player as dead."""

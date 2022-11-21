@@ -6,7 +6,8 @@ from django.db import models
 from .types import Color
 
 RESPAWN_FORBID_DURATION = timedelta(seconds=10)
-RESPAWN_PROTECTED_DURATION = timedelta(seconds=10)
+RESPAWN_PROTECTED_DURATION = timedelta(seconds=30)
+RESPAWN_PROTECTED_QUANTITY = 10
 
 
 class GameMode(models.TextChoices):

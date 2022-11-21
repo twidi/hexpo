@@ -13,10 +13,7 @@ from asgiref.sync import sync_to_async
 from django.template import loader
 from django.utils import timezone
 
-from hexpo_game.core.constants import (
-    RESPAWN_FORBID_DURATION,
-    RESPAWN_PROTECTED_DURATION,
-)
+from hexpo_game.core.constants import RESPAWN_FORBID_DURATION
 from hexpo_game.core.grid import ConcreteGrid
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
@@ -63,7 +60,7 @@ class GameState:
         self.grid.reset_map()
         self.grid.draw_map_contour(Color(0, 0, 0))
 
-        protected_time = timezone.now() - RESPAWN_PROTECTED_DURATION
+        now = timezone.now()
         for player_in_game in await sync_to_async(self.game.get_players_in_game_with_occupied_tiles)():
             self.grid.draw_areas(
                 (
@@ -71,7 +68,7 @@ class GameState:
                     for occupied_tile in player_in_game.occupiedtile_set.all()
                 ),
                 Color.from_hex(player_in_game.color).as_bgr(),
-                mark=player_in_game.started_at > protected_time,
+                mark=player_in_game.is_protected(now),
             )
 
         return True
@@ -79,8 +76,8 @@ class GameState:
     def get_players_context(self) -> list[dict[str, Any]]:
         """Get the context for the players left bar."""
         players_in_game = self.game.get_players_in_game_for_leader_board(20)
-        alive_time = timezone.now() - RESPAWN_FORBID_DURATION
-        protected_time = timezone.now() - RESPAWN_PROTECTED_DURATION
+        now = timezone.now()
+        alive_time = now - RESPAWN_FORBID_DURATION
 
         return [
             {
@@ -94,7 +91,7 @@ class GameState:
                 "nb_actions": player_in_game.nb_actions,  # type: ignore[attr-defined]
                 "nb_games": player_in_game.nb_games,  # type: ignore[attr-defined]
                 "can_play": not player_in_game.dead_at or player_in_game.dead_at < alive_time,
-                "is_protected": player_in_game.started_at > protected_time,
+                "is_protected": player_in_game.is_protected(now),
             }
             for index, player_in_game in enumerate(players_in_game, 1)
         ]
