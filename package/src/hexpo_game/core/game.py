@@ -2,6 +2,7 @@
 
 import logging
 from asyncio import Queue
+from datetime import datetime
 from typing import Optional, TypeAlias
 
 from asgiref.sync import sync_to_async
@@ -9,7 +10,14 @@ from django.utils import timezone
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES, get_click_target
-from .constants import NB_COLORS, PALETTE, RESPAWN_FORBID_DURATION, ActionType, GameMode
+from .constants import (
+    NB_COLORS,
+    PALETTE,
+    RESPAWN_FORBID_DURATION,
+    TURN_DURATION,
+    ActionType,
+    GameMode,
+)
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame
 from .types import Point, Tile
@@ -17,15 +25,23 @@ from .types import Point, Tile
 logger = logging.getLogger("hexpo_game.game")
 
 
-GameQueue: TypeAlias = Queue[tuple[Player, Game, ConcreteGrid, Optional[Tile]]]
+GameQueue: TypeAlias = Queue[tuple[Player, Optional[Tile]]]
 
 
-async def dequeue_clicks(queue: GameQueue) -> None:
+async def dequeue_clicks(queue: GameQueue, game: Game, grid: Grid) -> None:
     """Dequeue clicks and process them."""
+    now: datetime
+    next_turn_min_at = game.current_turn_started_at + TURN_DURATION
     while True:
-        player, game, grid, tile = await queue.get()
+        if (now := timezone.now()) > next_turn_min_at:
+            game.current_turn += 1
+            game.current_turn_started_at = now
+            await sync_to_async(game.save)()
+            next_turn_min_at = game.current_turn_started_at + TURN_DURATION
+            logger.info("Turn %s", game.current_turn)
+        player, tile = await queue.get()
         try:
-            await sync_to_async(on_maybe_tile_click)(player, game, grid.grid, tile)
+            await sync_to_async(on_maybe_tile_click)(player, game, grid, tile)
         except Exception:  # pylint:disable=broad-except
             logger.exception("Error while processing click for %s", player.name)
         queue.task_done()
@@ -37,9 +53,9 @@ def on_maybe_tile_click(player: Player, game: Game, grid: Grid, tile: Optional[T
         return None
 
     default_player_attrs = dict(  # noqa: C408
-        started_turn=0,
-        start_tile_col=0,
-        start_tile_row=0,
+        started_turn=game.current_turn,
+        start_tile_col=tile.col,
+        start_tile_row=tile.row,
         color=PALETTE[player.id % NB_COLORS].as_hex,
     )
 
@@ -107,7 +123,7 @@ def on_maybe_tile_click(player: Player, game: Game, grid: Grid, tile: Optional[T
 
         if not old_player_in_game.has_tiles():
             logger.warning("%s IS NOW  DEAD", old_player_in_game.player.name)
-            old_player_in_game.die(killer=player_in_game)
+            old_player_in_game.die(turn=game.current_turn, killer=player_in_game)
 
     else:
         logger.info("%s clicked on %s", player.name, tile)
@@ -134,7 +150,7 @@ async def on_click(  # pylint: disable=unused-argument
         area = COORDINATES["grid-area"]
         tile = grid.get_tile_at_point(Point(x=point.x - area[0][0], y=point.y - area[0][1]))
 
-        await queue.put((player, game, grid, tile))
+        await queue.put((player, tile))
         if tile is not None:
             return
 

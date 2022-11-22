@@ -33,7 +33,7 @@ def main() -> None:
     async def on_web_startup(app: web.Application) -> None:  # pylint: disable=unused-argument
         async_tasks.append(ensure_future(heat_catch_clicks(twitch_app_token, click_callback)))
         async_tasks.append(ensure_future(foofurbot_catch_clicks(twitch_app_token, click_callback)))
-        async_tasks.append(ensure_future(dequeue_clicks(queue)))
+        async_tasks.append(ensure_future(dequeue_clicks(queue, game, grid.grid)))
 
     async def on_web_shutdown(app: web.Application) -> None:  # pylint: disable=unused-argument
         await queue.join()

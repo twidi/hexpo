@@ -214,9 +214,9 @@ class PlayerInGame(models.Model):
             when < self.started_at + RESPAWN_PROTECTED_DURATION and self.count_tiles() <= RESPAWN_PROTECTED_QUANTITY
         )
 
-    def die(self, killer: Optional[PlayerInGame] = None) -> None:
+    def die(self, turn: Optional[int] = None, killer: Optional[PlayerInGame] = None) -> None:
         """Set the player as dead."""
-        self.ended_turn = self.game.current_turn
+        self.ended_turn = self.game.current_turn if turn is None else turn
         self.dead_at = timezone.now()
         self.killed_by = killer
         self.save()

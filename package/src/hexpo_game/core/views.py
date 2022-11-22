@@ -110,7 +110,7 @@ class GameState:
         context = {
             "grid_base64": self.grid.map_as_base64_png(),
             "players": await sync_to_async(self.get_players_context)(),
-            "timestamp": time()
+            "timestamp": time(),
         }
 
         html = loader.render_to_string("core/index.html", context)
