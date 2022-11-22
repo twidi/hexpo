@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -110,6 +110,7 @@ class GameState:
         context = {
             "grid_base64": self.grid.map_as_base64_png(),
             "players": await sync_to_async(self.get_players_context)(),
+            "timestamp": time()
         }
 
         html = loader.render_to_string("core/index.html", context)
