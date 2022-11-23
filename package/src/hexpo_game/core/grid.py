@@ -258,7 +258,7 @@ class ConcreteTile(NamedTuple):
 
 
 @dataclass
-class ConcreteGrid:
+class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
     """Represent a concrete grid."""
 
     grid: Grid
@@ -288,6 +288,7 @@ class ConcreteGrid:
         )
         self.max_coordinates = self.compute_max_coordinates()
         self.map = self.create_map()
+        self.drawing_map = self.create_map()
 
     def __iter__(self) -> Iterator[ConcreteTile]:
         """Iterate over the concrete tiles."""
@@ -349,11 +350,19 @@ class ConcreteGrid:
         """
         return np.zeros((ceil(self.max_coordinates.y + 1), ceil(self.max_coordinates.x + 1), 4), dtype=np.uint8)
 
-    def reset_map(self) -> None:
+    def reset_map(self, background: Optional[Color] = None) -> None:
         """Reset the map to 0."""
-        self.map.fill(0)
+        if background is None:
+            self.map.fill(0)
+            self.drawing_map.fill(0)
+        else:
+            fill = background[::-1] + (255,)
+            self.map[:] = fill
+            self.drawing_map[:] = fill
 
-    def draw_areas(self, tiles: Iterable[Tile], color: Color, mark: bool = False) -> None:
+    def draw_areas(
+        self, tiles: Iterable[Tile], color: Color, mark: bool = False, use_transparency: bool = True
+    ) -> None:
         """Draw the (perimeters of the) areas of the given tiles.
 
         Parameters
@@ -364,22 +373,31 @@ class ConcreteGrid:
             The color to use.
         mark : bool, optional
             Whether to mark the tiles, by default False.
+        use_transparency : bool, optional
+            Whether to use transparency, by default True.
 
         """
         if not tiles:
             return
 
-        hex_map = self.create_map()
+        drawing_color: tuple[int, ...]
+        if use_transparency:
+            self.drawing_map.fill(0)
+            drawing_map = self.drawing_map
+            drawing_color = (0, 0, 0, 255)
+        else:
+            drawing_map = self.map
+            drawing_color = color
 
         tiles_set = set(tiles)
         for tile in tiles_set:
             concrete_tile = self.tiles[tile.row][tile.col]
             if mark:
                 cv2.circle(  # pylint: disable=no-member
-                    hex_map,
+                    drawing_map,
                     round(concrete_tile.center),  # type: ignore[call-overload]
                     SEGMENTS_OFFSET,
-                    (0, 0, 0, 255),
+                    drawing_color,
                     THICKNESS,
                     cv2.LINE_AA,  # pylint: disable=no-member
                 )
@@ -388,21 +406,22 @@ class ConcreteGrid:
                     continue
                 offsets = SEGMENTS_OFFSETS[direction]
                 cv2.line(  # pylint: disable=no-member
-                    hex_map,
+                    drawing_map,
                     round(offsets[0] + concrete_tile.points[(direction - 1) % 6]),  # type: ignore[call-overload]
                     round(offsets[1] + concrete_tile.points[direction]),  # type: ignore[call-overload]
-                    (0, 0, 0, 255),
+                    drawing_color,
                     THICKNESS,
                     cv2.LINE_AA,  # pylint: disable=no-member
                 )
 
-        # we set the same color
-        mask = np.where(hex_map[:, :, 3] != 0)
-        # sadly we cannot do things like hex_map[mask][:,:3] = color
-        # hex_map[:, :, 3] = hex_map[:, :, 3] // 2 + 128  # reduce transparency when we have tiles
-        hex_map[:, :, :3] = color
-        # we update the map with only the pixels that are not fully transparent, i.e. where the tiles are drawn
-        self.map[mask] = hex_map[mask]
+        if use_transparency:
+            # we set the same color
+            mask = np.where(self.drawing_map[:, :, 3] != 0)
+            # sadly we cannot do things like self.drawing_map[mask][:,:3] = color
+            # self.drawing_map[:, :, 3] = self.drawing_map[:, :, 3] // 2 + 128  # reduce transparency when we have tiles
+            self.drawing_map[:, :, :3] = color
+            # we update the map with only the pixels that are not fully transparent, i.e. where the tiles are drawn
+            self.map[mask] = self.drawing_map[mask]
 
     def map_as_base64_png(self) -> str:
         """Return the map as an image encoded in base64."""
