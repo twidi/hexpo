@@ -298,6 +298,24 @@ class Action(models.Model):
             ),
         ]
 
+        indexes = [
+            models.Index(
+                name="%(app_label)s_%(class)s_game_turn",
+                fields=("game", "state", "turn", "confirmed_at"),
+            ),
+        ]
+
+    def fail(self, reason: ActionFailureReason) -> None:
+        """Set the action as failed."""
+        self.state = ActionState.FAILURE
+        self.failure_reason = reason
+        self.save()
+
+    def success(self) -> None:
+        """Set the action as successful."""
+        self.state = ActionState.SUCCESS
+        self.save()
+
 
 class RandomEvent(models.Model):
     """Represent a random event."""
