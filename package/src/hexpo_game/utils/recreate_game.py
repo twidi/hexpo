@@ -37,7 +37,7 @@ def recreate_game(game: Game) -> Game:
         )
     }
     actions = (
-        Action.objects.filter(player_in_game__game=game, state=ActionState.SUCCESSFUL)
+        Action.objects.filter(game=game, state=ActionState.SUCCESSFUL)
         .order_by("confirmed_at")
         .values_list("player_in_game_id", "tile_col", "tile_row", "confirmed_at")
     )

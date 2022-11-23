@@ -61,6 +61,7 @@ async def make_player_in_game(
             ),
         )
         await Action.objects.acreate(
+            game=game,
             player_in_game=player_in_game,
             turn=game.current_turn,
             action_type=ActionType.GROW,
@@ -102,7 +103,7 @@ async def test_on_click_no_tile():
     assert returned_player_in_game is None
     assert await game.playeringame_set.acount() == 0
     assert await game.occupiedtile_set.acount() == 0
-    assert await Action.objects.filter(player_in_game__game=game).acount() == 0
+    assert await Action.objects.filter(game=game).acount() == 0
 
 
 @pytest.mark.asyncio

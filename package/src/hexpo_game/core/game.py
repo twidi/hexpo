@@ -131,6 +131,7 @@ def on_maybe_tile_click(player: Player, game: Game, grid: Grid, tile: Optional[T
         OccupiedTile.objects.create(game=game, col=tile.col, row=tile.row, player_in_game=player_in_game)
 
     Action.objects.create(
+        game=game,
         player_in_game=player_in_game,
         turn=game.current_turn,
         action_type=ActionType.GROW,

@@ -50,9 +50,7 @@ def make_video(
 
     frame: bytes = grid.map.tobytes()
     pigs = {pig.id: pig for pig in PlayerInGame.objects.filter(game_id=game.id)}
-    actions = Action.objects.filter(player_in_game__game_id=game.id, state=ActionState.SUCCESSFUL).order_by(
-        "confirmed_at"
-    )
+    actions = Action.objects.filter(game_id=game.id, state=ActionState.SUCCESSFUL).order_by("confirmed_at")
     last_turn = -1
     nb_actions = actions.count()
     last_index = nb_actions - 1

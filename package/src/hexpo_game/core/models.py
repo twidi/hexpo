@@ -267,6 +267,7 @@ class Action(models.Model):
     player_in_game = models.ForeignKey(
         PlayerInGame, on_delete=models.CASCADE, help_text="Player in game that did the action."
     )
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the action was done in.", null=True)
     turn = models.PositiveIntegerField(help_text="Turn number when the action was done.")
     action_type = models.CharField(max_length=255, help_text="Type of the action.", choices=ActionType.choices)
     tile_col = models.IntegerField(
