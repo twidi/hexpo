@@ -3,7 +3,7 @@
         <title>Hexpocalypse Later</title>
         <link rel="stylesheet" type="text/css" href="/statics/style.css?ts={{ timestamp }}">
     </head>
-    <body>
+    <body data-reload="{% if reload %}true{% else %}false{% endif %}" id="page-index">
         <div id="main-container">
             <div id="empty-top"></div>
             <div id="top-bar">
@@ -15,7 +15,6 @@
                     <img width="50" height="50" src="/statics/extension-heat.png" style="grid-area: icon;"/>
                     <span style="grid-area: manage;">&#x27A1; Accès	&#x21B4;</span>
                     <span style="grid-area: accept;">️Accorder</span>
-                    </span>
                 </p>
             </div>
             <div id="top-left-corner"></div>

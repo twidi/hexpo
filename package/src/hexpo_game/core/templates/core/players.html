@@ -1,0 +1,16 @@
+<html>
+    <head>
+        <title>Hexpocalypse Later</title>
+        <link rel="stylesheet" type="text/css" href="/statics/style.css?ts={{ timestamp }}">
+    </head>
+    <body data-reload="{% if reload %}true{% else %}false{% endif %}" id="page-players">
+        <div id="main-container">
+            <div id="left-bar">
+                <div id="players">
+                    {% include "core/include_players.html" with players=players %}
+                </div>
+            </div>
+        </div>
+    <script src="/statics/script.js?ts={{ timestamp }}"></script>
+    </body>
+</html>

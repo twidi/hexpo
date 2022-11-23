@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime
 from pathlib import Path
+from time import time
 from typing import Any
 
 from aiohttp import web
@@ -98,10 +99,20 @@ class GameState:
             for index, player_in_game in enumerate(players_in_game, 1)
         ]
 
-    async def http_get_players(self, request: web.Request) -> web.Response:
+    async def http_get_players_partial(self, request: web.Request) -> web.Response:
         """Return the players partial html."""
         context = {"players": await sync_to_async(self.get_players_context)()}
         html = loader.render_to_string("core/include_players.html", context)
+        return Response(text=html, content_type="text/html")
+
+    async def http_get_players(self, request: web.Request) -> web.Response:
+        """Return the players partial html."""
+        context = {
+            "players": await sync_to_async(self.get_players_context)(),
+            "timestamp": time(),
+            "reload": request.rel_url.query.get("reload", "true") != "false",
+        }
+        html = loader.render_to_string("core/players.html", context)
         return Response(text=html, content_type="text/html")
 
     async def http_get_index(self, request: web.Request) -> web.Response:  # pylint: disable=unused-argument
@@ -111,6 +122,7 @@ class GameState:
             "grid_base64": self.grid.map_as_base64_png(),
             "players": await sync_to_async(self.get_players_context)(),
             "timestamp": time(),
+            "reload": request.rel_url.query.get("reload", "true") != "false",
         }
 
         html = loader.render_to_string("core/index.html", context)
@@ -128,7 +140,8 @@ def add_routes(router: web.UrlDispatcher) -> None:
     """Add routes to the router."""
     game_state = GameState.load_from_db()
     router.add_get("/", game_state.http_get_index)
-    router.add_get("/grid", game_state.http_get_grid_base64)
+    router.add_get("/grid.raw", game_state.http_get_grid_base64)
+    router.add_get("/players.partial", game_state.http_get_players_partial)
     router.add_get("/players", game_state.http_get_players)
     router.add_static("/statics", Path(__file__).parent / "statics")
     # router.add_get('/sse', sse)

@@ -23,6 +23,10 @@ body {
     height: 100%;
     width: 100%;
     display: grid;
+    grid-column-gap: 0;
+    grid-row-gap: 0;
+}
+body#page-index #main-container {
     grid-template-columns:
             calc(450px - 34px) 1fr calc(15% - 50px);
     grid-template-rows:
@@ -31,8 +35,6 @@ body {
             1fr
             calc(15%  - 34px)
             34px;
-    grid-column-gap: 0;
-    grid-row-gap: 0;
     grid-template-areas:
         "empty-top empty-top empty-top"
         "top-left-corner top-bar top-bar"
@@ -40,6 +42,12 @@ body {
         "left-bar bottom-bar bottom-bar"
         "empty-bottom empty-bottom empty-bottom";
 }
+body#page-players #main-container {
+    grid-template-columns: 1fr calc(450px);
+    grid-template-rows: 1fr;
+    grid-template-areas: "empty left-bar"
+}
+
 
 #empty-top {
     grid-area: empty-top;
@@ -144,6 +152,7 @@ body {
         "rank info"
         "rank extra";
     align-items: center;
+    position: relative;
 }
 .player.cannot-play {
     background-color: #480b0a;
@@ -245,6 +254,7 @@ body {
 
 .extension {
   animation: 2s linear infinite condemed_blink_effect;
+  transform: translateY(20px) translateX(-50px);
 }
 @-webkit-keyframes condemed_blink_effect {
   0% {
