@@ -7,6 +7,7 @@ import numpy as np
 from tqdm import tqdm
 
 from hexpo_game import django_setup  # noqa: F401  # pylint: disable=unused-import
+from hexpo_game.core.constants import ActionState
 from hexpo_game.core.grid import ConcreteGrid, Grid
 from hexpo_game.core.models import Action, Game, PlayerInGame
 from hexpo_game.core.types import Color, Point, Tile
@@ -26,7 +27,7 @@ def make_video(
 ) -> None:
     """Create a video from all turns of a game, with a turn per frame.
 
-    Only works, for now, for game where all actions are `ActionType.GROW`.
+    Only works, for now, for game where all actions are `ActionType.GROW` and `ActionState.SUCCESSFUL`.
     """
     tile_size = ConcreteGrid.compute_tile_size(game.grid_nb_cols, game.grid_nb_rows, width, height)
     grid = ConcreteGrid(Grid(game.grid_nb_cols, game.grid_nb_rows), tile_size)
@@ -49,7 +50,7 @@ def make_video(
 
     frame: bytes = grid.map.tobytes()
     pigs = {pig.id: pig for pig in PlayerInGame.objects.filter(game_id=game.id)}
-    actions = Action.objects.filter(player_in_game__game_id=game.id, confirmed_at__isnull=False).order_by(
+    actions = Action.objects.filter(player_in_game__game_id=game.id, state=ActionState.SUCCESSFUL).order_by(
         "confirmed_at"
     )
     last_turn = -1

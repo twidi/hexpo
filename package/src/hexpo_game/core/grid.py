@@ -142,7 +142,7 @@ class Grid:
         return self.nb_cols * self.nb_rows
 
     def compute_neighbors(self, tile: Tile) -> Neighbors:
-        """Return the neighbors of a tile."""
+        """Compute the neighbors of a tile."""
         neighbors: list[MaybeTile] = []
         for direction in range(6):
             col_diff, row_diff = DIRECTION_DIFFERENCES[tile.col % 2][direction]

@@ -5,7 +5,7 @@ from typing import Optional, cast
 from tqdm import tqdm
 
 from hexpo_game import django_setup  # noqa: F401  # pylint: disable=unused-import
-from hexpo_game.core.constants import TURN_DURATION
+from hexpo_game.core.constants import TURN_DURATION, ActionState
 from hexpo_game.core.models import Action, Game, OccupiedTile, PlayerInGame
 from hexpo_game.core.types import Tile
 
@@ -15,7 +15,7 @@ from hexpo_game.core.types import Tile
 def recreate_game(game: Game) -> Game:
     """Recreate a game from another based solely on its actions.
 
-    Only works for game where all actions are `ActionType.GROW`. Non confirmed actions are ignored.
+    Only works for game where all actions are `ActionType.GROW`. Non-successful actions are ignored.
 
     """
     game_data = vars(game).copy()
@@ -37,7 +37,7 @@ def recreate_game(game: Game) -> Game:
         )
     }
     actions = (
-        Action.objects.filter(player_in_game__game=game, confirmed_at__isnull=False)
+        Action.objects.filter(player_in_game__game=game, state=ActionState.SUCCESSFUL)
         .order_by("confirmed_at")
         .values_list("player_in_game_id", "tile_col", "tile_row", "confirmed_at")
     )
@@ -74,6 +74,7 @@ def recreate_game(game: Game) -> Game:
             tile_col=tile.col,
             tile_row=tile.row,
             confirmed_at=now,
+            state=ActionState.SUCCESSFUL,
         )
         other_player_id = last_owner.get(tile)
         if other_player_id == player_id:  # tile already owned

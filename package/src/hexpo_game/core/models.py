@@ -13,6 +13,7 @@ from .constants import (
     NB_COLORS,
     RESPAWN_PROTECTED_DURATION,
     RESPAWN_PROTECTED_QUANTITY,
+    ActionState,
     ActionType,
     GameMode,
     RandomEventTurnMoment,
@@ -274,8 +275,27 @@ class Action(models.Model):
     tile_row = models.IntegerField(
         help_text="The grid row of the action in the offset `odd-q` coordinate system.", null=True
     )
-    confirmed_at = models.DateTimeField(help_text="When the action was confirmed.", null=True)
+    state = models.CharField(
+        max_length=255, help_text="State of the action.", choices=ActionState.choices, default=ActionState.CREATED
+    )
+    confirmed_at = models.DateTimeField(help_text="When the action was confirmed.", null=True, db_index=True)
     efficiency = models.FloatField(help_text="Efficiency of the action. (between 0 and 1)", default=1.0)
+
+    class Meta:
+        """Meta class for Action."""
+
+        constraints = [
+            # when the state is not "CREATED", the `confirmed_at` field must be set
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_confirmed_at_not_null_if_not_created",
+                check=Q(state=ActionState.CREATED) | Q(confirmed_at__isnull=False),
+            ),
+            # when the state is "CREATED", the `confirmed_at` field must be null
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_confirmed_at_null_if_created",
+                check=~Q(state=ActionState.CREATED) | Q(confirmed_at__isnull=True),
+            ),
+        ]
 
 
 class RandomEvent(models.Model):

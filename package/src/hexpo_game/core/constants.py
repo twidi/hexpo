@@ -29,6 +29,15 @@ class ActionType(models.TextChoices):
     BANK = "bank", "Bank"
 
 
+class ActionState(models.TextChoices):
+    """Represent the different states of actions."""
+
+    CREATED = "created", "Created"
+    CONFIRMED = "confirmed", "Confirmed"
+    SUCCESSFUL = "successful", "Successful"
+    FAILED = "failed", "Failed"
+
+
 class RandomEventType(models.TextChoices):
     """Represent the different types of random events."""
 

@@ -15,6 +15,7 @@ from .constants import (
     PALETTE,
     RESPAWN_FORBID_DURATION,
     TURN_DURATION,
+    ActionState,
     ActionType,
     GameMode,
 )
@@ -136,6 +137,7 @@ def on_maybe_tile_click(player: Player, game: Game, grid: Grid, tile: Optional[T
         tile_col=tile.col,
         tile_row=tile.row,
         confirmed_at=timezone.now(),
+        state=ActionState.SUCCESSFUL,
     )
 
     return player_in_game

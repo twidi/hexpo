@@ -11,6 +11,7 @@ from freezegun import freeze_time
 from hexpo_game.core.constants import (
     RESPAWN_FORBID_DURATION,
     RESPAWN_PROTECTED_DURATION,
+    ActionState,
     ActionType,
     GameMode,
 )
@@ -66,6 +67,7 @@ async def make_player_in_game(
             tile_col=tile.col,
             tile_row=tile.row,
             confirmed_at=timezone.now(),
+            state=ActionState.SUCCESSFUL,
         )
 
     return player_in_game
