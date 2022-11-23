@@ -27,7 +27,7 @@ def make_video(
 ) -> None:
     """Create a video from all turns of a game, with a turn per frame.
 
-    Only works, for now, for game where all actions are `ActionType.GROW` and `ActionState.SUCCESSFUL`.
+    Only works, for now, for game where all actions are `ActionType.GROW` and `ActionState.SUCCESS`.
     """
     tile_size = ConcreteGrid.compute_tile_size(game.grid_nb_cols, game.grid_nb_rows, width, height)
     grid = ConcreteGrid(Grid(game.grid_nb_cols, game.grid_nb_rows), tile_size)
@@ -50,7 +50,7 @@ def make_video(
 
     frame: bytes = grid.map.tobytes()
     pigs = {pig.id: pig for pig in PlayerInGame.objects.filter(game_id=game.id)}
-    actions = Action.objects.filter(game_id=game.id, state=ActionState.SUCCESSFUL).order_by("confirmed_at")
+    actions = Action.objects.filter(game_id=game.id, state=ActionState.SUCCESS).order_by("confirmed_at")
     last_turn = -1
     nb_actions = actions.count()
     last_index = nb_actions - 1

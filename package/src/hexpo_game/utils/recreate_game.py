@@ -37,7 +37,7 @@ def recreate_game(game: Game) -> Game:
         )
     }
     actions = (
-        Action.objects.filter(game=game, state=ActionState.SUCCESSFUL)
+        Action.objects.filter(game=game, state=ActionState.SUCCESS)
         .order_by("confirmed_at")
         .values_list("player_in_game_id", "tile_col", "tile_row", "confirmed_at")
     )
@@ -74,7 +74,7 @@ def recreate_game(game: Game) -> Game:
             tile_col=tile.col,
             tile_row=tile.row,
             confirmed_at=now,
-            state=ActionState.SUCCESSFUL,
+            state=ActionState.SUCCESS,
         )
         other_player_id = last_owner.get(tile)
         if other_player_id == player_id:  # tile already owned

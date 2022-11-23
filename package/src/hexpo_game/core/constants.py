@@ -34,8 +34,8 @@ class ActionState(models.TextChoices):
 
     CREATED = "created", "Created"
     CONFIRMED = "confirmed", "Confirmed"
-    SUCCESSFUL = "successful", "Successful"
-    FAILED = "failed", "Failed"
+    SUCCESS = "success", "Success"
+    FAILURE = "failure", "Failure"
 
 
 class RandomEventType(models.TextChoices):

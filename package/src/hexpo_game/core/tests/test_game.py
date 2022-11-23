@@ -68,7 +68,7 @@ async def make_player_in_game(
             tile_col=tile.col,
             tile_row=tile.row,
             confirmed_at=timezone.now(),
-            state=ActionState.SUCCESSFUL,
+            state=ActionState.SUCCESS,
         )
 
     return player_in_game
