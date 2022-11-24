@@ -75,6 +75,16 @@ async def make_player_in_game(
     return player_in_game
 
 
+async def make_game_and_player(
+    first_tile: Tile, game_mode: GameMode = GameMode.FREE_NEIGHBOR
+) -> tuple[Game, Player, PlayerInGame]:
+    """Make a game and a player in it."""
+    game = await make_game(mode=game_mode)
+    player = await make_player()
+    player_in_game = await make_player_in_game(game, player, [first_tile])
+    return game, player, player_in_game
+
+
 def get_grid(game: Game) -> Grid:
     """Get the grid of the game."""
     return Grid(game.grid_nb_cols, game.grid_nb_rows)
@@ -107,18 +117,40 @@ async def assert_has_actions(player_in_game: PlayerInGame, tiles: Sequence[Tile]
     assert set(tiles) == actions_tiles
 
 
+async def assert_death(player_in_game: PlayerInGame, killed: bool, killed_by_id: Optional[int] = None) -> None:
+    """Assert the player is dead or not."""
+    __tracebackhide__ = True  # pylint: disable=unused-variable
+    await player_in_game.arefresh_from_db()
+    assert (player_in_game.dead_at is not None) == killed
+    assert player_in_game.killed_by_id == killed_by_id
+
+
+async def assert_action_state(
+    action: Action, state: ActionState, failure_reason: Optional[ActionFailureReason] = None
+) -> None:
+    """Assert the player is dead or not."""
+    __tracebackhide__ = True  # pylint: disable=unused-variable
+    await action.arefresh_from_db()
+    assert action.state == state
+    assert action.failure_reason == failure_reason
+
+
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_on_click_new_player():
     """Test that a new player can click on a tile."""
     game = await make_game()
     player = await make_player()
+
     assert await game.playeringame_set.acount() == 0
     assert await game.occupiedtile_set.acount() == 0
-    action = await asave_action(player, game, Tile(0, 0))
-    assert action is not None
+
+    assert (action := await asave_action(player, game, Tile(0, 0))) is not None
+
     assert (player_in_game := action.player_in_game).player_id == player.id
+
     await aplay_turn(game, get_grid(game), 0)
+
     await assert_has_actions(player_in_game, [Tile(0, 0)])
     await assert_has_tiles(player_in_game, [Tile(0, 0)])
 
@@ -129,26 +161,30 @@ async def test_on_click_no_tile():
     """Test that a player cannot click on a tile if there is no tile."""
     game = await make_game()
     player = await make_player()
-    action = await asave_action(player, game, None)
-    assert action is None
+
+    assert (await asave_action(player, game, None)) is None
+
     assert await game.playeringame_set.acount() == 0
     assert await game.occupiedtile_set.acount() == 0
-    assert await Action.objects.filter(game=game).acount() == 0
+    assert await game.action_set.acount() == 0
 
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_on_click_free_tile():
     """Test that an existing player can click on a free tile."""
-    game = await make_game()
-    player = await make_player()
-    player_in_game = await make_player_in_game(game, player, [Tile(0, 1)])
-    assert await player_in_game.action_set.acount() == 1
-    assert await player_in_game.occupiedtile_set.acount() == 1
-    action = await asave_action(player, game, Tile(0, 0))
-    assert action is not None
-    await aplay_turn(game, get_grid(game), 0)
+    game, player, player_in_game = await make_game_and_player(Tile(0, 1))
+
+    await assert_has_actions(player_in_game, [Tile(0, 1)])
+    await assert_has_tiles(player_in_game, [Tile(0, 1)])
+
+    assert (action := await asave_action(player, game, Tile(0, 0))) is not None
+
     assert action.player_in_game_id == player_in_game.id
+
+    await aplay_turn(game, get_grid(game), 0)
+
+    await assert_action_state(action, ActionState.SUCCESS)
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(0, 1)])
     await assert_has_tiles(player_in_game, [Tile(0, 0), Tile(0, 1)])
 
@@ -157,18 +193,12 @@ async def test_on_click_free_tile():
 @pytest.mark.django_db(transaction=True)
 async def test_on_click_non_neighbor_tile_in_free_neighbor_mode():
     """Test that a player cannot click on an invalid tile in FREE_NEIGHBOR mode."""
-    game = await make_game()
-    player = await make_player()
-    player_in_game = await make_player_in_game(game, player, [Tile(1, 1)])
-    assert await player_in_game.action_set.acount() == 1
-    assert await player_in_game.occupiedtile_set.acount() == 1
-    action = await asave_action(player, game, Tile(0, 0))
-    assert action is not None
+    game, player, player_in_game = await make_game_and_player(Tile(1, 1))
+
+    assert (action := await asave_action(player, game, Tile(0, 0))) is not None
     await aplay_turn(game, get_grid(game), 0)
-    await action.arefresh_from_db()
-    assert action.state == ActionState.FAILURE
-    assert action.failure_reason == ActionFailureReason.GROW_NO_NEIGHBOR
-    assert action.player_in_game_id == player_in_game.id
+
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_NO_NEIGHBOR)
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(1, 1)])
     await assert_has_tiles(player_in_game, [Tile(1, 1)])
 
@@ -177,19 +207,12 @@ async def test_on_click_non_neighbor_tile_in_free_neighbor_mode():
 @pytest.mark.django_db(transaction=True)
 async def test_on_click_non_neighbor_tile_in_free_full_mode():
     """Test that a player cannot click on an invalid tile in FREE_FULL mode."""
-    game = await make_game()
-    game.mode = GameMode.FREE_FULL
-    await sync_to_async(game.save)()
-    player = await make_player()
-    player_in_game = await make_player_in_game(game, player, [Tile(1, 1)])
-    assert await player_in_game.action_set.acount() == 1
-    assert await player_in_game.occupiedtile_set.acount() == 1
-    action = await asave_action(player, game, Tile(0, 0))
-    assert action is not None
+    game, player, player_in_game = await make_game_and_player(Tile(1, 1), game_mode=GameMode.FREE_FULL)
+
+    assert (action := await asave_action(player, game, Tile(0, 0))) is not None
     await aplay_turn(game, get_grid(game), 0)
-    await action.arefresh_from_db()
-    assert action.state == ActionState.SUCCESS
-    assert action.player_in_game_id == player_in_game.id
+
+    await assert_action_state(action, ActionState.SUCCESS)
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(1, 1)])
     await assert_has_tiles(player_in_game, [Tile(0, 0), Tile(1, 1)])
 
@@ -198,18 +221,12 @@ async def test_on_click_non_neighbor_tile_in_free_full_mode():
 @pytest.mark.django_db(transaction=True)
 async def test_on_click_self_occupied_tile():
     """Test that a player cannot click on a tile occupied by themselves."""
-    game = await make_game()
-    player = await make_player()
-    player_in_game = await make_player_in_game(game, player, [Tile(0, 0)])
-    assert await player_in_game.action_set.acount() == 1
-    assert await player_in_game.occupiedtile_set.acount() == 1
-    action = await asave_action(player, game, Tile(0, 0))
-    assert action is not None
+    game, player, player_in_game = await make_game_and_player(Tile(0, 0))
+
+    assert (action := await asave_action(player, game, Tile(0, 0))) is not None
     await aplay_turn(game, get_grid(game), 0)
-    await action.arefresh_from_db()
-    assert action.state == ActionState.FAILURE
-    assert action.failure_reason == ActionFailureReason.GROW_SELF
-    assert action.player_in_game_id == player_in_game.id
+
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_SELF)
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(0, 0)])
     await assert_has_tiles(player_in_game, [Tile(0, 0)])
 
@@ -218,25 +235,18 @@ async def test_on_click_self_occupied_tile():
 @pytest.mark.django_db(transaction=True)
 async def test_on_click_protected_tile():
     """Test that a player cannot click on a protected tile."""
-    game = await make_game()
-    player = await make_player()
-    player_in_game = await make_player_in_game(game, player, [Tile(0, 0)])
-    assert await player_in_game.action_set.acount() == 1
-    assert await player_in_game.occupiedtile_set.acount() == 1
-    player2 = await make_player(2)
-    player_in_game2 = await make_player_in_game(game, player2, [Tile(0, 1)])
-    action = await asave_action(player, game, Tile(0, 1))
-    assert action is not None
+    game, player, player_in_game = await make_game_and_player(Tile(0, 0))
+    player_in_game2 = await make_player_in_game(game, await make_player(2), [Tile(0, 1)])
+
+    assert (action := await asave_action(player, game, Tile(0, 1))) is not None
     await aplay_turn(game, get_grid(game), 0)
-    await action.arefresh_from_db()
-    assert action.state == ActionState.FAILURE
-    assert action.failure_reason == ActionFailureReason.GROW_PROTECTED
-    assert action.player_in_game_id == player_in_game.id
+
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_PROTECTED)
+
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(0, 1)])
     await assert_has_tiles(player_in_game, [Tile(0, 0)])
-    await player_in_game.arefresh_from_db()
-    assert player_in_game.dead_at is None
-    assert player_in_game.killed_by is None
+    await assert_death(player_in_game, False)
+
     await assert_has_actions(player_in_game2, [Tile(0, 1)])
     await assert_has_tiles(player_in_game2, [Tile(0, 1)])
 
@@ -245,138 +255,110 @@ async def test_on_click_protected_tile():
 @pytest.mark.django_db(transaction=True)
 async def test_on_click_tile_occupied_by_other():
     """Test that a player can click on a tile (among others) occupied by another player."""
-    game = await make_game()
-    player = await make_player()
     with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 2):
-        player_in_game = await make_player_in_game(game, player, [Tile(0, 1)])
-        player2 = await make_player(2)
-        player_in_game2 = await make_player_in_game(game, player2, [Tile(0, 0), Tile(1, 1)])
-    assert await player_in_game.action_set.acount() == 1
-    assert await player_in_game.occupiedtile_set.acount() == 1
-    assert await player_in_game2.action_set.acount() == 2
-    assert await player_in_game2.occupiedtile_set.acount() == 2
-    action = await asave_action(player, game, Tile(0, 0))
-    assert action is not None
+        game, player, player_in_game = await make_game_and_player(Tile(0, 1))
+        player_in_game2 = await make_player_in_game(game, await make_player(2), [Tile(0, 0), Tile(1, 0)])
+
+    await assert_has_actions(player_in_game, [Tile(0, 1)])
+    await assert_has_tiles(player_in_game, [Tile(0, 1)])
+    await assert_has_actions(player_in_game2, [Tile(0, 0), Tile(1, 0)])
+    await assert_has_tiles(player_in_game2, [Tile(0, 0), Tile(1, 0)])
+
+    assert (action := await asave_action(player, game, Tile(0, 0))) is not None
     await aplay_turn(game, get_grid(game), 0)
-    await action.arefresh_from_db()
-    assert action.state == ActionState.SUCCESS
-    assert action.player_in_game_id == player_in_game.id
+
+    await assert_action_state(action, ActionState.SUCCESS)
+
     await assert_has_actions(player_in_game, [Tile(0, 1), Tile(0, 0)])
     await assert_has_tiles(player_in_game, [Tile(0, 1), Tile(0, 0)])
-    await assert_has_actions(player_in_game2, [Tile(0, 0), Tile(1, 1)])
-    await assert_has_tiles(player_in_game2, [Tile(1, 1)])
-    await player_in_game2.arefresh_from_db()
-    assert player_in_game2.dead_at is None
-    assert player_in_game2.killed_by is None
-    assert await PlayerInGame.objects.filter(player=player2).acount() == 1
+
+    await assert_has_actions(player_in_game2, [Tile(0, 0), Tile(1, 0)])
+    await assert_has_tiles(player_in_game2, [Tile(1, 0)])
+    await assert_death(player_in_game2, False)
+    assert await PlayerInGame.objects.filter(player_id=player_in_game2.player_id).acount() == 1
 
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_on_click_tile_last_occupied_by_other():
     """Test that a player can click on the last tile occupied by another player."""
-    game = await make_game()
-    player = await make_player()
     with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 2):
-        player_in_game = await make_player_in_game(game, player, [Tile(0, 1)])
-        player2 = await make_player(2)
-        player_in_game2 = await make_player_in_game(game, player2, [Tile(0, 0)])
-    assert await player_in_game.action_set.acount() == 1
-    assert await player_in_game.occupiedtile_set.acount() == 1
-    assert await player_in_game2.action_set.acount() == 1
-    assert await player_in_game2.occupiedtile_set.acount() == 1
-    action = await asave_action(player, game, Tile(0, 0))
-    assert action is not None
+        game, player, player_in_game = await make_game_and_player(Tile(0, 1))
+        player_in_game2 = await make_player_in_game(game, await make_player(2), [Tile(0, 0)])
+
+    assert (action := await asave_action(player, game, Tile(0, 0))) is not None
     await aplay_turn(game, get_grid(game), 0)
-    await action.arefresh_from_db()
-    assert action.state == ActionState.SUCCESS
-    assert action.player_in_game_id == player_in_game.id
+
+    await assert_action_state(action, ActionState.SUCCESS)
+
     await assert_has_actions(player_in_game, [Tile(0, 1), Tile(0, 0)])
     await assert_has_tiles(player_in_game, [Tile(0, 1), Tile(0, 0)])
+
     await assert_has_actions(player_in_game2, [Tile(0, 0)])
     await assert_has_tiles(player_in_game2, [])
-    await player_in_game2.arefresh_from_db()
-    assert player_in_game2.dead_at is not None
-    assert player_in_game2.killed_by_id == player_in_game.id
-    assert await PlayerInGame.objects.filter(player=player2).acount() == 1
+    await assert_death(player_in_game2, True, player_in_game.id)
+    assert await PlayerInGame.objects.filter(player_id=player_in_game2.player_id).acount() == 1
 
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_on_click_tile_after_recent_death():
     """Test that a player cannot click on a tile if recently dead."""
-    game = await make_game()
-    player = await make_player()
     with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 2):
-        player_in_game = await make_player_in_game(game, player, [Tile(0, 0)])
-        player2 = await make_player(2)
-        player_in_game2 = await make_player_in_game(game, player2, [Tile(1, 0)])
-    await asave_action(player2, game, Tile(0, 0))
+        game, player, player_in_game = await make_game_and_player(Tile(0, 0))
+        player_in_game2 = await make_player_in_game(game, await make_player(2), [Tile(1, 0)])
+
+    await asave_action(player_in_game2.player, game, Tile(0, 0))
     await aplay_turn(game, get_grid(game), 0)
-    await player_in_game.arefresh_from_db()
-    assert player_in_game.dead_at is not None
-    assert player_in_game.killed_by_id == player_in_game2.id
-    assert await player_in_game.action_set.acount() == 1
-    assert await player_in_game.occupiedtile_set.acount() == 0
+    await assert_death(player_in_game, True, player_in_game2.id)
+
+    assert await asave_action(player, game, Tile(0, 1)) is None
+    await aplay_turn(game, get_grid(game), 0)
+
     await assert_has_actions(player_in_game, [Tile(0, 0)])
     await assert_has_tiles(player_in_game, [])
-    await assert_has_actions(player_in_game2, [Tile(1, 0), Tile(0, 0)])
-    await assert_has_tiles(player_in_game2, [Tile(1, 0), Tile(0, 0)])
-    action = await asave_action(player, game, Tile(0, 1))
-    assert action is None
-    await aplay_turn(game, get_grid(game), 0)
-    await assert_has_actions(player_in_game, [Tile(0, 0)])
-    await assert_has_tiles(player_in_game, [])
-    await assert_has_actions(player_in_game2, [Tile(1, 0), Tile(0, 0)])
-    await assert_has_tiles(player_in_game2, [Tile(1, 0), Tile(0, 0)])
-    await player_in_game.arefresh_from_db()
-    assert player_in_game.dead_at is not None
-    assert player_in_game.killed_by_id == player_in_game2.id
+    await assert_death(player_in_game, True, player_in_game2.id)
     assert await PlayerInGame.objects.filter(player=player).acount() == 1
+
+    await assert_has_actions(player_in_game2, [Tile(1, 0), Tile(0, 0)])
+    await assert_has_tiles(player_in_game2, [Tile(1, 0), Tile(0, 0)])
 
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_on_click_tile_after_not_recent_death():
     """Test that a player can click on a tile if dead but not recently."""
-    game = await make_game()
-    player = await make_player()
     with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 4):
-        player_in_game = await make_player_in_game(game, player, [Tile(0, 0)])
-    player2 = await make_player(2)
+        game, player, player_in_game = await make_game_and_player(Tile(0, 0))
     with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 2):
-        player_in_game2 = await make_player_in_game(game, player2, [Tile(1, 0)])
-        await asave_action(player2, game, Tile(0, 0))
+        player_in_game2 = await make_player_in_game(game, await make_player(2), [Tile(1, 0)])
+
+    await asave_action(player_in_game2.player, game, Tile(0, 0))
     await aplay_turn(game, get_grid(game), 0)
-    await player_in_game.arefresh_from_db()
-    assert player_in_game.dead_at is not None
-    assert player_in_game.killed_by_id == player_in_game2.id
+    await assert_death(player_in_game, True, player_in_game2.id)
+
+    player_in_game.dead_at = timezone.now() - RESPAWN_FORBID_DURATION * 2
+    await player_in_game.asave()
+
+    assert (action := await asave_action(player, game, Tile(0, 1))) is not None
+    await aplay_turn(game, get_grid(game), 0)
+
+    await assert_action_state(action, ActionState.SUCCESS)
+
     await assert_has_actions(player_in_game, [Tile(0, 0)])
     await assert_has_tiles(player_in_game, [])
+    await assert_death(player_in_game, True, player_in_game2.id)
+
     await assert_has_actions(player_in_game2, [Tile(1, 0), Tile(0, 0)])
     await assert_has_tiles(player_in_game2, [Tile(1, 0), Tile(0, 0)])
-    player_in_game.dead_at = timezone.now() - RESPAWN_FORBID_DURATION * 2
-    await sync_to_async(player_in_game.save)()
-    action = await asave_action(player, game, Tile(0, 1))
-    assert action is not None
-    await aplay_turn(game, get_grid(game), 0)
-    await action.arefresh_from_db()
-    assert action.state == ActionState.SUCCESS
+
     player_in_game_new = await sync_to_async(lambda action: action.player_in_game)(action)
     assert player_in_game_new.id != player_in_game.id
     assert player_in_game_new.player_id == player_in_game.player_id
-    await assert_has_actions(player_in_game, [Tile(0, 0)])
-    await assert_has_tiles(player_in_game, [])
-    await assert_has_actions(player_in_game2, [Tile(1, 0), Tile(0, 0)])
-    await assert_has_tiles(player_in_game2, [Tile(1, 0), Tile(0, 0)])
     await assert_has_actions(player_in_game_new, [Tile(0, 1)])
     await assert_has_tiles(player_in_game_new, [Tile(0, 1)])
-    await player_in_game.arefresh_from_db()
-    assert player_in_game.dead_at is not None
-    assert player_in_game.killed_by_id == player_in_game2.id
-    await action.player_in_game.arefresh_from_db()
-    assert action.player_in_game.dead_at is None
-    assert action.player_in_game.killed_by is None
+    await assert_death(player_in_game_new, False)
+
     assert await PlayerInGame.objects.filter(player=player).acount() == 2
 
 
@@ -384,36 +366,26 @@ async def test_on_click_tile_after_not_recent_death():
 @pytest.mark.django_db(transaction=True)
 async def test_die_during_a_turn():
     """Test that actions of a player dead during a turn are ignored."""
-    game = await make_game()
-    player = await make_player()
     with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 4):
-        player_in_game = await make_player_in_game(game, player, [Tile(0, 0)])
-    player2 = await make_player(2)
+        game, player, player_in_game = await make_game_and_player(Tile(0, 0))
     with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 2):
-        player_in_game2 = await make_player_in_game(game, player2, [Tile(1, 0)])
+        player_in_game2 = await make_player_in_game(game, await make_player(2), [Tile(1, 0)])
 
-    action_1 = await asave_action(player, game, Tile(0, 1))
-    assert action_1 is not None
-    action_2 = await asave_action(player2, game, Tile(0, 0))
-    assert action_2 is not None
-    action_3 = await asave_action(player2, game, Tile(0, 1))
-    assert action_3 is not None
-    action_4 = await asave_action(player, game, Tile(1, 1))
-    assert action_4 is not None
+    assert (action_1 := await asave_action(player, game, Tile(0, 1))) is not None
+    assert (action_2 := await asave_action(player_in_game2.player, game, Tile(0, 0))) is not None
+    assert (action_3 := await asave_action(player_in_game2.player, game, Tile(0, 1))) is not None
+    assert (action_4 := await asave_action(player, game, Tile(1, 1))) is not None
+
     await aplay_turn(game, get_grid(game), 0)
-    await action_1.arefresh_from_db()
-    await action_2.arefresh_from_db()
-    await action_3.arefresh_from_db()
-    await action_4.arefresh_from_db()
-    assert action_1.state == ActionState.SUCCESS
-    assert action_2.state == ActionState.SUCCESS
-    assert action_3.state == ActionState.SUCCESS
-    assert action_4.state == ActionState.FAILURE
-    assert action_4.failure_reason == ActionFailureReason.DEAD
+
+    await assert_action_state(action_1, ActionState.SUCCESS)
+    await assert_action_state(action_2, ActionState.SUCCESS)
+    await assert_action_state(action_3, ActionState.SUCCESS)
+    await assert_action_state(action_4, ActionState.FAILURE, ActionFailureReason.DEAD)
+
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(0, 1), Tile(1, 1)])
     await assert_has_tiles(player_in_game, [])
+    await assert_death(player_in_game, True, player_in_game2.id)
+
     await assert_has_actions(player_in_game2, [Tile(1, 0), Tile(0, 0), Tile(0, 1)])
     await assert_has_tiles(player_in_game2, [Tile(1, 0), Tile(0, 0), Tile(0, 1)])
-    await player_in_game.arefresh_from_db()
-    assert player_in_game.dead_at is not None
-    assert player_in_game.killed_by_id == player_in_game2.id

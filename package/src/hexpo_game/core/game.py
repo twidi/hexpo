@@ -40,7 +40,7 @@ async def dequeue_clicks(queue: GameQueue, game: Game, grid: Grid) -> None:
         if (now := timezone.now()) > next_turn_min_at:
             game.current_turn += 1
             game.current_turn_started_at = now
-            await sync_to_async(game.save)()
+            await game.asave()
             next_turn_min_at = game.current_turn_started_at + TURN_DURATION
             await sync_to_async(play_turn)(game, grid, turn=game.current_turn - 1)
         player, tile = await queue.get()
@@ -56,11 +56,7 @@ def play_turn(game: Game, grid: Grid, turn: int) -> None:
     queryset = Action.objects.filter(game=game, state=ActionState.CONFIRMED, turn=turn)
     logger_play_turn.info("Playing turn %s: %s actions", turn, len(queryset))
     dead_during_turn: set[int] = set()  # id of dead player in games
-    for action in (
-        queryset
-        .order_by("confirmed_at")
-        .select_related("player_in_game__player")
-    ):
+    for action in queryset.order_by("confirmed_at").select_related("player_in_game__player"):
         if action.tile_col is None or action.tile_row is None:
             continue
         player_in_game = action.player_in_game
@@ -104,7 +100,9 @@ def play_turn(game: Game, grid: Grid, turn: int) -> None:
 
         if occupied_tile is not None:
             old_player_in_game = occupied_tile.player_in_game
-            logger_play_turn.info("%s clicked on %s that was occupied by %s", player.name, tile, old_player_in_game.player.name)
+            logger_play_turn.info(
+                "%s clicked on %s that was occupied by %s", player.name, tile, old_player_in_game.player.name
+            )
             occupied_tile.player_in_game = player_in_game
             occupied_tile.save()
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 from asgiref.sync import sync_to_async
 from django.db import models
@@ -35,6 +35,10 @@ class BaseModel(models.Model):
     async def arefresh_from_db(self) -> None:
         """Refresh the instance from the database."""
         await sync_to_async(self.refresh_from_db)()
+
+    async def asave(self, *args: Any, **kwargs: Any) -> None:
+        """Save the instance."""
+        await sync_to_async(self.save)(*args, **kwargs)
 
 
 class Game(BaseModel):
