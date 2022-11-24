@@ -38,6 +38,15 @@ class ActionState(models.TextChoices):
     FAILURE = "failure", "Failure"
 
 
+class ActionFailureReason(models.TextChoices):
+    """Represent the different reasons of action failure."""
+
+    DEAD = "dead", "Dead"
+    GROW_SELF = "grow_self", "Already it's tile"
+    GROW_PROTECTED = "grow_protected", "Tile is protected"
+    GROW_NO_NEIGHBOR = "grow_no_neighbor", "Not on a neighbor"
+
+
 class RandomEventType(models.TextChoices):
     """Represent the different types of random events."""
 

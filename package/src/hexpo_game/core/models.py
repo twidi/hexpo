@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Optional, cast
 
+from asgiref.sync import sync_to_async
 from django.db import models
 from django.db.models import Count, F, Max, OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
@@ -13,6 +14,7 @@ from .constants import (
     NB_COLORS,
     RESPAWN_PROTECTED_DURATION,
     RESPAWN_PROTECTED_QUANTITY,
+    ActionFailureReason,
     ActionState,
     ActionType,
     GameMode,
@@ -22,7 +24,20 @@ from .grid import Grid
 from .types import Tile
 
 
-class Game(models.Model):
+class BaseModel(models.Model):
+    """Base model for all our models."""
+
+    class Meta:
+        """Meta class for BaseModel."""
+
+        abstract = True
+
+    async def arefresh_from_db(self) -> None:
+        """Refresh the instance from the database."""
+        await sync_to_async(self.refresh_from_db)()
+
+
+class Game(BaseModel):
     """Represent a playing game."""
 
     mode = models.CharField(max_length=255, choices=GameMode.choices, default=GameMode.FREE_FULL)
@@ -126,7 +141,7 @@ class Game(models.Model):
         return queryset
 
 
-class Player(models.Model):
+class Player(BaseModel):
     """Represent a player that played at least one game."""
 
     external_id = models.CharField(
@@ -153,7 +168,7 @@ class Player(models.Model):
         return set(Player.objects.filter(allowed=False).values_list("external_id", flat=True))
 
 
-class PlayerInGame(models.Model):
+class PlayerInGame(BaseModel):
     """Represent a player in a game.
 
     We can have many PlayerInGame for the same (player, game) couple, but only with is_alive = True.
@@ -223,7 +238,7 @@ class PlayerInGame(models.Model):
         self.save()
 
 
-class OccupiedTile(models.Model):
+class OccupiedTile(BaseModel):
     """Represent a tile that is occupied by a player."""
 
     player_in_game = models.ForeignKey(
@@ -252,7 +267,7 @@ class OccupiedTile(models.Model):
         return cls.objects.filter(player_in_game_id=player_in_game_id).filter(neighbor_filter).exists()
 
 
-class Drop(models.Model):
+class Drop(BaseModel):
     """Represent a drop not yet picked up by a player."""
 
     game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the drop is in.")
@@ -261,13 +276,13 @@ class Drop(models.Model):
     nb_actions = models.FloatField(help_text="Number of action points in the drop.")
 
 
-class Action(models.Model):
+class Action(BaseModel):
     """Represent an action done by a player."""
 
     player_in_game = models.ForeignKey(
         PlayerInGame, on_delete=models.CASCADE, help_text="Player in game that did the action."
     )
-    game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the action was done in.", null=True)
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the action was done in.")
     turn = models.PositiveIntegerField(help_text="Turn number when the action was done.")
     action_type = models.CharField(max_length=255, help_text="Type of the action.", choices=ActionType.choices)
     tile_col = models.IntegerField(
@@ -278,6 +293,9 @@ class Action(models.Model):
     )
     state = models.CharField(
         max_length=255, help_text="State of the action.", choices=ActionState.choices, default=ActionState.CREATED
+    )
+    failure_reason = models.CharField(
+        max_length=255, help_text="Reason of the failure.", choices=ActionFailureReason.choices, null=True
     )
     confirmed_at = models.DateTimeField(help_text="When the action was confirmed.", null=True, db_index=True)
     efficiency = models.FloatField(help_text="Efficiency of the action. (between 0 and 1)", default=1.0)
@@ -295,6 +313,11 @@ class Action(models.Model):
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_confirmed_at_null_if_created",
                 check=~Q(state=ActionState.CREATED) | Q(confirmed_at__isnull=True),
+            ),
+            # when the state is "FAILED", the `failure_reason` field must be set
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_failure_reason_not_null_if_failed",
+                check=~Q(state=ActionState.FAILURE) | Q(failure_reason__isnull=False),
             ),
         ]
 
@@ -317,7 +340,7 @@ class Action(models.Model):
         self.save()
 
 
-class RandomEvent(models.Model):
+class RandomEvent(BaseModel):
     """Represent a random event."""
 
     game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the event is in.")
