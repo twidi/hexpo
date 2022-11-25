@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from math import floor
 from typing import Any, Optional, cast
 
 from asgiref.sync import sync_to_async
@@ -86,6 +87,17 @@ class Game(BaseModel):
                 current_turn_end=timezone.now() + timedelta(minutes=turn_duration_minutes),
             )
         return game
+
+    def next_turn(self, started_at: Optional[datetime] = None) -> int:
+        """Go to the next turn."""
+        self.current_turn += 1
+        self.current_turn_started_at = started_at or timezone.now()
+        self.save()
+        return self.current_turn
+
+    async def anext_turn(self, started_at: Optional[datetime] = None) -> int:
+        """Go to the next turn."""
+        return cast(int, await sync_to_async(self.next_turn)(started_at))
 
     def get_last_tile_update_at(self) -> Optional[datetime]:
         """Get the date of the last updated tile of the game."""
@@ -241,6 +253,14 @@ class PlayerInGame(BaseModel):
         self.killed_by = killer
         self.save()
 
+    def get_available_actions(self) -> int:
+        """Return the number of available actions for the player for the current turn."""
+        return floor(self.level + self.banked_actions - self.get_nb_actions_in_turn())
+
+    def get_nb_actions_in_turn(self) -> int:
+        """Return the number of actions the player has done in the current turn."""
+        return self.action_set.filter(turn=self.game.current_turn).exclude(state=ActionState.CREATED).count()
+
 
 class OccupiedTile(BaseModel):
     """Represent a tile that is occupied by a player."""
@@ -327,9 +347,16 @@ class Action(BaseModel):
 
         indexes = [
             models.Index(
+                # use to query actions on a turn
                 name="%(app_label)s_%(class)s_game_turn",
                 fields=("game", "state", "turn", "confirmed_at"),
             ),
+            models.Index(
+                # used to count valid actions of users in a turn
+                name="%(app_label)s_%(class)s_player_turn",
+                fields=("player_in_game", "turn", "state"),
+                condition=~Q(state=ActionState.CREATED),
+            )
         ]
 
     def fail(self, reason: ActionFailureReason) -> None:

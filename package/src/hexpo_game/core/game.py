@@ -37,13 +37,11 @@ async def dequeue_clicks(queue: GameQueue, game: Game, grid: Grid) -> None:
     now: datetime
     next_turn_min_at = game.current_turn_started_at + TURN_DURATION
     while True:
-        if (now := timezone.now()) > next_turn_min_at:
-            game.current_turn += 1
-            game.current_turn_started_at = now
-            await game.asave()
-            next_turn_min_at = game.current_turn_started_at + TURN_DURATION
-            await sync_to_async(play_turn)(game, grid, turn=game.current_turn - 1)
         player, tile = await queue.get()
+        if (now := timezone.now()) >= next_turn_min_at:
+            await game.anext_turn(now)
+            next_turn_min_at = game.current_turn_started_at + TURN_DURATION
+            await aplay_turn(game, grid, turn=game.current_turn - 1)
         try:
             await asave_action(player, game, tile)
         except Exception:  # pylint:disable=broad-except
@@ -51,8 +49,9 @@ async def dequeue_clicks(queue: GameQueue, game: Game, grid: Grid) -> None:
         queue.task_done()
 
 
-def play_turn(game: Game, grid: Grid, turn: int) -> None:
+def play_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> None:
     """Play a turn."""
+    turn = game.current_turn if turn is None else turn
     queryset = Action.objects.filter(game=game, state=ActionState.CONFIRMED, turn=turn)
     logger_play_turn.info("Playing turn %s: %s actions", turn, len(queryset))
     dead_during_turn: set[int] = set()  # id of dead player in games
@@ -75,12 +74,12 @@ def play_turn(game: Game, grid: Grid, turn: int) -> None:
         )
         if occupied_tile is not None:
             if occupied_tile.player_in_game.player_id == player.id:
-                logger_play_turn.info("%s clicked on %s but it's already his tile", player.name, tile)
+                logger_play_turn.warning("%s clicked on %s but it's already his tile", player.name, tile)
                 action.fail(reason=ActionFailureReason.GROW_SELF)
                 continue
 
             if occupied_tile.player_in_game.is_protected():
-                logger_play_turn.info(
+                logger_play_turn.warning(
                     "%s clicked on %s but is occupied by %s and protected",
                     player.name,
                     tile,
@@ -111,13 +110,13 @@ def play_turn(game: Game, grid: Grid, turn: int) -> None:
                 old_player_in_game.die(turn=turn, killer=player_in_game)
                 dead_during_turn.add(old_player_in_game.id)
         else:
-            logger_play_turn.info("%s clicked on %s", player.name, tile)
+            logger_play_turn.info("%s clicked on %s that was not occupied", player.name, tile)
             OccupiedTile.objects.create(game=game, col=tile.col, row=tile.row, player_in_game=player_in_game)
 
         action.success()
 
 
-async def aplay_turn(game: Game, grid: Grid, turn: int) -> None:
+async def aplay_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> None:
     """Play a turn."""
     await sync_to_async(play_turn)(game, grid, turn)
 
@@ -132,6 +131,7 @@ def save_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Ac
         start_tile_col=tile.col,
         start_tile_row=tile.row,
         color=PALETTE[player.id % NB_COLORS].as_hex,
+        level=3 if game.mode in (GameMode.FREE_FULL, GameMode.FREE_NEIGHBOR) else 1,
     )
 
     player_in_game = (
@@ -161,6 +161,9 @@ def save_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Ac
             **default_player_attrs,
         )
         logger_save_action.warning("%s clicked on %s AND IS ALIVE AGAIN", player.name, tile)
+    elif player_in_game.get_available_actions() <= 0:
+        logger_save_action.warning("%s clicked on %s BUT HAS NOT ACTIONS LEFT", player.name, tile)
+        return None
     else:
         logger_save_action.info("%s clicked on %s", player.name, tile)
 
