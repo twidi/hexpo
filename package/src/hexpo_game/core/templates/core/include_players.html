@@ -3,14 +3,12 @@
         <div class="player-color"></div>
         <div class="player-rank">{{ player.rank }}</div>
         <div class="player-info">
-            <div class="player-name">
-                <span>{{ player.name }}</span>
-            </div>
+            <div class="player-name">{{ player.name }}</div>
             <div class="player-nb-tiles">{{ player.nb_tiles }}</div>
             <div class="player-percent-tiles">{{ player.percent_tiles }}</div>
         </div>
         <div class="player-extra">
-            (total: {{ player.nb_games }} essai{{ player.nb_games|pluralize }},  {{ player.nb_kills }} kill{{ player.nb_kills|pluralize }}, {{ player.nb_actions }} case{{ player.nb_actions|pluralize }})
+            (total: {{ player.nb_games }} départ{{ player.nb_games|pluralize }},  {{ player.nb_kills }} kill{{ player.nb_kills|pluralize }}, {{ player.nb_actions }} case{{ player.nb_actions|pluralize }})
         </div>
     </div>
 {% endfor %}

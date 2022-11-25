@@ -10,7 +10,7 @@ COORDINATES: dict[str, tuple[tuple[int, int], tuple[int, int]]] = {  # ((left, t
     "action-btn-defend": ((102, 192), (184, 232)),
     "action-btn-grow": ((194, 192), (276, 232)),
     "action-btn-bank": ((286, 192), (368, 232)),
-    "grid-area": ((416 + 30, 182 + 34), (2226, 1224)),
+    "grid-area": ((416 + 30, 184 + 34), (2226, 1224)),
 }
 
 

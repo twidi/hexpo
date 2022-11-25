@@ -6,17 +6,20 @@ html, body {
     overflow: hidden;
 }
 :root {
-    --grid-opacity: 0.5;
+    --grid-opacity: 0.75;
     --text-color: #eee;
     --bright-color: #ae15c8;
     --shell-background: #0a0513;
-    --shell-shadow: #0a051366
+    --shell-shadow: #0a0513cc;
 }
 body {
     background-color: #11091f;
-    font-size: 16px;
+    font-size: 18px;
     color: var(--text-color);
     font-family: 'Roboto', sans-serif;
+}
+p {
+    margin: 0;
 }
 
 #main-container {
@@ -51,6 +54,7 @@ body#page-players #main-container {
 
 #empty-top {
     grid-area: empty-top;
+    border-bottom: solid 2px var(--bright-color);
 }
 #empty-bottom {
     grid-area: empty-bottom;
@@ -59,12 +63,18 @@ body#page-players #main-container {
     padding-left: 20px;
     padding-right: 20px;
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     grid-area: top-bar;
     background-color: var(--shell-background);
-    box-shadow: 0 14px 11px 2px var(--shell-shadow), 0 -14px 11px 2px var(--shell-shadow);
+    box-shadow: 0 14px 11px 2px var(--shell-shadow);
     font-size: 32px;
+}
+#instructions {
+    grid-area: instructions;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 #main-name {
@@ -86,30 +96,10 @@ body#page-players #main-container {
     transform: rotate(-9deg)
 }
 
-#top-bar .extension {
-    width: 7.5em;
-    display: grid;
-    grid-template-columns: 50px 1fr;
-    grid-template-rows: repeat(2, 1fr);
-    grid-column-gap: 10px;
-    grid-row-gap: 0;
-    grid-template-areas:
-        "icon manage"
-        "icon accept";
-    align-items: center;
-    text-align: right;
-}
-#top-bar p {
-    margin: 0;
-}
-#top-bar p ~ p {
-    margin-top: 16px;
-}
 
 #top-left-corner {
     grid-area: top-left-corner;
     background-color: var(--shell-background);
-    box-shadow: 0 -14px 11px 2px var(--shell-shadow);
     z-index: 1;
 }
 
@@ -119,6 +109,7 @@ body#page-players #main-container {
     display: flex;
     flex-direction: column;
     box-shadow: 14px 0 11px 2px var(--shell-shadow);
+    border-right: solid 2px var(--bright-color);
 }
 
 #actions {
@@ -212,6 +203,8 @@ body#page-players #main-container {
 .player-name {
     flex-grow: 1;
     text-align: left;
+    max-width: 12em;
+    overflow: hidden;
 }
 .player-nb-tiles {
     width: 2.5em;
@@ -233,6 +226,7 @@ body#page-players #main-container {
     grid-area: grid-area;
     padding-left: 30px;
     padding-top: 34px;
+    border-top: solid 2px var(--bright-color);
 }
 #grid-area.debug {
     font-size: 90;
@@ -244,37 +238,11 @@ body#page-players #main-container {
 
 #right-bar {
     grid-area: right-bar;
+    border-top: solid 2px var(--bright-color);
 }
 #top-bar {
     grid-area: top-bar;
 }
 #bottom-bar {
     grid-area: bottom-bar;
-}
-
-.extension {
-  animation: 2s linear infinite condemed_blink_effect;
-  transform: translateY(20px) translateX(-50px);
-}
-@-webkit-keyframes condemed_blink_effect {
-  0% {
-    visibility: hidden;
-  }
-  50% {
-    visibility: hidden;
-  }
-  100% {
-    visibility: visible;
-  }
-}
-@keyframes condemed_blink_effect {
-  0% {
-    visibility: hidden;
-  }
-  50% {
-    visibility: hidden;
-  }
-  100% {
-    visibility: visible;
-  }
 }
