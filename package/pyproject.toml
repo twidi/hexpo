@@ -77,7 +77,6 @@ lint = [
     'pylint-django',
 ]
 tests = [
-    'freezegun',
     'mock',
     'pytest',
     'pytest-asyncio',

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from functools import cached_property
 from math import floor
 from typing import Any, Optional, cast
 
@@ -12,13 +13,13 @@ from django.db.models import Count, F, Max, OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
 
 from .constants import (
+    GAME_MODE_CONFIGS,
     NB_COLORS,
-    RESPAWN_PROTECTED_DURATION,
-    RESPAWN_PROTECTED_QUANTITY,
     ActionFailureReason,
     ActionState,
     ActionType,
     GameMode,
+    GameModeConfig,
     RandomEventTurnMoment,
 )
 from .grid import Grid
@@ -54,6 +55,11 @@ class Game(BaseModel):
     current_turn = models.PositiveIntegerField(default=0, help_text="Current turn number.")
     current_turn_started_at = models.DateTimeField(auto_now_add=True, help_text="When the current turn started.")
     current_turn_end = models.DateTimeField(help_text="When the current turn ends.")
+
+    @cached_property
+    def config(self) -> GameModeConfig:
+        """Get the game config."""
+        return GAME_MODE_CONFIGS[GameMode(self.mode)]
 
     def end_game(self) -> None:
         """End the game."""
@@ -125,7 +131,7 @@ class Game(BaseModel):
 
     def get_players_in_game_with_occupied_tiles(self) -> list[PlayerInGame]:
         """Get the players in game with their occupied tiles prefeteched."""
-        return list(self.playeringame_set.filter(dead_at__isnull=True).prefetch_related("occupiedtile_set").all())
+        return list(self.playeringame_set.filter(ended_turn__isnull=True).prefetch_related("occupiedtile_set").all())
 
     def get_players_in_game_for_leader_board(self, limit: Optional[int] = None) -> QuerySet[PlayerInGame]:
         """Get the players in game for the leader board."""
@@ -226,7 +232,7 @@ class PlayerInGame(BaseModel):
                     "game",
                     "player",
                 ),
-                condition=Q(dead_at__isnull=True),
+                condition=Q(ended_turn__isnull=True),
             ),
         ]
 
@@ -238,12 +244,18 @@ class PlayerInGame(BaseModel):
         """Return the number of tiles the player has."""
         return self.occupiedtile_set.count()
 
-    def is_protected(self, when: Optional[datetime] = None) -> bool:
+    def is_protected(self) -> bool:
         """Return whether the player is protected or not."""
-        if when is None:
-            when = timezone.now()
         return (
-            when < self.started_at + RESPAWN_PROTECTED_DURATION and self.count_tiles() <= RESPAWN_PROTECTED_QUANTITY
+            self.started_turn + self.game.config.respawn_protected_max_turns + 1 > self.game.current_turn
+            and self.count_tiles() <= self.game.config.respawn_protected_max_tiles
+        )
+
+    def can_respawn(self) -> bool:
+        """Return whether the player can respawn or not."""
+        return (
+            self.ended_turn is None
+            or self.ended_turn + self.game.config.respawn_cooldown_turns + 1 <= self.game.current_turn
         )
 
     def die(self, turn: Optional[int] = None, killer: Optional[PlayerInGame] = None) -> None:
@@ -356,7 +368,7 @@ class Action(BaseModel):
                 name="%(app_label)s_%(class)s_player_turn",
                 fields=("player_in_game", "turn", "state"),
                 condition=~Q(state=ActionState.CREATED),
-            )
+            ),
         ]
 
     def fail(self, reason: ActionFailureReason) -> None:

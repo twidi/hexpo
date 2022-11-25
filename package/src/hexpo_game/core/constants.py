@@ -1,15 +1,12 @@
 """Constants for the game."""
 from datetime import timedelta
+from typing import NamedTuple
 
 from django.db import models
 
 from .types import Color
 
-RESPAWN_FORBID_DURATION = timedelta(seconds=10)
 RESPAWN_PROTECTED_DURATION = timedelta(seconds=30)
-RESPAWN_PROTECTED_QUANTITY = 10
-
-TURN_DURATION = timedelta(seconds=1)
 
 
 class GameMode(models.TextChoices):
@@ -18,6 +15,45 @@ class GameMode(models.TextChoices):
     FREE_FULL = "free-full", "Free full"
     FREE_NEIGHBOR = "free-neighbor", "Free neighbor"
     TURN_BY_TURN = "turn-by-turn", "Turn by turn"
+
+
+class GameModeConfig(NamedTuple):
+    """The configuration of a game mode."""
+
+    neighbors_only: bool
+    turn_duration: timedelta
+    player_start_level: int
+    respawn_cooldown_turns: int
+    respawn_protected_max_turns: int
+    respawn_protected_max_tiles: int
+
+
+GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
+    GameMode.FREE_FULL: GameModeConfig(
+        neighbors_only=False,
+        turn_duration=timedelta(seconds=1),
+        player_start_level=3,
+        respawn_cooldown_turns=10,
+        respawn_protected_max_turns=30,
+        respawn_protected_max_tiles=10,
+    ),
+    GameMode.FREE_NEIGHBOR: GameModeConfig(
+        neighbors_only=True,
+        turn_duration=timedelta(seconds=1),
+        player_start_level=3,
+        respawn_cooldown_turns=10,
+        respawn_protected_max_turns=30,
+        respawn_protected_max_tiles=10,
+    ),
+    GameMode.TURN_BY_TURN: GameModeConfig(
+        neighbors_only=True,
+        turn_duration=timedelta(minutes=5),
+        player_start_level=1,
+        respawn_cooldown_turns=5,
+        respawn_protected_max_turns=10,
+        respawn_protected_max_tiles=10,
+    ),
+}
 
 
 class ActionType(models.TextChoices):

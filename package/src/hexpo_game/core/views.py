@@ -13,9 +13,7 @@ from aiohttp import web
 from aiohttp.web import Response
 from asgiref.sync import sync_to_async
 from django.template import loader
-from django.utils import timezone
 
-from hexpo_game.core.constants import RESPAWN_FORBID_DURATION
 from hexpo_game.core.grid import ConcreteGrid
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
@@ -62,7 +60,6 @@ class GameState:
         self.grid.reset_map()
         self.grid.draw_map_contour(Color(0, 0, 0))
 
-        now = timezone.now()
         for player_in_game in await sync_to_async(self.game.get_players_in_game_with_occupied_tiles)():
             self.grid.draw_areas(
                 (
@@ -70,7 +67,7 @@ class GameState:
                     for occupied_tile in player_in_game.occupiedtile_set.all()
                 ),
                 Color.from_hex(player_in_game.color).as_bgr(),
-                mark=player_in_game.is_protected(now),
+                mark=player_in_game.is_protected(),
             )
 
         return True
@@ -78,8 +75,6 @@ class GameState:
     def get_players_context(self) -> list[dict[str, Any]]:
         """Get the context for the players left bar."""
         players_in_game = self.game.get_players_in_game_for_leader_board(15)
-        now = timezone.now()
-        alive_time = now - RESPAWN_FORBID_DURATION
 
         return [
             {
@@ -93,8 +88,8 @@ class GameState:
                 "nb_actions": player_in_game.nb_actions,  # type: ignore[attr-defined]
                 "nb_games": player_in_game.nb_games,  # type: ignore[attr-defined]
                 "nb_kills": player_in_game.nb_kills,  # type: ignore[attr-defined]
-                "can_play": not player_in_game.dead_at or player_in_game.dead_at < alive_time,
-                "is_protected": player_in_game.is_protected(now),
+                "can_play": player_in_game.ended_turn is None or player_in_game.can_respawn(),  # type: ignore
+                "is_protected": player_in_game.is_protected(),
             }
             for index, player_in_game in enumerate(players_in_game, 1)
         ]

@@ -10,16 +10,7 @@ from django.utils import timezone
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES, get_click_target
-from .constants import (
-    NB_COLORS,
-    PALETTE,
-    RESPAWN_FORBID_DURATION,
-    TURN_DURATION,
-    ActionFailureReason,
-    ActionState,
-    ActionType,
-    GameMode,
-)
+from .constants import NB_COLORS, PALETTE, ActionFailureReason, ActionState, ActionType
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame
 from .types import Point, Tile
@@ -35,12 +26,12 @@ GameQueue: TypeAlias = Queue[tuple[Player, Optional[Tile]]]
 async def dequeue_clicks(queue: GameQueue, game: Game, grid: Grid) -> None:
     """Dequeue clicks and process them."""
     now: datetime
-    next_turn_min_at = game.current_turn_started_at + TURN_DURATION
+    next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
     while True:
         player, tile = await queue.get()
         if (now := timezone.now()) >= next_turn_min_at:
             await game.anext_turn(now)
-            next_turn_min_at = game.current_turn_started_at + TURN_DURATION
+            next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
             await aplay_turn(game, grid, turn=game.current_turn - 1)
         try:
             await asave_action(player, game, tile)
@@ -89,7 +80,7 @@ def play_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> None:
                 continue
 
         if (
-            game.mode == GameMode.FREE_NEIGHBOR
+            game.config.neighbors_only
             and player_in_game.has_tiles()
             and not OccupiedTile.has_occupied_neighbors(player_in_game.id, tile, grid)
         ):
@@ -131,13 +122,12 @@ def save_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Ac
         start_tile_col=tile.col,
         start_tile_row=tile.row,
         color=PALETTE[player.id % NB_COLORS].as_hex,
-        level=3 if game.mode in (GameMode.FREE_FULL, GameMode.FREE_NEIGHBOR) else 1,
+        level=game.config.player_start_level,
     )
 
     player_in_game = (
-        PlayerInGame.objects.filter(
+        game.playeringame_set.filter(
             player=player,
-            game=game,
         )
         .order_by("-id")
         .first()
@@ -150,8 +140,8 @@ def save_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Ac
             **default_player_attrs,
         )
         logger_save_action.warning("%s clicked on %s AND IS A NEW PLAYER", player.name, tile)
-    elif player_in_game.dead_at:
-        if player_in_game.dead_at + RESPAWN_FORBID_DURATION > timezone.now():
+    elif player_in_game.ended_turn is not None:
+        if not player_in_game.can_respawn():
             logger_save_action.warning("%s clicked on %s but IS STILL DEAD", player.name, tile)
             return None
 

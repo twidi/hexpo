@@ -5,7 +5,7 @@ from typing import Optional, cast
 from tqdm import tqdm
 
 from hexpo_game import django_setup  # noqa: F401  # pylint: disable=unused-import
-from hexpo_game.core.constants import TURN_DURATION, ActionState
+from hexpo_game.core.constants import ActionState
 from hexpo_game.core.models import Action, Game, OccupiedTile, PlayerInGame
 from hexpo_game.core.types import Tile
 
@@ -45,12 +45,12 @@ def recreate_game(game: Game) -> Game:
 
         now = cast(datetime, action[3])
         if next_turn_min_at is None:
-            next_turn_min_at = now + TURN_DURATION
+            next_turn_min_at = now + game.config.turn_duration
             new_game.started_at = new_game.current_turn_started_at = now
         elif now > next_turn_min_at:
             new_game.current_turn += 1
             new_game.current_turn_started_at = now
-            next_turn_min_at = new_game.current_turn_started_at + TURN_DURATION
+            next_turn_min_at = new_game.current_turn_started_at + game.config.turn_duration
 
         tile = Tile(cast(int, action[1]), cast(int, action[2]))
 
