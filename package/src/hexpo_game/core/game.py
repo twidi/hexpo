@@ -64,7 +64,7 @@ def play_turn(game: Game, grid: Grid, turn: int) -> None:
 
         if player_in_game.id in dead_during_turn:
             action.fail(reason=ActionFailureReason.DEAD)
-            logger_play_turn.warning("%s IS NOW  DEAD", player.name)
+            logger_play_turn.warning("%s IS DEAD (killed in this turn)", player.name)
             continue
 
         tile = Tile(action.tile_col, action.tile_row)
@@ -107,7 +107,7 @@ def play_turn(game: Game, grid: Grid, turn: int) -> None:
             occupied_tile.save()
 
             if not old_player_in_game.has_tiles():
-                logger_play_turn.warning("%s IS NOW  DEAD", old_player_in_game.player.name)
+                logger_play_turn.warning("%s IS NOW DEAD", old_player_in_game.player.name)
                 old_player_in_game.die(turn=turn, killer=player_in_game)
                 dead_during_turn.add(old_player_in_game.id)
         else:

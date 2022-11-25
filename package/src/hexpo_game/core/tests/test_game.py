@@ -121,6 +121,10 @@ async def assert_death(player_in_game: PlayerInGame, killed: bool, killed_by_id:
     """Assert the player is dead or not."""
     __tracebackhide__ = True  # pylint: disable=unused-variable
     await player_in_game.arefresh_from_db()
+
+    # any other way to load a fk in async ?
+    await sync_to_async(getattr)(player_in_game, "player")
+
     assert (player_in_game.dead_at is not None) == killed
     assert player_in_game.killed_by_id == killed_by_id
 
@@ -389,3 +393,35 @@ async def test_die_during_a_turn():
 
     await assert_has_actions(player_in_game2, [Tile(1, 0), Tile(0, 0), Tile(0, 1)])
     await assert_has_tiles(player_in_game2, [Tile(1, 0), Tile(0, 0), Tile(0, 1)])
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_first_click_on_protected():
+    """Test that a player can click on a protected tile on the first turn."""
+    with freeze_time(timezone.now() - RESPAWN_PROTECTED_DURATION * 4):
+        game, player, player_in_game = await make_game_and_player(Tile(0, 0))
+        await aplay_turn(game, get_grid(game), 0)
+
+        player_in_game2 = await make_player_in_game(game, await make_player(2), [])
+        assert (action := await asave_action(player_in_game2.player, game, Tile(0, 0))) is not None
+        await aplay_turn(game, get_grid(game), 0)
+        await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_PROTECTED)
+
+        await assert_has_actions(player_in_game, [Tile(0, 0)])
+        await assert_has_tiles(player_in_game, [Tile(0, 0)])
+        await assert_death(player_in_game, False)
+        await assert_has_actions(player_in_game2, [Tile(0, 0)])
+        await assert_has_tiles(player_in_game2, [])
+        await assert_death(player_in_game2, False)
+
+    assert (action := await asave_action(player_in_game2.player, game, Tile(0, 0))) is not None
+    await aplay_turn(game, get_grid(game), 0)
+    await assert_action_state(action, ActionState.SUCCESS)
+
+    await assert_has_actions(player_in_game, [Tile(0, 0)])
+    await assert_has_tiles(player_in_game, [])
+    await assert_death(player_in_game, True, player_in_game2.id)
+    await assert_has_actions(player_in_game2, [Tile(0, 0), Tile(0, 0)])
+    await assert_has_tiles(player_in_game2, [Tile(0, 0)])
+    await assert_death(player_in_game2, False)
