@@ -228,27 +228,39 @@ body#page-players #main-container {
     border-top: solid 2px var(--bright-color);
 }
 
+#coord-hor, .coord-ver {
+    opacity: var(--grid-opacity);
+}
 #coord-hor {
     padding-left: calc(0.125 * var(--tile-width));
     display: flex;
     align-items: end;
     padding-bottom: 10px;
+    grid-area: coord-hor;
 }
 #coord-hor span {
   width: calc(var(--tile-width) * 0.75);
   display: inline-block;
   text-align: center;
 }
-#coord-ver {
+#coord-hor span.even {
+    transform: translateY(calc(var(--tile-height) / 2));
+}
+.coord-ver {
     display: flex;
     flex-direction: column;
     align-items: end;
     padding-right: 10px;
+    grid-area: coord-ver;
 }
-#coord-ver span {
+.coord-ver span {
     height: var(--tile-height);
     line-height: var(--tile-height);
     font-size: 24px;
+}
+#coord-ver-even {
+    transform: translateX(calc(var(--tile-width) * 0.25)) translateY(calc(var(--tile-height) / 2));
+    opacity: calc(var(--grid-opacity) * 0.5);
 }
 #coord-hor span, #coord-ver span {
     font-size: 24px;

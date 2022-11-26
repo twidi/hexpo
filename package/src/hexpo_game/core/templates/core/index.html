@@ -28,13 +28,14 @@
             <div id="coord-empty"></div>
             <div id="coord-hor">
                 {% for coord in coordinates_horizontal %}
-                    <span>{{ coord }}</span>
+                    <span class="{% cycle "odd" "even" %}">{{ coord }}</span>
                 {% endfor %}
             </div>
-            <div id="coord-ver">
-                {% for coord in coordinates_vertical %}
-                    <span>{{ coord }}</span>
-                {% endfor %}
+            <div id="coord-ver-odd" class="coord-ver">
+                {% for coord in coordinates_vertical %}<span>{{ coord }}</span>{% endfor %}
+            </div>
+            <div id="coord-ver-even" class="coord-ver">
+                {% for coord in coordinates_vertical %}<span>{{ coord }}</span>{% endfor %}
             </div>
             <div id="grid-area" class="positioned">
                 <img id="grid" src="data:image/png;base64,{{ grid_base64 }}" />
