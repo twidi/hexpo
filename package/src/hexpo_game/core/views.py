@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -48,6 +49,12 @@ class GameState:
         """Load the game state from the database."""
         game, grid = get_game_and_grid()
         return cls(game=game, grid=grid, last_updated=game.started_at)
+
+    async def update_forever(self, delay: float) -> None:
+        """Update the game state forever."""
+        while True:
+            await self.game.arefresh_from_db()
+            await asyncio.sleep(delay)
 
     async def draw_grid(self) -> bool:
         """Redraw the grid."""
@@ -131,8 +138,8 @@ class GameState:
         return Response(status=304)
 
 
-def add_routes(router: web.UrlDispatcher) -> None:
-    """Add routes to the router."""
+def prepare_views(router: web.UrlDispatcher) -> GameState:
+    """Prepare the game state and add the views to the router."""
     game_state = GameState.load_from_db()
     router.add_get("/", game_state.http_get_index)
     router.add_get("/grid.raw", game_state.http_get_grid_base64)
@@ -140,9 +147,4 @@ def add_routes(router: web.UrlDispatcher) -> None:
     router.add_get("/players", game_state.http_get_players)
     router.add_static("/statics", Path(__file__).parent / "statics")
     # router.add_get('/sse', sse)
-
-
-if __name__ == "__main__":
-    app = web.Application()
-    add_routes(app.router)
-    web.run_app(app, host="127.0.0.1", port=8000)
+    return game_state
