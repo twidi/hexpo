@@ -123,13 +123,11 @@ class Grid:
         default_factory=tuple, init=False, repr=False, compare=False, hash=False
     )
     neighbors: dict[Tile, Neighbors] = field(default_factory=dict, init=False, repr=False, compare=False, hash=False)
-    contour_tiles: set[Tile] = field(default_factory=set, init=False, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         """Create the grid."""
         self.tiles = tuple(tuple(Tile(col, row) for col in range(self.nb_cols)) for row in range(self.nb_rows))
         self.neighbors = {tile: self.compute_neighbors(tile) for tile in self}
-        self.contour_tiles = self.compute_contour_tiles()
 
     def __iter__(self) -> Iterator[Tile]:
         """Iterate over the tiles."""
@@ -230,10 +228,6 @@ class Grid:
         nb_rows = (-val_b + sqrt(delta)) / (2 * val_a)
         nb_cols = nb_tiles / nb_rows
         return floor(nb_cols), floor(nb_rows)
-
-    def compute_contour_tiles(self) -> set[Tile]:
-        """Return the tiles on the contour of the grid."""
-        return {tile for tile in self if tile.col in (0, self.nb_cols - 1) or tile.row in (0, self.nb_rows - 1)}
 
 
 TilePoints: TypeAlias = tuple[Point, Point, Point, Point, Point, Point]

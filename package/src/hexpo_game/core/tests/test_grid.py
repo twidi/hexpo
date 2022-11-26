@@ -41,23 +41,6 @@ def test_tile_neighbors() -> None:
     assert grid.neighbors[Tile(2, 2)] == (Tile(2, 1), None, None, None, Tile(1, 2), Tile(1, 1))
 
 
-def test_contour_tiles():
-    """Test the contour tiles."""
-    grid = Grid(3, 4)
-    assert grid.contour_tiles == {
-        Tile(0, 0),
-        Tile(1, 0),
-        Tile(2, 0),
-        Tile(2, 1),
-        Tile(2, 2),
-        Tile(2, 3),
-        Tile(1, 3),
-        Tile(0, 3),
-        Tile(0, 2),
-        Tile(0, 1),
-    }
-
-
 def test_point_add() -> None:
     """Test the addition of points."""
     point1 = Point(1.0, 2.0)
