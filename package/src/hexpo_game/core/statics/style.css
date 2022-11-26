@@ -6,7 +6,8 @@ html, body {
     overflow: hidden;
 }
 :root {
-    --grid-opacity: 0.75;
+    --opacity: 0.75;
+    --grid-opacity: 0.5;
     --text-color: #eee;
     --bright-color: #ae15c8;
     --shell-background: #0a0513;
@@ -19,6 +20,11 @@ body {
     color: var(--text-color);
     font-family: 'Roboto', sans-serif;
 }
+
+* {
+    box-sizing: border-box;
+}
+
 p {
     margin: 0;
 }
@@ -45,8 +51,8 @@ body#page-index #main-container {
         "top-left-corner top-bar      top-bar      top-bar"
         "left-bar        coord-empty  coord-hor    right-bar"
         "left-bar        coord-ver    grid-area    right-bar"
-        "left-bar        bottom-bar   bottom-bar   bottom-bar"
-        "empty-bottom    empty-bottom empty-bottom empty-bottom";
+        "left-bar        .            bottom-bar   right-bar"
+        ".               .            .            .";
 }
 body#page-players #main-container {
     grid-template-columns: 1fr calc(450px);
@@ -58,9 +64,6 @@ body#page-players #main-container {
 #empty-top {
     grid-area: empty-top;
     border-bottom: solid 2px var(--bright-color);
-}
-#empty-bottom {
-    grid-area: empty-bottom;
 }
 #top-bar {
     padding-left: 20px;
@@ -229,7 +232,7 @@ body#page-players #main-container {
 }
 
 #coord-hor, .coord-ver {
-    opacity: var(--grid-opacity);
+    opacity: var(--opacity);
 }
 #coord-hor {
     padding-left: calc(0.125 * var(--tile-width));
@@ -259,7 +262,7 @@ body#page-players #main-container {
 }
 #coord-ver-even {
     transform: translateX(calc(var(--tile-width) * 0.25)) translateY(calc(var(--tile-height) / 2));
-    opacity: calc(var(--grid-opacity) * 0.75);
+    opacity: calc(var(--opacity) * 0.75);
 }
 #coord-hor span, .coord-ver span {
     font-size: 24px;
@@ -286,4 +289,29 @@ body#page-players #main-container {
 }
 #bottom-bar {
     grid-area: bottom-bar;
+    display: flex;
+    justify-content: center;
+    width: var(--map-width);
+    padding-left: 9px;
+    padding-right: 9px;
+}
+#messages {
+    font-size: 30px;
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    width: 100%;
+    overflow: hidden;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+.message {
+    border: solid 5px var(--bright-color);
+    max-width: 25%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.2);
 }

@@ -41,7 +41,11 @@
                 <img id="grid" src="data:image/png;base64,{{ grid_base64 }}" />
             </div>
             <div id="right-bar"></div>
-            <div id="bottom-bar"></div>
+            <div id="bottom-bar">
+                <div id="messages">
+                    {% include "core/include_messages.html" with messages=messages %}
+                </div>
+            </div>
             <div id="empty-bottom"></div>
         </div>
     <script src="/statics/script.js?ts={{ timestamp }}"></script>

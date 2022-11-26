@@ -5,22 +5,24 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
+from operator import itemgetter
 from pathlib import Path
 from string import ascii_letters
 from time import time
-from typing import Any
+from typing import Any, NamedTuple
 
 from aiohttp import web
 from aiohttp.web import Response
 from asgiref.sync import sync_to_async
 from django.template import loader
+from django.utils import timezone
 
 from hexpo_game.core.grid import ConcreteGrid
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .game import get_game_and_grid
-from .models import Game
+from .models import Game, PlayerInGame
 from .types import Color, Tile
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,23 @@ logger = logging.getLogger(__name__)
 #
 
 
+class Message(NamedTuple):
+    """Message to display."""
+
+    text: str
+    display_until: datetime
+
+    @classmethod
+    def create(cls, text: str, delay: int) -> Message:
+        """Create a message to display during `delay` seconds."""
+        return cls(text, timezone.now() + timedelta(seconds=delay))
+
+
+def human_coordinates(col: int, row: int) -> str:
+    """Get the human coordinates."""
+    return f"{ascii_letters[26:][row]}-{col + 1}"
+
+
 @dataclass
 class GameState:
     """The state of the current running game."""
@@ -44,6 +63,20 @@ class GameState:
     game: Game
     grid: ConcreteGrid
     last_updated: datetime
+
+    def __post_init__(self) -> None:
+        """Get the last players and prepare the list of messages."""
+        self.last_players: dict[int, PlayerInGame] = self.get_players_in_game()
+        self.messages: list[Message] = []
+
+    def get_players_in_game(self) -> dict[int, PlayerInGame]:
+        """Get the players in game."""
+        return {
+            pig.id: pig
+            for pig in self.game.playeringame_set.filter(ended_turn__isnull=True)
+            .select_related("player")
+            .order_by("started_at")
+        }
 
     @classmethod
     def load_from_db(cls) -> GameState:
@@ -55,7 +88,48 @@ class GameState:
         """Update the game state forever."""
         while True:
             await self.game.arefresh_from_db()
+            await self.update_messages()
             await asyncio.sleep(delay)
+
+    def get_dead_players(self, ids: list[int]) -> dict[int, PlayerInGame]:
+        """Get the dead players from the given ids."""
+        return {
+            pig.id: pig
+            for pig in self.game.playeringame_set.filter(id__in=ids)
+            .select_related("player", "killed_by__player")
+            .order_by("dead_at")
+        }
+
+    async def update_messages(self) -> None:
+        """Update the list of messages to display."""
+        # first we remove the old messages
+        now = timezone.now()
+        self.messages = [message for message in self.messages if message.display_until > now]
+
+        # then we add the new ones (new players and dead ones)
+        current_players = await sync_to_async(self.get_players_in_game)()
+        new_players_ids = set(current_players) - set(self.last_players)
+        dead_players_ids = set(self.last_players) - set(current_players)
+
+        new_messages: list[tuple[datetime, Message]] = []
+
+        for pig_id in new_players_ids:
+            pig = current_players[pig_id]
+            coordinates = human_coordinates(pig.start_tile_col, pig.start_tile_row)
+            new_messages.append(
+                (pig.started_at, Message.create(f"{pig.player.name} est arrivé en {coordinates}.", 15))
+            )
+
+        if dead_players_ids:
+            dead_players = await sync_to_async(self.get_dead_players)(dead_players_ids)
+            new_messages.extend(
+                (pig.dead_at, Message.create(f"{pig.player.name} a été tué par {pig.killed_by.player.name}.", 15))
+                for pig in dead_players.values()
+            )
+
+        self.messages.extend(message for message_date, message in sorted(new_messages, key=itemgetter(0)))
+
+        self.last_players = current_players
 
     async def draw_grid(self) -> bool:
         """Redraw the grid."""
@@ -102,6 +176,12 @@ class GameState:
             for index, player_in_game in enumerate(players_in_game, 1)
         ]
 
+    async def http_get_messages_partial(self, request: web.Request) -> web.Response:
+        """Get the messages partial."""
+        context = {"messages": self.messages}
+        html = loader.render_to_string("core/include_messages.html", context)
+        return Response(text=html, content_type="text/html")
+
     async def http_get_players_partial(self, request: web.Request) -> web.Response:
         """Return the players partial html."""
         context = {"players": await sync_to_async(self.get_players_context)()}
@@ -124,6 +204,7 @@ class GameState:
         context = {
             "grid_base64": self.grid.map_as_base64_png(),
             "players": await sync_to_async(self.get_players_context)(),
+            "messages": self.messages,
             "timestamp": time(),
             "reload": request.rel_url.query.get("reload", "true") != "false",
             "map_width": int(self.grid.map_size.x),
@@ -131,7 +212,7 @@ class GameState:
             "tile_width": self.grid.tile_width,
             "tile_height": self.grid.tile_height,
             "coordinates_horizontal": list(range(1, self.grid.nb_cols + 1)),
-            "coordinates_vertical": ascii_letters[26:][:self.grid.nb_rows],
+            "coordinates_vertical": ascii_letters[26:][: self.grid.nb_rows],
         }
 
         html = loader.render_to_string("core/index.html", context)
@@ -152,6 +233,7 @@ def prepare_views(router: web.UrlDispatcher) -> GameState:
     router.add_get("/grid.raw", game_state.http_get_grid_base64)
     router.add_get("/players.partial", game_state.http_get_players_partial)
     router.add_get("/players", game_state.http_get_players)
+    router.add_get("/messages.partial", game_state.http_get_messages_partial)
     router.add_static("/statics", Path(__file__).parent / "statics")
     # router.add_get('/sse', sse)
     return game_state

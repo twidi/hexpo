@@ -2,6 +2,7 @@ const show_positioned_sizes = false;
 const do_reload = document.body.getAttribute("data-reload") === "true";
 const refresh_map = do_reload;
 const refresh_players = do_reload;
+const refresh_messages = do_reload;
 
 if (show_positioned_sizes) {
     let log = '\n';
@@ -16,7 +17,8 @@ if (show_positioned_sizes) {
 }
 
 let grid = document.querySelector('#grid'),
-    players = document.querySelector('#players');
+    players = document.querySelector('#players'),
+    messages = document.querySelector('#messages');
 if (refresh_map && grid) setInterval(async () => {
     const response = await fetch('/grid.raw', {cache: 'no-cache'});
     if (response.ok) {
@@ -28,5 +30,11 @@ if (refresh_players && players) setInterval(async () => {
     const response = await fetch('/players.partial', {cache: 'no-cache'});
     if (response.ok) {
         players.innerHTML = await response.text();
+    }
+}, 1000);
+if (refresh_messages && messages) setInterval(async () => {
+    const response = await fetch('/messages.partial', {cache: 'no-cache'});
+    if (response.ok) {
+        messages.innerHTML = await response.text();
     }
 }, 1000);

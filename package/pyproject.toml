@@ -84,6 +84,7 @@ tests = [
     'pytest-django',
     'pytest-lazy-fixture',
     'pytest-sugar',
+    'time-machine',
     'types-mock',
 ]
 

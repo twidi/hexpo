@@ -280,6 +280,10 @@ class PlayerInGame(BaseModel):
         self.killed_by = killer
         self.save()
 
+    async def adie(self, turn: Optional[int] = None, killer: Optional[PlayerInGame] = None) -> None:
+        """Set the player as dead."""
+        await sync_to_async(self.die)(turn, killer)
+
     def get_available_actions(self) -> int:
         """Return the number of available actions for the player for the current turn."""
         return floor(self.level + self.banked_actions - self.get_nb_actions_in_turn())
