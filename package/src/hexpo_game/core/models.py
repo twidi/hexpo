@@ -129,9 +129,13 @@ class Game(BaseModel):
             ),
         ).filter(id=F("last_playeringame_id"))
 
-    def get_players_in_game_with_occupied_tiles(self) -> list[PlayerInGame]:
+    def get_current_players_in_game(self) -> QuerySet[PlayerInGame]:
+        """Get the players in game."""
+        return self.playeringame_set.filter(ended_turn__isnull=True)
+
+    def get_current_players_in_game_with_occupied_tiles(self) -> list[PlayerInGame]:
         """Get the players in game with their occupied tiles prefeteched."""
-        return list(self.playeringame_set.filter(ended_turn__isnull=True).prefetch_related("occupiedtile_set").all())
+        return list(self.get_current_players_in_game().prefetch_related("occupiedtile_set").all())
 
     def get_players_in_game_for_leader_board(self, limit: Optional[int] = None) -> QuerySet[PlayerInGame]:
         """Get the players in game for the leader board."""

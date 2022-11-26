@@ -83,7 +83,7 @@ class GameState:
         """Get the players in game."""
         return {
             pig.id: pig
-            for pig in self.game.playeringame_set.filter(ended_turn__isnull=True)
+            for pig in self.game.get_current_players_in_game()
             .select_related("player")
             .order_by("started_at")
         }
@@ -168,7 +168,7 @@ class GameState:
         self.grid.reset_map()
         self.grid.draw_map_contour(Color(0, 0, 0))
 
-        for player_in_game in await sync_to_async(self.game.get_players_in_game_with_occupied_tiles)():
+        for player_in_game in await sync_to_async(self.game.get_current_players_in_game_with_occupied_tiles)():
             self.grid.draw_areas(
                 (
                     Tile(occupied_tile.col, occupied_tile.row)

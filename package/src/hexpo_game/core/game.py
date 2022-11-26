@@ -13,7 +13,7 @@ from .click_handler import COORDINATES, get_click_target
 from .constants import NB_COLORS, PALETTE, ActionFailureReason, ActionState, ActionType
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame
-from .types import Point, Tile
+from .types import Point, Tile, Color
 
 logger = logging.getLogger("hexpo_game.game")
 logger_save_action = logging.getLogger("hexpo_game.game.save_action")
@@ -116,6 +116,15 @@ async def aplay_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> None
     await sync_to_async(play_turn)(game, grid, turn)
 
 
+def get_free_color(game: Game, default: Color) -> Color:
+    """Get a color not already used in the game, using the default if not used, or no other available."""
+    used_colors = {pig.color_object for pig in game.get_current_players_in_game()}
+    if default not in used_colors:
+        return default
+    free_colors = set(PALETTE) - used_colors
+    return free_colors.pop() if free_colors else default
+
+
 def save_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Action]:
     """Save the player action if they clicked one a tile."""
     if tile is None:
@@ -125,7 +134,6 @@ def save_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Ac
         started_turn=game.current_turn,
         start_tile_col=tile.col,
         start_tile_row=tile.row,
-        color=PALETTE[player.id % NB_COLORS].as_hex,
         level=game.config.player_start_level,
     )
 
@@ -141,6 +149,7 @@ def save_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Ac
         player_in_game = PlayerInGame.objects.create(
             player=player,
             game=game,
+            color=get_free_color(game, PALETTE[player.id % NB_COLORS]).as_hex,
             **default_player_attrs,
         )
         logger_save_action.warning("%s clicked on %s AND IS A NEW PLAYER", player.name, tile)
@@ -152,6 +161,7 @@ def save_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Ac
         player_in_game = PlayerInGame.objects.create(
             player=player,
             game=game,
+            color=get_free_color(game, player_in_game.color_object).as_hex,
             **default_player_attrs,
         )
         logger_save_action.warning("%s clicked on %s AND IS ALIVE AGAIN", player.name, tile)
