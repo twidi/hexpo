@@ -256,19 +256,15 @@ body#page-players #main-container {
 .coord-ver span {
     height: var(--tile-height);
     line-height: var(--tile-height);
-    font-size: 24px;
 }
 #coord-ver-even {
     transform: translateX(calc(var(--tile-width) * 0.25)) translateY(calc(var(--tile-height) / 2));
-    opacity: calc(var(--grid-opacity) * 0.5);
+    opacity: calc(var(--grid-opacity) * 0.75);
 }
-#coord-hor span, #coord-ver span {
+#coord-hor span, .coord-ver span {
     font-size: 24px;
+    color: var(--text-color);
 }
-
-
-
-
 
 #grid-area {
     grid-area: grid-area;
