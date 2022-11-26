@@ -4,7 +4,7 @@
         <link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet'>
         <link rel="stylesheet" type="text/css" href="/statics/style.css?ts={{ timestamp }}">
     </head>
-    <body data-reload="{% if reload %}true{% else %}false{% endif %}" id="page-index">
+    <body data-reload="{% if reload %}true{% else %}false{% endif %}" id="page-index" style="--map-width: {{ map_width }}px; --map-height: {{ map_height }}px; --tile-width: {{ tile_width }}px; --tile-height: {{ tile_height }}px">
         <div id="main-container">
             <div id="empty-top"></div>
             <div id="top-bar">
@@ -24,6 +24,17 @@
                 <div id="players">
                     {% include "core/include_players.html" with players=players %}
                 </div>
+            </div>
+            <div id="coord-empty"></div>
+            <div id="coord-hor">
+                {% for coord in coordinates_horizontal %}
+                    <span>{{ coord }}</span>
+                {% endfor %}
+            </div>
+            <div id="coord-ver">
+                {% for coord in coordinates_vertical %}
+                    <span>{{ coord }}</span>
+                {% endfor %}
             </div>
             <div id="grid-area" class="positioned">
                 <img id="grid" src="data:image/png;base64,{{ grid_base64 }}" />

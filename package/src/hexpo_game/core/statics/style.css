@@ -11,6 +11,7 @@ html, body {
     --bright-color: #ae15c8;
     --shell-background: #0a0513;
     --shell-shadow: #0a0513cc;
+    --coordinates-size: 50px;
 }
 body {
     background-color: #11091f;
@@ -31,19 +32,21 @@ p {
 }
 body#page-index #main-container {
     grid-template-columns:
-            calc(450px - 34px) 1fr calc(15% - 50px);
+            calc(450px - 34px) var(--coordinates-size) 1fr calc(15% - 50px - var(--coordinates-size));
     grid-template-rows:
             68px
             calc(15% - 68px - 34px)
+            var(--coordinates-size)
             1fr
-            calc(15%  - 34px)
+            calc(15%  - 34px - var(--coordinates-size))
             34px;
     grid-template-areas:
-        "empty-top empty-top empty-top"
-        "top-left-corner top-bar top-bar"
-        "left-bar grid-area right-bar"
-        "left-bar bottom-bar bottom-bar"
-        "empty-bottom empty-bottom empty-bottom";
+        "empty-top       empty-top    empty-top    empty-top"
+        "top-left-corner top-bar      top-bar      top-bar"
+        "left-bar        coord-empty  coord-hor    right-bar"
+        "left-bar        coord-ver    grid-area    right-bar"
+        "left-bar        bottom-bar   bottom-bar   bottom-bar"
+        "empty-bottom    empty-bottom empty-bottom empty-bottom";
 }
 body#page-players #main-container {
     grid-template-columns: 1fr calc(450px);
@@ -221,12 +224,42 @@ body#page-players #main-container {
     color: #999;
 }
 
+#coord-empty, #coord-hor {
+    border-top: solid 2px var(--bright-color);
+}
+
+#coord-hor {
+    padding-left: calc(0.125 * var(--tile-width));
+    display: flex;
+    align-items: end;
+    padding-bottom: 10px;
+}
+#coord-hor span {
+  width: calc(var(--tile-width) * 0.75);
+  display: inline-block;
+  text-align: center;
+}
+#coord-ver {
+    display: flex;
+    flex-direction: column;
+    align-items: end;
+    padding-right: 10px;
+}
+#coord-ver span {
+    height: var(--tile-height);
+    line-height: var(--tile-height);
+    font-size: 24px;
+}
+#coord-hor span, #coord-ver span {
+    font-size: 24px;
+}
+
+
+
+
 
 #grid-area {
     grid-area: grid-area;
-    padding-left: 30px;
-    padding-top: 34px;
-    border-top: solid 2px var(--bright-color);
 }
 #grid-area.debug {
     font-size: 90;

@@ -281,6 +281,7 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
             for row in self.grid.tiles
         )
         self.max_coordinates = self.compute_max_coordinates()
+        self.map_size = Point(ceil(self.max_coordinates.x + 1), ceil(self.max_coordinates.y + 1))
         self.map = self.create_map()
         self.drawing_map = self.create_map()
 
@@ -342,7 +343,7 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
             (nb pixels y, nb pixels x, 4 channels (3 colors + alpha) of uint8.
 
         """
-        return np.zeros((ceil(self.max_coordinates.y + 1), ceil(self.max_coordinates.x + 1), 4), dtype=np.uint8)
+        return np.zeros((int(self.map_size.y), int(self.map_size.x), 4), dtype=np.uint8)
 
     def reset_map(self, background: Optional[Color] = None) -> None:
         """Reset the map to 0."""

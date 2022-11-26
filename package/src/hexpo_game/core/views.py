@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from string import ascii_letters
 from time import time
 from typing import Any
 
@@ -125,6 +126,12 @@ class GameState:
             "players": await sync_to_async(self.get_players_context)(),
             "timestamp": time(),
             "reload": request.rel_url.query.get("reload", "true") != "false",
+            "map_width": int(self.grid.map_size.x),
+            "map_height": int(self.grid.map_size.y),
+            "tile_width": self.grid.tile_width,
+            "tile_height": self.grid.tile_height,
+            "coordinates_horizontal": list(range(1, self.grid.nb_cols + 1)),
+            "coordinates_vertical": ascii_letters[26:][:self.grid.nb_rows],
         }
 
         html = loader.render_to_string("core/index.html", context)
