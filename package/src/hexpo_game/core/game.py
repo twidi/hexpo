@@ -1,5 +1,5 @@
 """Main game loop and functions."""
-
+import asyncio
 import logging
 from asyncio import Queue
 from datetime import datetime
@@ -28,16 +28,20 @@ async def dequeue_clicks(queue: GameQueue, game: Game, grid: Grid) -> None:
     now: datetime
     next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
     while True:
-        player, tile = await queue.get()
         if (now := timezone.now()) >= next_turn_min_at:
             await game.anext_turn(now)
             next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
             await aplay_turn(game, grid, turn=game.current_turn - 1)
         try:
-            await asave_action(player, game, tile)
-        except Exception:  # pylint:disable=broad-except
-            logger.exception("Error while processing click for %s", player.name)
-        queue.task_done()
+            player, tile = await asyncio.wait_for(queue.get(), timeout=1)
+        except asyncio.TimeoutError:
+            continue
+        else:
+            try:
+                await asave_action(player, game, tile)
+            except Exception:  # pylint:disable=broad-except
+                logger.exception("Error while processing click for %s", player.name)
+            queue.task_done()
 
 
 def play_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> None:
