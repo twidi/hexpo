@@ -28,7 +28,7 @@ async def dequeue_clicks(queue: GameQueue, game: Game, grid: Grid) -> None:
     now: datetime
     next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
     while True:
-        if (now := timezone.now()) >= next_turn_min_at:
+        if (now := timezone.now()) >= next_turn_min_at and await game.confirmed_actions_for_turn().aexists():
             await game.anext_turn(now)
             next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
             await aplay_turn(game, grid, turn=game.current_turn - 1)
@@ -47,7 +47,7 @@ async def dequeue_clicks(queue: GameQueue, game: Game, grid: Grid) -> None:
 def play_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> None:
     """Play a turn."""
     turn = game.current_turn if turn is None else turn
-    queryset = Action.objects.filter(game=game, state=ActionState.CONFIRMED, turn=turn)
+    queryset = game.confirmed_actions_for_turn(turn)
     logger_play_turn.info("Playing turn %s: %s actions", turn, len(queryset))
     dead_during_turn: set[int] = set()  # id of dead player in games
     for action in queryset.order_by("confirmed_at").select_related("player_in_game__player"):

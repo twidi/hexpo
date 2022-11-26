@@ -162,6 +162,12 @@ class Game(BaseModel):
             queryset = queryset[:limit]
         return queryset
 
+    def confirmed_actions_for_turn(self, turn: Optional[int] = None) -> QuerySet[Action]:
+        """Get the confirmed actions for the given turn."""
+        if turn is None:
+            turn = self.current_turn
+        return self.action_set.filter(state=ActionState.CONFIRMED, turn=turn)
+
 
 class Player(BaseModel):
     """Represent a player that played at least one game."""
