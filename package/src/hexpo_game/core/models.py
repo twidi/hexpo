@@ -255,6 +255,10 @@ class PlayerInGame(BaseModel):
         return (
             self.started_turn + self.game.config.respawn_protected_max_turns + 1 > self.game.current_turn
             and self.count_tiles() <= self.game.config.respawn_protected_max_tiles
+            and (
+                self.game.config.respawn_protected_max_duration is None
+                or self.started_at + self.game.config.respawn_protected_max_duration > timezone.now()
+            )
         )
 
     def can_respawn(self) -> bool:
@@ -262,6 +266,11 @@ class PlayerInGame(BaseModel):
         return (
             self.ended_turn is None
             or self.ended_turn + self.game.config.respawn_cooldown_turns + 1 <= self.game.current_turn
+            or (
+                self.dead_at is not None
+                and self.game.config.respawn_cooldown_max_duration is not None
+                and self.dead_at + self.game.config.respawn_cooldown_max_duration < timezone.now()
+            )
         )
 
     def die(self, turn: Optional[int] = None, killer: Optional[PlayerInGame] = None) -> None:

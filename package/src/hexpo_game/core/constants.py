@@ -24,8 +24,10 @@ class GameModeConfig(NamedTuple):
     turn_duration: timedelta
     player_start_level: int
     respawn_cooldown_turns: int
+    respawn_cooldown_max_duration: timedelta | None
     respawn_protected_max_turns: int
     respawn_protected_max_tiles: int
+    respawn_protected_max_duration: timedelta | None
 
 
 GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
@@ -34,24 +36,30 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         turn_duration=timedelta(seconds=1),
         player_start_level=3,
         respawn_cooldown_turns=10,
+        respawn_cooldown_max_duration=timedelta(seconds=10),
         respawn_protected_max_turns=30,
         respawn_protected_max_tiles=10,
+        respawn_protected_max_duration=timedelta(seconds=30),
     ),
     GameMode.FREE_NEIGHBOR: GameModeConfig(
         neighbors_only=True,
         turn_duration=timedelta(seconds=1),
         player_start_level=3,
         respawn_cooldown_turns=10,
+        respawn_cooldown_max_duration=timedelta(seconds=10),
         respawn_protected_max_turns=30,
         respawn_protected_max_tiles=10,
+        respawn_protected_max_duration=timedelta(seconds=30),
     ),
     GameMode.TURN_BY_TURN: GameModeConfig(
         neighbors_only=True,
         turn_duration=timedelta(minutes=5),
         player_start_level=1,
         respawn_cooldown_turns=5,
+        respawn_cooldown_max_duration=None,
         respawn_protected_max_turns=10,
         respawn_protected_max_tiles=10,
+        respawn_protected_max_duration=None,
     ),
 }
 
