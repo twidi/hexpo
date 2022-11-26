@@ -63,7 +63,7 @@ def make_video(
                 tiles_per_owner.setdefault(owner, []).append(tile)
             grid.reset_map()
             for owner, tiles in tiles_per_owner.items():
-                grid.draw_areas(tiles, Color.from_hex(owner.color), use_transparency=False)
+                grid.draw_areas(tiles, owner.color_object, use_transparency=False)
             used_video_map[:] = grid.map[:, :, :3]
             frame = video_map.tobytes()
             writing_process.stdin.write(frame)

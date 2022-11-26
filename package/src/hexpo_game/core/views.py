@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import enum
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -10,7 +11,7 @@ from operator import itemgetter
 from pathlib import Path
 from string import ascii_letters
 from time import time
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Optional
 
 from aiohttp import web
 from aiohttp.web import Response
@@ -39,16 +40,25 @@ logger = logging.getLogger(__name__)
 #
 
 
+class MessageType(enum.Enum):
+    """Type of message."""
+
+    RESPAWN = "respawn"
+    DEATH = "death"
+
+
 class Message(NamedTuple):
     """Message to display."""
 
     text: str
+    type: MessageType
     display_until: datetime
+    color: Optional[Color] = None
 
     @classmethod
-    def create(cls, text: str, delay: int) -> Message:
-        """Create a message to display during `delay` seconds."""
-        return cls(text, timezone.now() + timedelta(seconds=delay))
+    def create(cls, text: str, type: MessageType, duration: int, color: Optional[Color] = None) -> Message:
+        """Create a message to display during `duration` seconds."""
+        return cls(text=text, type=type, display_until=timezone.now() + timedelta(seconds=duration), color=color)
 
 
 def human_coordinates(col: int, row: int) -> str:
@@ -117,13 +127,29 @@ class GameState:
             pig = current_players[pig_id]
             coordinates = human_coordinates(pig.start_tile_col, pig.start_tile_row)
             new_messages.append(
-                (pig.started_at, Message.create(f"{pig.player.name} est arrivé en {coordinates}.", 15))
+                (
+                    pig.started_at,
+                    Message.create(
+                        text=f"{pig.player.name} est arrivé en {coordinates}.",
+                        type=MessageType.RESPAWN,
+                        duration=15,
+                        color=pig.color_object,
+                    ),
+                )
             )
 
         if dead_players_ids:
             dead_players = await sync_to_async(self.get_dead_players)(dead_players_ids)
             new_messages.extend(
-                (pig.dead_at, Message.create(f"{pig.player.name} a été tué par {pig.killed_by.player.name}.", 15))
+                (
+                    pig.dead_at,
+                    Message.create(
+                        f"{pig.player.name} a été tué par {pig.killed_by.player.name}.",
+                        type=MessageType.RESPAWN,
+                        duration=15,
+                        color=pig.color_object,
+                    ),
+                )
                 for pig in dead_players.values()
             )
 
@@ -148,7 +174,7 @@ class GameState:
                     Tile(occupied_tile.col, occupied_tile.row)
                     for occupied_tile in player_in_game.occupiedtile_set.all()
                 ),
-                Color.from_hex(player_in_game.color).as_bgr(),
+                player_in_game.color_object.as_bgr(),
                 mark=player_in_game.is_protected(),
             )
 

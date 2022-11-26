@@ -23,7 +23,7 @@ from .constants import (
     RandomEventTurnMoment,
 )
 from .grid import Grid
-from .types import Tile
+from .types import Color, Tile
 
 
 class BaseModel(models.Model):
@@ -241,6 +241,11 @@ class PlayerInGame(BaseModel):
                 condition=Q(ended_turn__isnull=True),
             ),
         ]
+
+    @cached_property
+    def color_object(self) -> Color:
+        """Get the color object of the player."""
+        return Color.from_hex(self.color)
 
     def has_tiles(self) -> bool:
         """Return whether the player has tiles or not."""

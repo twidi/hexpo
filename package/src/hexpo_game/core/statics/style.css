@@ -306,7 +306,7 @@ body#page-players #main-container {
     font-weight: bold;
 }
 .message {
-    border: solid 5px var(--bright-color);
+    border: solid 5px var(--message-color, var(--bright-color));
     max-width: 25%;
     display: flex;
     justify-content: center;
