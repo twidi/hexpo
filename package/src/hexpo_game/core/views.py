@@ -66,7 +66,7 @@ class Message(NamedTuple):
 
 def human_coordinates(col: int, row: int) -> str:
     """Get the human coordinates."""
-    return f"{ascii_letters[26:][row]}-{col + 1}"
+    return f"{ascii_letters[26:][row]}‑{col + 1}"
 
 
 @dataclass

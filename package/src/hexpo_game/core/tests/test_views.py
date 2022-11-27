@@ -94,7 +94,7 @@ async def test_update_messages_first_message() -> None:
     ):  # freezegun does not work well with timezone aware datetimes
         await game_state.update_messages()
         expected_message = Message(
-            text=f"{player_in_game.player.name} est arrivé en A-1",
+            text=f"{player_in_game.player.name} est arrivé en A‑1",
             kind=MessageKind.NEW_PLAYER,
             display_until=timezone.now() + timedelta(seconds=15),
             color=Color(0, 0, 0),
@@ -111,7 +111,7 @@ async def test_update_messages_new_messages() -> None:
     with time_machine.travel(timezone.now(), tick=False):
         await game_state.update_messages()
         expected_message_1 = Message(
-            text=f"{player_in_game.player.name} est arrivé en A-1",
+            text=f"{player_in_game.player.name} est arrivé en A‑1",
             kind=MessageKind.NEW_PLAYER,
             display_until=timezone.now() + timedelta(seconds=15),
             color=Color(0, 0, 0),
@@ -121,7 +121,7 @@ async def test_update_messages_new_messages() -> None:
     with time_machine.travel(timezone.now(), tick=False):
         await game_state.update_messages()
         expected_message_2 = Message(
-            text=f"{player_in_game2.player.name} est arrivé en B-2",
+            text=f"{player_in_game2.player.name} est arrivé en B‑2",
             kind=MessageKind.NEW_PLAYER,
             display_until=timezone.now() + timedelta(seconds=15),
             color=Color(0, 0, 0),
@@ -134,9 +134,9 @@ async def test_update_messages_new_messages() -> None:
     # here we check the order, not the exactness of the dates, it's why we don't mock the date
     await game_state.update_messages()
     expected_message_3_msg = f"{player_in_game.player.name} a été tué par {player_in_game2.player.name}"
-    expected_message_4_msg = f"{player_in_game3.player.name} est arrivé en C-3"
+    expected_message_4_msg = f"{player_in_game3.player.name} est arrivé en C‑3"
     expected_message_5_msg = f"{player_in_game2.player.name} a été tué par {player_in_game3.player.name}"
-    expected_message_6_msg = f"{player_in_game1_bis.player.name} est revenu en D-4"
+    expected_message_6_msg = f"{player_in_game1_bis.player.name} est revenu en D‑4"
     assert [(message.kind, message.text) for message in game_state.messages] == [
         (expected_message_1.kind, expected_message_1.text),
         (expected_message_2.kind, expected_message_2.text),
