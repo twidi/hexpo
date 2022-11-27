@@ -16,6 +16,7 @@ from typing import Any, NamedTuple, Optional
 from aiohttp import web
 from aiohttp.web import Response
 from asgiref.sync import sync_to_async
+from django.db.models import Count
 from django.template import loader
 from django.utils import timezone
 
@@ -43,6 +44,7 @@ logger = logging.getLogger(__name__)
 class MessageKind(enum.Enum):
     """Kind of message."""
 
+    NEW_PLAYER = "new_player"
     RESPAWN = "respawn"
     DEATH = "death"
     OTHER = "other"
@@ -77,15 +79,12 @@ class GameState:
 
     def __post_init__(self) -> None:
         """Get the last players and prepare the list of messages."""
-        self.last_players: dict[int, PlayerInGame] = self.get_players_in_game()
+        self.last_players_ids: set[int] = self.get_players_in_game_ids()
         self.messages: list[Message] = []
 
-    def get_players_in_game(self) -> dict[int, PlayerInGame]:
-        """Get the players in game."""
-        return {
-            pig.id: pig
-            for pig in self.game.get_current_players_in_game().select_related("player").order_by("started_at")
-        }
+    def get_players_in_game_ids(self) -> set[int]:
+        """Get the ids of the players in game."""
+        return set(self.game.get_current_players_in_game().values_list("id", flat=True))
 
     @classmethod
     def load_from_db(cls) -> GameState:
@@ -100,14 +99,22 @@ class GameState:
             await self.update_messages()
             await asyncio.sleep(delay)
 
-    def get_dead_players(self, ids: list[int]) -> dict[int, PlayerInGame]:
+    def get_new_players(self, ids: list[int]) -> list[PlayerInGame]:
+        """Get the new players from the given ids."""
+        return list(
+            self.game.playeringame_set.filter(id__in=ids)
+            .annotate(nb_pigs=Count("player__playeringame"))
+            .select_related("player")
+            .order_by("started_at")
+        )
+
+    def get_dead_players(self, ids: list[int]) -> list[PlayerInGame]:
         """Get the dead players from the given ids."""
-        return {
-            pig.id: pig
-            for pig in self.game.playeringame_set.filter(id__in=ids)
+        return list(
+            self.game.playeringame_set.filter(id__in=ids)
             .select_related("player", "killed_by__player")
             .order_by("dead_at")
-        }
+        )
 
     async def update_messages(self) -> None:
         """Update the list of messages to display."""
@@ -116,26 +123,34 @@ class GameState:
         self.messages = [message for message in self.messages if message.display_until > now]
 
         # then we add the new ones (new players and dead ones)
-        current_players = await sync_to_async(self.get_players_in_game)()
-        new_players_ids = set(current_players) - set(self.last_players)
-        dead_players_ids = set(self.last_players) - set(current_players)
+        current_players_ids = await sync_to_async(self.get_players_in_game_ids)()
+        new_players_ids = current_players_ids - self.last_players_ids
+        dead_players_ids = self.last_players_ids - current_players_ids
 
         new_messages: list[tuple[datetime, Message]] = []
 
-        for pig_id in new_players_ids:
-            pig = current_players[pig_id]
-            coordinates = human_coordinates(pig.start_tile_col, pig.start_tile_row)
-            new_messages.append(
-                (
-                    pig.started_at,
-                    Message.create(
-                        text=f"{pig.player.name} est arrivé en {coordinates}",
-                        kind=MessageKind.RESPAWN,
-                        duration=15,
-                        color=pig.color_object,
-                    ),
+        if new_players_ids:
+            new_players = await sync_to_async(self.get_new_players)(new_players_ids)
+            for pig in new_players:
+                coordinates = human_coordinates(pig.start_tile_col, pig.start_tile_row)
+                new_messages.append(
+                    (
+                        pig.started_at,
+                        Message.create(
+                            text=f"{pig.player.name} est arrivé en {coordinates}",
+                            kind=MessageKind.NEW_PLAYER,
+                            duration=15,
+                            color=pig.color_object,
+                        )
+                        if pig.nb_pigs == 1
+                        else Message.create(
+                            text=f"{pig.player.name} est revenu en {coordinates}",
+                            kind=MessageKind.RESPAWN,
+                            duration=15,
+                            color=pig.color_object,
+                        ),
+                    )
                 )
-            )
 
         if dead_players_ids:
             dead_players = await sync_to_async(self.get_dead_players)(dead_players_ids)
@@ -149,12 +164,12 @@ class GameState:
                         color=pig.color_object,
                     ),
                 )
-                for pig in dead_players.values()
+                for pig in dead_players
             )
 
         self.messages.extend(message for message_date, message in sorted(new_messages, key=itemgetter(0)))
 
-        self.last_players = current_players
+        self.last_players_ids = current_players_ids
 
     async def draw_grid(self) -> bool:
         """Redraw the grid."""

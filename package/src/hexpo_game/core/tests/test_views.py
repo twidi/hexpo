@@ -95,7 +95,7 @@ async def test_update_messages_first_message() -> None:
         await game_state.update_messages()
         expected_message = Message(
             text=f"{player_in_game.player.name} est arrivé en A-1",
-            kind=MessageKind.RESPAWN,
+            kind=MessageKind.NEW_PLAYER,
             display_until=timezone.now() + timedelta(seconds=15),
             color=Color(0, 0, 0),
         )
@@ -107,12 +107,12 @@ async def test_update_messages_first_message() -> None:
 async def test_update_messages_new_messages() -> None:
     """Test adding messages."""
     game_state = await make_game_state()
-    player_in_game = await make_player_in_game(game_state.game, await make_player())
+    player_in_game = await make_player_in_game(game_state.game, (player := await make_player()))
     with time_machine.travel(timezone.now(), tick=False):
         await game_state.update_messages()
         expected_message_1 = Message(
             text=f"{player_in_game.player.name} est arrivé en A-1",
-            kind=MessageKind.RESPAWN,
+            kind=MessageKind.NEW_PLAYER,
             display_until=timezone.now() + timedelta(seconds=15),
             color=Color(0, 0, 0),
         )
@@ -122,7 +122,7 @@ async def test_update_messages_new_messages() -> None:
         await game_state.update_messages()
         expected_message_2 = Message(
             text=f"{player_in_game2.player.name} est arrivé en B-2",
-            kind=MessageKind.RESPAWN,
+            kind=MessageKind.NEW_PLAYER,
             display_until=timezone.now() + timedelta(seconds=15),
             color=Color(0, 0, 0),
         )
@@ -130,15 +130,18 @@ async def test_update_messages_new_messages() -> None:
     await player_in_game.adie(killer=player_in_game2)
     player_in_game3 = await make_player_in_game(game_state.game, await make_player(3), col=2, row=2)
     await player_in_game2.adie(killer=player_in_game3)
+    player_in_game1_bis = await make_player_in_game(game_state.game, player, col=3, row=3)
     # here we check the order, not the exactness of the dates, it's why we don't mock the date
     await game_state.update_messages()
     expected_message_3_msg = f"{player_in_game.player.name} a été tué par {player_in_game2.player.name}"
     expected_message_4_msg = f"{player_in_game3.player.name} est arrivé en C-3"
     expected_message_5_msg = f"{player_in_game2.player.name} a été tué par {player_in_game3.player.name}"
+    expected_message_6_msg = f"{player_in_game1_bis.player.name} est revenu en D-4"
     assert [(message.kind, message.text) for message in game_state.messages] == [
         (expected_message_1.kind, expected_message_1.text),
         (expected_message_2.kind, expected_message_2.text),
         (MessageKind.DEATH, expected_message_3_msg),
-        (MessageKind.RESPAWN, expected_message_4_msg),
+        (MessageKind.NEW_PLAYER, expected_message_4_msg),
         (MessageKind.DEATH, expected_message_5_msg),
+        (MessageKind.RESPAWN, expected_message_6_msg),
     ]
