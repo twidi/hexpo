@@ -10,7 +10,7 @@ from hexpo_game import django_setup  # noqa: F401  # pylint: disable=unused-impo
 from hexpo_game.core.constants import ActionState
 from hexpo_game.core.grid import ConcreteGrid, Grid
 from hexpo_game.core.models import Action, Game, PlayerInGame
-from hexpo_game.core.types import Color, Point, Tile
+from hexpo_game.core.types import Point, Tile
 
 # pylint: disable=too-many-locals
 

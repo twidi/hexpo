@@ -40,25 +40,26 @@ logger = logging.getLogger(__name__)
 #
 
 
-class MessageType(enum.Enum):
-    """Type of message."""
+class MessageKind(enum.Enum):
+    """Kind of message."""
 
     RESPAWN = "respawn"
     DEATH = "death"
+    OTHER = "other"
 
 
 class Message(NamedTuple):
     """Message to display."""
 
     text: str
-    type: MessageType
+    kind: MessageKind
     display_until: datetime
     color: Optional[Color] = None
 
     @classmethod
-    def create(cls, text: str, type: MessageType, duration: int, color: Optional[Color] = None) -> Message:
+    def create(cls, text: str, kind: MessageKind, duration: int, color: Optional[Color] = None) -> Message:
         """Create a message to display during `duration` seconds."""
-        return cls(text=text, type=type, display_until=timezone.now() + timedelta(seconds=duration), color=color)
+        return cls(text=text, kind=kind, display_until=timezone.now() + timedelta(seconds=duration), color=color)
 
 
 def human_coordinates(col: int, row: int) -> str:
@@ -83,9 +84,7 @@ class GameState:
         """Get the players in game."""
         return {
             pig.id: pig
-            for pig in self.game.get_current_players_in_game()
-            .select_related("player")
-            .order_by("started_at")
+            for pig in self.game.get_current_players_in_game().select_related("player").order_by("started_at")
         }
 
     @classmethod
@@ -130,8 +129,8 @@ class GameState:
                 (
                     pig.started_at,
                     Message.create(
-                        text=f"{pig.player.name} est arrivé en {coordinates}.",
-                        type=MessageType.RESPAWN,
+                        text=f"{pig.player.name} est arrivé en {coordinates}",
+                        kind=MessageKind.RESPAWN,
                         duration=15,
                         color=pig.color_object,
                     ),
@@ -144,8 +143,8 @@ class GameState:
                 (
                     pig.dead_at,
                     Message.create(
-                        f"{pig.player.name} a été tué par {pig.killed_by.player.name}.",
-                        type=MessageType.RESPAWN,
+                        f"{pig.player.name} a été tué par {pig.killed_by.player.name}",
+                        kind=MessageKind.DEATH,
                         duration=15,
                         color=pig.color_object,
                     ),

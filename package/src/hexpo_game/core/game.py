@@ -13,7 +13,7 @@ from .click_handler import COORDINATES, get_click_target
 from .constants import NB_COLORS, PALETTE, ActionFailureReason, ActionState, ActionType
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame
-from .types import Point, Tile, Color
+from .types import Color, Point, Tile
 
 logger = logging.getLogger("hexpo_game.game")
 logger_save_action = logging.getLogger("hexpo_game.game.save_action")
