@@ -144,7 +144,12 @@ class Game(BaseModel):
             .annotate(
                 nb_actions=Subquery(
                     Player.objects.filter(id=OuterRef("player_id"))
-                    .annotate(count=Count("playeringame__action", filter=Q(playeringame__game_id=self.id)))
+                    .annotate(
+                        count=Count(
+                            "playeringame__action",
+                            filter=Q(playeringame__game_id=self.id, playeringame__action__state=ActionState.SUCCESS),
+                        )
+                    )
                     .values("count")[:1]
                 ),
                 nb_games=Subquery(
