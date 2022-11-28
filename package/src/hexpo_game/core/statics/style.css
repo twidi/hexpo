@@ -231,9 +231,6 @@ body#page-players #main-container {
     border-top: solid 2px var(--bright-color);
 }
 
-#coord-hor, .coord-ver {
-    opacity: var(--opacity);
-}
 #coord-hor {
     padding-left: calc(0.125 * var(--tile-width));
     display: flex;
@@ -267,6 +264,7 @@ body#page-players #main-container {
 #coord-hor span, .coord-ver span {
     font-size: 24px;
     color: var(--text-color);
+    opacity: var(--opacity);
 }
 
 #grid-area {
