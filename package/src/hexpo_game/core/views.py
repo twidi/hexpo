@@ -20,10 +20,9 @@ from django.db.models import Count
 from django.template import loader
 from django.utils import timezone
 
-from hexpo_game.core.grid import ConcreteGrid
-
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
-from .game import get_game_and_grid
+from .game import get_game_and_grid, human_coordinates
+from .grid import ConcreteGrid
 from .models import Game, PlayerInGame
 from .types import Color, Tile
 
@@ -62,11 +61,6 @@ class Message(NamedTuple):
     def create(cls, text: str, kind: MessageKind, duration: int, color: Optional[Color] = None) -> Message:
         """Create a message to display during `duration` seconds."""
         return cls(text=text, kind=kind, display_until=timezone.now() + timedelta(seconds=duration), color=color)
-
-
-def human_coordinates(col: int, row: int) -> str:
-    """Get the human coordinates."""
-    return f"{ascii_letters[26:][row]}‑{col + 1}"
 
 
 @dataclass

@@ -35,6 +35,7 @@ dependencies = [
     "python-dotenv",
     "pyyaml",
     "tqdm",
+    "twitchAPI",
     "twitchio",
     "websockets",
 ]
@@ -115,6 +116,7 @@ show_error_codes = true
 pretty = true
 strict = true
 implicit_reexport = true
+disallow_subclassing_any = false
 
 [tool.django-stubs]
 django_settings_module = "hexpo_game.settings"

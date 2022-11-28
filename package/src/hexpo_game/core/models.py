@@ -133,6 +133,10 @@ class Game(BaseModel):
         """Get the players in game."""
         return self.playeringame_set.filter(ended_turn__isnull=True)
 
+    def get_current_players_ids_in_game(self) -> set[int]:
+        """Get the ids of the players in game."""
+        return set(self.playeringame_set.filter(ended_turn__isnull=True).values_list("player_id", flat=True))
+
     def get_current_players_in_game_with_occupied_tiles(self) -> list[PlayerInGame]:
         """Get the players in game with their occupied tiles prefeteched."""
         return list(self.get_current_players_in_game().prefetch_related("occupiedtile_set").all())

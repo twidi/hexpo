@@ -3,6 +3,7 @@ import asyncio
 import logging
 from asyncio import Queue
 from datetime import datetime
+from string import ascii_letters
 from typing import Optional, TypeAlias, cast
 
 from asgiref.sync import sync_to_async
@@ -13,6 +14,7 @@ from .click_handler import COORDINATES, get_click_target
 from .constants import NB_COLORS, PALETTE, ActionFailureReason, ActionState, ActionType
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame
+from .twitch import ChatMessagesQueue
 from .types import Color, Point, Tile
 
 logger = logging.getLogger("hexpo_game.game")
@@ -20,18 +22,26 @@ logger_save_action = logging.getLogger("hexpo_game.game.save_action")
 logger_play_turn = logging.getLogger("hexpo_game.game.play_turn")
 
 
-GameQueue: TypeAlias = Queue[tuple[Player, Optional[Tile]]]
+ClicksQueue: TypeAlias = Queue[tuple[Player, Optional[Tile]]]
 
 
-async def dequeue_clicks(queue: GameQueue, game: Game, grid: Grid) -> None:
+def human_coordinates(col: int, row: int) -> str:
+    """Get the human coordinates."""
+    return f"{ascii_letters[26:][row]}‑{col + 1}"
+
+
+async def dequeue_clicks(queue: ClicksQueue, game: Game, grid: Grid, chats_messages_queue: ChatMessagesQueue) -> None:
     """Dequeue clicks and process them."""
     now: datetime
     next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
+    seen_players_ids: set[int] = await sync_to_async(game.get_current_players_ids_in_game)()
     while True:
         if (now := timezone.now()) >= next_turn_min_at and await game.confirmed_actions_for_turn().aexists():
             await game.anext_turn(now)
             next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
-            await aplay_turn(game, grid, turn=game.current_turn - 1)
+            messages = await aplay_turn(game, grid, seen_players_ids, game.current_turn - 1)
+            for message in messages:
+                await chats_messages_queue.put(message)
         try:
             player, tile = await asyncio.wait_for(queue.get(), timeout=1)
         except asyncio.TimeoutError:
@@ -44,12 +54,17 @@ async def dequeue_clicks(queue: GameQueue, game: Game, grid: Grid) -> None:
             queue.task_done()
 
 
-def play_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> None:
+def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-statements
+    game: Game, grid: Grid, seen_players_ids: set[int], turn: Optional[int] = None
+) -> list[str]:
     """Play a turn."""
     turn = game.current_turn if turn is None else turn
+    messages = []
     queryset = game.confirmed_actions_for_turn(turn)
     logger_play_turn.info("Playing turn %s: %s actions", turn, len(queryset))
     dead_during_turn: set[int] = set()  # id of dead player in games
+    on_protected: set[int] = set()  # id of player that clicked only a protected tile
+    seen_in_turn: dict[int, tuple[Player, Tile]] = {}  # id of player: (player, tile)
     for action in queryset.order_by("confirmed_at").select_related("player_in_game__player"):
         if action.tile_col is None or action.tile_row is None:
             continue
@@ -62,6 +77,7 @@ def play_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> None:
             continue
 
         tile = Tile(action.tile_col, action.tile_row)
+        seen_in_turn[player.id] = (player, tile)
         occupied_tile = (
             OccupiedTile.objects.filter(game=game, col=tile.col, row=tile.row)
             .select_related("player_in_game__player")
@@ -81,6 +97,7 @@ def play_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> None:
                     occupied_tile.player_in_game.player.name,
                 )
                 action.fail(reason=ActionFailureReason.GROW_PROTECTED)
+                on_protected.add(player.id)
                 continue
 
         if (
@@ -108,12 +125,34 @@ def play_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> None:
             logger_play_turn.info("%s clicked on %s that was not occupied", player.name, tile)
             OccupiedTile.objects.create(game=game, col=tile.col, row=tile.row, player_in_game=player_in_game)
 
+        on_protected.discard(player.id)
+
         action.success()
 
+    for player_id, (player, tile) in seen_in_turn.items():
+        if player_id in seen_players_ids or player_id in dead_during_turn:
+            continue
+        if on_protected:
+            messages.append(
+                f"Bienvenue dans la partie @{player.name} ! "
+                "Mais tu as cliqué sur une case protégée ! "
+                "Essaye sur une case sans rond au milieu !"
+            )
+        else:
+            messages.append(
+                f"Bienvenue dans la partie @{player.name} ! "
+                f"Tu vas apparaître en {human_coordinates(tile.col, tile.row)} dans quelques secondes ! "
+                "Clique sur les cases autour pour t'agrandir (le délai est normal "
+                "et tu n'es pas obligé·e d'attendre l'affichage d'une case cliquée pour continuer !)"
+            )
+            seen_players_ids.add(player.id)
 
-async def aplay_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> None:
+    return messages
+
+
+async def aplay_turn(game: Game, grid: Grid, seen_players_ids: set[int], turn: Optional[int] = None) -> list[str]:
     """Play a turn."""
-    await sync_to_async(play_turn)(game, grid, turn)
+    return cast(list[str], await sync_to_async(play_turn)(game, grid, seen_players_ids, turn))
 
 
 def get_free_color(game: Game, default: Color) -> Color:
@@ -189,7 +228,7 @@ async def asave_action(player: Player, game: Game, tile: Optional[Tile]) -> Opti
 
 
 async def on_click(  # pylint: disable=unused-argument
-    player: Player, x_relative: float, y_relative: float, game: Game, grid: ConcreteGrid, queue: GameQueue
+    player: Player, x_relative: float, y_relative: float, game: Game, grid: ConcreteGrid, clicks_queue: ClicksQueue
 ) -> None:
     """Display a message when a click is received."""
     target, point = get_click_target(x_relative, y_relative)
@@ -197,7 +236,7 @@ async def on_click(  # pylint: disable=unused-argument
         area = COORDINATES["grid-area"]
         tile = grid.get_tile_at_point(Point(x=point.x - area[0][0], y=point.y - area[0][1]))
 
-        await queue.put((player, tile))
+        await clicks_queue.put((player, tile))
         if tile is not None:
             return
 

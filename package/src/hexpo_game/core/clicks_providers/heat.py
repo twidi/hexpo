@@ -16,15 +16,11 @@ import re
 from websockets.exceptions import ConnectionClosed
 from websockets.legacy.client import connect
 
-from .utils import (
-    ClickCallback,
-    get_twitch_client,
-    handle_click,
-    init_refused_ids,
-    standalone_runner,
-)
+from ..twitch import TwitchClient
+from .utils import ClickCallback, handle_click
 
-CHANNEL_ID = 229962991
+# CHANNEL_ID = 229962991
+CHANNEL_ID = 820553075
 MAX_WAIT_DELAY = 5
 WS_URL = f"wss://heat-api.j38.net/channel/{CHANNEL_ID}"
 GET_USER_URL = "https://heat-api.j38.net/user/{}"
@@ -97,13 +93,15 @@ def get_data(raw_data: bytes | str) -> tuple[str, float, float]:
     return user_id, x_relative, y_relative
 
 
-async def catch_clicks(twitch_app_token: str, callback: ClickCallback) -> None:
+async def catch_clicks(twitch_client: TwitchClient, refused_ids: set[str], callback: ClickCallback) -> None:
     """Catch clicks on the screen and print the targets.
 
     Parameters
     ----------
-    twitch_app_token: str
-        The Twitch app token to use.
+    twitch_client: TwitchClient
+        The Twitch client to use.
+    refused_ids: set[str]
+        The IDs of the users to ignore.
     callback: ClickCallback
         The callback to call when a click is received.
 
@@ -114,9 +112,6 @@ async def catch_clicks(twitch_app_token: str, callback: ClickCallback) -> None:
         - if the Twitch app token could not be retrieved.
 
     """
-    twitch_client = await get_twitch_client(twitch_app_token)
-    refused_ids: set[str] = await init_refused_ids()
-
     while True:
         async with connect(WS_URL) as websocket:
             while True:
@@ -142,7 +137,3 @@ async def catch_clicks(twitch_app_token: str, callback: ClickCallback) -> None:
 
                 except Exception:  # pylint: disable=broad-except
                     logger.exception("Unhandled exception while trying to process WS message: %s", raw_data)
-
-
-if __name__ == "__main__":
-    asyncio.run(standalone_runner(catch_clicks))

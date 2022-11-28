@@ -152,7 +152,7 @@ async def test_on_click_new_player():
 
     assert (player_in_game := action.player_in_game).player_id == player.id
 
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
 
     await assert_has_actions(player_in_game, [Tile(0, 0)])
     await assert_has_tiles(player_in_game, [Tile(0, 0)])
@@ -186,7 +186,7 @@ async def test_on_click_free_tile():
 
     assert action.player_in_game_id == player_in_game.id
 
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
 
     await assert_action_state(action, ActionState.SUCCESS)
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(0, 1)])
@@ -201,7 +201,7 @@ async def test_on_click_non_neighbor_tile_in_free_neighbor_mode():
 
     await game.anext_turn()
     assert (action := await asave_action(player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
 
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_NO_NEIGHBOR)
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(1, 1)])
@@ -216,7 +216,7 @@ async def test_on_click_non_neighbor_tile_in_free_full_mode():
 
     await game.anext_turn()
     assert (action := await asave_action(player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
 
     await assert_action_state(action, ActionState.SUCCESS)
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(1, 1)])
@@ -231,7 +231,7 @@ async def test_on_click_self_occupied_tile():
 
     await game.anext_turn()
     assert (action := await asave_action(player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
 
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_SELF)
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(0, 0)])
@@ -247,7 +247,7 @@ async def test_on_click_protected_tile():
 
     await game.anext_turn()
     assert (action := await asave_action(player, game, Tile(0, 1))) is not None
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
 
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_PROTECTED)
 
@@ -275,7 +275,7 @@ async def test_on_click_tile_occupied_by_other():
         await game.anext_turn()
 
     assert (action := await asave_action(player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
 
     await assert_action_state(action, ActionState.SUCCESS)
 
@@ -299,7 +299,7 @@ async def test_on_click_tile_last_occupied_by_other():
         await game.anext_turn()
 
     assert (action := await asave_action(player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
 
     await assert_action_state(action, ActionState.SUCCESS)
 
@@ -323,12 +323,12 @@ async def test_on_click_tile_after_recent_death():
         await game.anext_turn()
 
     await asave_action(player_in_game2.player, game, Tile(0, 0))
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
     await assert_death(player_in_game, True, player_in_game2.id)
 
     await game.anext_turn()
     assert await asave_action(player, game, Tile(0, 1)) is None
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
 
     await assert_has_actions(player_in_game, [Tile(0, 0)])
     await assert_has_tiles(player_in_game, [])
@@ -350,14 +350,14 @@ async def test_on_click_tile_after_not_recent_death():
         await game.anext_turn()
 
     await asave_action(player_in_game2.player, game, Tile(0, 0))
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
     await assert_death(player_in_game, True, player_in_game2.id)
 
     for _ in range(game.config.respawn_protected_max_turns + 1):
         await game.anext_turn()
 
     assert (action := await asave_action(player, game, Tile(0, 1))) is not None
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
 
     await assert_action_state(action, ActionState.SUCCESS)
 
@@ -393,7 +393,7 @@ async def test_die_during_a_turn():
     assert (action_3 := await asave_action(player_in_game2.player, game, Tile(0, 1))) is not None
     assert (action_4 := await asave_action(player, game, Tile(1, 1))) is not None
 
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
 
     await assert_action_state(action_1, ActionState.SUCCESS)
     await assert_action_state(action_2, ActionState.SUCCESS)
@@ -413,13 +413,13 @@ async def test_die_during_a_turn():
 async def test_first_click_on_protected():
     """Test that a player can click on a protected tile on the first turn."""
     game, _, player_in_game = await make_game_and_player(Tile(0, 0))
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
 
     player_in_game2 = await make_player_in_game(game, await make_player(2), [])
 
     await game.anext_turn()
     assert (action := await asave_action(player_in_game2.player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_PROTECTED)
 
     await assert_has_actions(player_in_game, [Tile(0, 0)])
@@ -433,7 +433,7 @@ async def test_first_click_on_protected():
         await game.anext_turn()
 
     assert (action := await asave_action(player_in_game2.player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
     await assert_action_state(action, ActionState.SUCCESS)
 
     await assert_has_actions(player_in_game, [Tile(0, 0)])
@@ -449,7 +449,7 @@ async def test_first_click_on_protected():
 async def test_cannot_use_more_than_allowed_actions():
     """Test that a player cannot confirm more actions than allowed."""
     game, _, player_in_game = await make_game_and_player(Tile(0, 0))
-    await aplay_turn(game, get_grid(game))
+    await aplay_turn(game, get_grid(game), set())
     await game.anext_turn()
 
     assert await asave_action(player_in_game.player, game, Tile(0, 1)) is not None

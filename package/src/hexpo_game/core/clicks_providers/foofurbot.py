@@ -6,23 +6,17 @@ See also a http fork: https://dashboard.twitch.tv/extensions/qillvtd91t2sywoxafy
 
 """
 
-import asyncio
 import json
 import logging
 from contextlib import suppress
 from functools import partial
 
-from twitchio import Client  # type: ignore[import]
 from websockets.exceptions import ConnectionClosedError
 from websockets.legacy.server import WebSocketServerProtocol, serve
 
-from hexpo_game.core.clicks_providers.utils import (
-    ClickCallback,
-    get_twitch_client,
-    handle_click,
-    init_refused_ids,
-    standalone_runner,
-)
+from hexpo_game.core.clicks_providers.utils import ClickCallback, handle_click
+
+from ..twitch import TwitchClient
 
 logger = logging.getLogger("hexpo_game.click_provider.foofurbot")
 
@@ -81,7 +75,7 @@ def get_data(raw_data: bytes | str) -> tuple[str, str, float, float]:
 
 async def on_connection(
     websocket: WebSocketServerProtocol,
-    twitch_client: Client,
+    twitch_client: TwitchClient,
     refused_ids: set[str],
     callback: ClickCallback,
 ) -> None:
@@ -108,19 +102,12 @@ async def on_connection(
                 logger.exception("Unhandled exception while trying to process WS message: %s", raw_data)
 
 
-async def catch_clicks(twitch_app_token: str, callback: ClickCallback) -> None:
+async def catch_clicks(twitch_client: TwitchClient, refused_ids: set[str], callback: ClickCallback) -> None:
     """Listen on the websocket forever."""
-    twitch_client = await get_twitch_client(twitch_app_token)
-    refused_ids: set[str] = await init_refused_ids()
-
     server = await serve(
         partial(on_connection, twitch_client=twitch_client, refused_ids=refused_ids, callback=callback),
         "127.0.0.1",
         8765,
     )
-    print("Websocket listening")
+    logger.debug("Websocket listening")
     await server.serve_forever()
-
-
-if __name__ == "__main__":
-    asyncio.run(standalone_runner(catch_clicks))
