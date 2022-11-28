@@ -16,7 +16,7 @@ import re
 from websockets.exceptions import ConnectionClosed
 from websockets.legacy.client import connect
 
-from ..twitch import TwitchClient
+from ..twitch import ChatMessagesQueue, TwitchClient
 from .utils import ClickCallback, handle_click
 
 # CHANNEL_ID = 229962991
@@ -93,13 +93,20 @@ def get_data(raw_data: bytes | str) -> tuple[str, float, float]:
     return user_id, x_relative, y_relative
 
 
-async def catch_clicks(twitch_client: TwitchClient, refused_ids: set[str], callback: ClickCallback) -> None:
+async def catch_clicks(
+    twitch_client: TwitchClient,
+    chats_messages_queue: ChatMessagesQueue,
+    refused_ids: set[str],
+    callback: ClickCallback,
+) -> None:
     """Catch clicks on the screen and print the targets.
 
     Parameters
     ----------
     twitch_client: TwitchClient
         The Twitch client to use.
+    chats_messages_queue: ChatMessagesQueue
+        The queue to use to send messages to the chat.
     refused_ids: set[str]
         The IDs of the users to ignore.
     callback: ClickCallback
@@ -112,6 +119,7 @@ async def catch_clicks(twitch_client: TwitchClient, refused_ids: set[str], callb
         - if the Twitch app token could not be retrieved.
 
     """
+    # pylint: disable=duplicate-code
     while True:
         async with connect(WS_URL) as websocket:
             while True:
@@ -133,7 +141,9 @@ async def catch_clicks(twitch_client: TwitchClient, refused_ids: set[str], callb
                             refused_ids.add(exc.args[2])
                         continue
 
-                    await handle_click(user_id, x_relative, y_relative, twitch_client, refused_ids, callback)
+                    await handle_click(
+                        user_id, x_relative, y_relative, twitch_client, chats_messages_queue, refused_ids, callback
+                    )
 
                 except Exception:  # pylint: disable=broad-except
                     logger.exception("Unhandled exception while trying to process WS message: %s", raw_data)

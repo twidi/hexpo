@@ -34,8 +34,12 @@ def main() -> None:
         twitch_client = get_twitch_client(token, refresh_token)
         async_tasks.append(twitch_client.running_task)
         refused_ids = await init_refused_ids()
-        async_tasks.append(ensure_future(heat_catch_clicks(twitch_client, refused_ids, click_callback)))
-        async_tasks.append(ensure_future(foofurbot_catch_clicks(twitch_client, refused_ids, click_callback)))
+        async_tasks.append(
+            ensure_future(heat_catch_clicks(twitch_client, chats_messages_queue, refused_ids, click_callback))
+        )
+        async_tasks.append(
+            ensure_future(foofurbot_catch_clicks(twitch_client, chats_messages_queue, refused_ids, click_callback))
+        )
         async_tasks.append(ensure_future(dequeue_clicks(clicks_queue, game, grid.grid, chats_messages_queue)))
         async_tasks.append(ensure_future(twitch_client.send_messages(chats_messages_queue)))
         async_tasks.append(ensure_future(game_state.update_forever(delay=1)))

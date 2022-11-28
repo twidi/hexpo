@@ -6,7 +6,7 @@ from asgiref.sync import sync_to_async
 
 from ... import django_setup  # noqa: F401  # pylint: disable=unused-import
 from ..models import Player
-from ..twitch import TwitchClient, fetch_user_name
+from ..twitch import ChatMessagesQueue, TwitchClient, fetch_user_name
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,18 @@ ClickCallback: TypeAlias = Callable[[Player, float, float], Awaitable[None]]
 async def init_refused_ids() -> set[str]:
     """Initialize the list of refused IDs."""
     return cast(set[str], await sync_to_async(Player.get_not_allowed_ids)())
+
+
+class AnonymousUser(ValueError):
+    """Raised when the user is anonymous."""
+
+
+class OpaqueUser(ValueError):
+    """Raised when the user id is opaque."""
+
+
+class InvalidUser(ValueError):
+    """Raised when the user is invalid."""
 
 
 async def validate_user_id(user_id: str) -> int:
@@ -34,19 +46,22 @@ async def validate_user_id(user_id: str) -> int:
 
     Raises
     ------
-    ValueError
-        - If the user id starts with "A" (anonymous) or "U" (user that didn't accept to share its ID).
-        - If the user id is not a number.
+    AnonymousUser
+        If the user is anonymous (the id starts with a "A").
+    OpaqueUser
+        If the user ID is opaque (the id starts with a "U": they didn't accept to share their ID).
+    InvalidUser
+        If the user id is not a number.
 
     """
     if user_id.startswith("A"):
-        raise ValueError("User %s is not logged in on Twitch.")
+        raise AnonymousUser("User %s is not logged in on Twitch.")
     if user_id.startswith("U"):
-        raise ValueError("User %s did no accept to share its ID")
+        raise OpaqueUser("User %s did no accept to share its ID")
     try:
         return int(user_id)
     except ValueError:
-        raise ValueError("User ID %s is not an integer") from None
+        raise InvalidUser("User ID %s is not an integer") from None
 
 
 async def get_player(user_id: int, twitch_client: TwitchClient) -> Player:
@@ -89,6 +104,7 @@ async def handle_click(
     x_relative: float,
     y_relative: float,
     twitch_client: TwitchClient,
+    chats_messages_queue: ChatMessagesQueue,
     refused_ids: set[str],
     callback: ClickCallback,
 ) -> None:
@@ -104,6 +120,8 @@ async def handle_click(
         The y coordinate of the click, relative to the screen size.
     twitch_client: TwitchClient
         The Twitch client to use to get the username.
+    chats_messages_queue: ChatMessagesQueue
+        The queue to use to send messages to the chat.
     refused_ids: set[str]
         The set of refused user IDs.
     callback: ClickCallback
@@ -116,6 +134,17 @@ async def handle_click(
     try:
         final_user_id = await validate_user_id(user_id)
     except ValueError as exc:
+        if isinstance(exc, AnonymousUser):
+            await chats_messages_queue.put(
+                "A toi, joueur inconnu et non connecté à Twitch, qui vient de cliquer sur le stream, "
+                "si tu veux jouer tu dois te connecter à Twitch "
+                "puis suivre les instructions affichées en haut du stream !"
+            )
+        elif isinstance(exc, OpaqueUser):
+            await chats_messages_queue.put(
+                "A toi, joueur inconnu, qui vient de cliquer sur le stream, "
+                "si tu veux jouer tu dois suivre les instructions affichées en haut du stream !"
+            )
         logger.error(str(exc), user_id)
         refused_ids.add(user_id)
         return

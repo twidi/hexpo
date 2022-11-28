@@ -16,7 +16,7 @@ from websockets.legacy.server import WebSocketServerProtocol, serve
 
 from hexpo_game.core.clicks_providers.utils import ClickCallback, handle_click
 
-from ..twitch import TwitchClient
+from ..twitch import ChatMessagesQueue, TwitchClient
 
 logger = logging.getLogger("hexpo_game.click_provider.foofurbot")
 
@@ -76,10 +76,12 @@ def get_data(raw_data: bytes | str) -> tuple[str, str, float, float]:
 async def on_connection(
     websocket: WebSocketServerProtocol,
     twitch_client: TwitchClient,
+    chats_messages_queue: ChatMessagesQueue,
     refused_ids: set[str],
     callback: ClickCallback,
 ) -> None:
     """Handle message received via the websocket."""
+    # pylint: disable=duplicate-code
     # connection is closed relatively quickly, so we don't need to log this
     with suppress(ConnectionClosedError):
         async for raw_data in websocket:
@@ -96,16 +98,29 @@ async def on_connection(
                 if event != "click":
                     continue
 
-                await handle_click(user_id, x_relative, y_relative, twitch_client, refused_ids, callback)
+                await handle_click(
+                    user_id, x_relative, y_relative, twitch_client, chats_messages_queue, refused_ids, callback
+                )
 
             except Exception:  # pylint: disable=broad-except
                 logger.exception("Unhandled exception while trying to process WS message: %s", raw_data)
 
 
-async def catch_clicks(twitch_client: TwitchClient, refused_ids: set[str], callback: ClickCallback) -> None:
+async def catch_clicks(
+    twitch_client: TwitchClient,
+    chats_messages_queue: ChatMessagesQueue,
+    refused_ids: set[str],
+    callback: ClickCallback,
+) -> None:
     """Listen on the websocket forever."""
     server = await serve(
-        partial(on_connection, twitch_client=twitch_client, refused_ids=refused_ids, callback=callback),
+        partial(
+            on_connection,
+            twitch_client=twitch_client,
+            chats_messages_queue=chats_messages_queue,
+            refused_ids=refused_ids,
+            callback=callback,
+        ),
         "127.0.0.1",
         8765,
     )
