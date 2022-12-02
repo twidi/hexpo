@@ -34,7 +34,7 @@ async def dequeue_clicks(queue: ClicksQueue, game: Game, grid: Grid, chats_messa
     """Dequeue clicks and process them."""
     now: datetime
     next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
-    seen_players_ids: set[int] = await sync_to_async(game.get_current_players_ids_in_game)()
+    seen_players_ids: set[int] = await sync_to_async(game.get_all_players_ids_in_game)()
     while True:
         if (now := timezone.now()) >= next_turn_min_at and await game.confirmed_actions_for_turn().aexists():
             await game.anext_turn(now)

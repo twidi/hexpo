@@ -19,8 +19,8 @@ from websockets.legacy.client import connect
 from ..twitch import ChatMessagesQueue, TwitchClient
 from .utils import ClickCallback, handle_click
 
-# CHANNEL_ID = 229962991
-CHANNEL_ID = 820553075
+CHANNEL_ID = 229962991
+# CHANNEL_ID = 820553075
 MAX_WAIT_DELAY = 5
 WS_URL = f"wss://heat-api.j38.net/channel/{CHANNEL_ID}"
 GET_USER_URL = "https://heat-api.j38.net/user/{}"
