@@ -44,10 +44,11 @@ class TwitchClient(Bot):
 
     def __init__(self, token: str, refresh_token: str) -> None:
         """Initialize the Twitch client."""
+        # noinspection InvisibleCharacter
         super().__init__(
             token=token,
             client_secret=os.environ["TWITCH_CLIENT_SECRET"],
-            prefix="!",
+            prefix=" ",
             nick=CHANEL_NAME,
             initial_channels=[CHANEL_NAME],
             loop=asyncio.get_running_loop(),

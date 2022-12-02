@@ -135,7 +135,7 @@ class Game(BaseModel):
 
     def get_all_players_ids_in_game(self) -> set[int]:
         """Get the ids of the players in game."""
-        return set(self.playeringame_set.all().distinct('player_id').values_list("player_id", flat=True))
+        return set(self.playeringame_set.all().distinct("player_id").values_list("player_id", flat=True))
 
     def get_current_players_in_game_with_occupied_tiles(self) -> list[PlayerInGame]:
         """Get the players in game with their occupied tiles prefeteched."""
