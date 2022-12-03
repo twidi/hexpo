@@ -4,7 +4,7 @@ import logging
 from asyncio import Queue
 from datetime import datetime
 from string import ascii_letters
-from typing import Optional, TypeAlias, cast
+from typing import Any, Optional, TypeAlias, cast
 
 from asgiref.sync import sync_to_async
 from django.utils import timezone
@@ -66,7 +66,7 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
     on_protected: set[int] = set()  # id of player that clicked only a protected tile
     seen_in_turn: dict[int, tuple[Player, Tile]] = {}  # id of player: (player, tile)
     for action in queryset.order_by("confirmed_at").select_related("player_in_game__player"):
-        if action.tile_col is None or action.tile_row is None:
+        if (action.tile_col is None or action.tile_row is None) and action.action_type != ActionType.BANK:
             continue
         player_in_game = action.player_in_game
         player = player_in_game.player
@@ -76,58 +76,186 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
             logger_play_turn.warning("%s IS DEAD (killed in this turn)", player.name)
             continue
 
-        tile = Tile(action.tile_col, action.tile_row)
+        if action.action_type == ActionType.BANK:
+            old_banked = player_in_game.banked_actions
+            player_in_game.banked_actions += (banked := game.config.bank_value * action.efficiency)
+            player_in_game.save()
+            action.success()
+            logger_play_turn.info(
+                "%s banked %s (from %s to %s)",
+                player.name,
+                f"{banked:.2f}",
+                f"{old_banked:.2f}",
+                f"{player_in_game.banked_actions:.2f}",
+            )
+            continue
+
+        tile = Tile(action.tile_col, action.tile_row)  # type: ignore[arg-type]  # we know we have a tile
         seen_in_turn[player.id] = (player, tile)
         occupied_tile = (
             OccupiedTile.objects.filter(game=game, col=tile.col, row=tile.row)
             .select_related("player_in_game__player")
             .first()
         )
-        if occupied_tile is not None:
-            if occupied_tile.player_in_game.player_id == player.id:
-                logger_play_turn.warning("%s clicked on %s but it's already his tile", player.name, tile)
-                action.fail(reason=ActionFailureReason.GROW_SELF)
+
+        if action.action_type == ActionType.ATTACK:
+            if occupied_tile is None:
+                logger_play_turn.warning("%s attacked %s but it's not occupied", player.name, tile)
+                action.fail(reason=ActionFailureReason.ATTACK_EMPTY)
                 continue
 
-            if occupied_tile.player_in_game.is_protected():
+            current_player_in_game = occupied_tile.player_in_game
+            current_player_name = (
+                current_player_in_game.player.name if current_player_in_game.player_id != player.id else "themselves"
+            )
+
+            if current_player_in_game.is_protected():
                 logger_play_turn.warning(
-                    "%s clicked on %s but is occupied by %s and protected",
+                    "%s attacked %s but is occupied by %s and protected",
                     player.name,
                     tile,
-                    occupied_tile.player_in_game.player.name,
+                    current_player_name,
                 )
-                action.fail(reason=ActionFailureReason.GROW_PROTECTED)
+                action.fail(reason=ActionFailureReason.ATTACK_PROTECTED)
                 on_protected.add(player.id)
                 continue
 
-        if (
-            game.config.neighbors_only
-            and player_in_game.has_tiles()
-            and not OccupiedTile.has_occupied_neighbors(player_in_game.id, tile, grid)
-        ):
-            logger_play_turn.warning("%s clicked on %s but has no neighbors", player.name, tile)
-            action.fail(reason=ActionFailureReason.GROW_NO_NEIGHBOR)
-            continue
-
-        if occupied_tile is not None:
-            old_player_in_game = occupied_tile.player_in_game
-            logger_play_turn.info(
-                "%s clicked on %s that was occupied by %s", player.name, tile, old_player_in_game.player.name
+            old_level = occupied_tile.level
+            distance = max(
+                1,
+                min(
+                    tile.distance(Tile(col, row))
+                    for col, row in player_in_game.occupiedtile_set.values_list("col", "row")
+                ),
             )
-            occupied_tile.player_in_game = player_in_game
+            distance_efficiency = (
+                (1 - game.config.attack_farthest_efficiency) * distance
+                + game.config.attack_farthest_efficiency
+                - grid.max_distance
+            ) / (1 - grid.max_distance)
+            occupied_tile.level -= (damage := game.config.attack_damage * action.efficiency * distance_efficiency)
+
+            if occupied_tile.level <= 0:
+                logger_play_turn.info(
+                    "%s attacked and destroyed %s that was occupied by %s (damage: %s, from %s)",
+                    player.name,
+                    tile,
+                    current_player_name,
+                    f"{damage:.2f}",
+                    f"{old_level:.2f}",
+                )
+                occupied_tile.delete()
+                if not current_player_in_game.has_tiles():
+                    logger_play_turn.warning("%s IS NOW DEAD", current_player_in_game.player.name)
+                    current_player_in_game.die(turn=turn, killer=player_in_game)
+                    dead_during_turn.add(current_player_in_game.id)
+            else:
+                occupied_tile.save()
+                logger_play_turn.info(
+                    "%s attacked %s that is occupied by %s (damage: %s, from %s to %s)",
+                    player.name,
+                    tile,
+                    current_player_name,
+                    f"{damage:.2f}",
+                    f"{old_level:.2f}",
+                    f"{occupied_tile.level:.2f}",
+                )
+
+            action.success()
+
+        elif action.action_type == ActionType.DEFEND:
+            if occupied_tile is None:
+                logger_play_turn.warning("%s defended %s but it's not occupied", player.name, tile)
+                action.fail(reason=ActionFailureReason.DEFEND_EMPTY)
+                continue
+
+            current_player_in_game = occupied_tile.player_in_game
+            if current_player_in_game.player_id != player.id:
+                logger_play_turn.warning(
+                    "%s defended %s but it's occupied by %s", player.name, tile, current_player_in_game.player.name
+                )
+                action.fail(reason=ActionFailureReason.DEFEND_OTHER)
+                continue
+
+            old_level = occupied_tile.level
+            occupied_tile.level += (improvement := game.config.defend_improvement * action.efficiency)
+            occupied_tile.level = min(occupied_tile.level, 100.0)
             occupied_tile.save()
+            logger_play_turn.info(
+                "%s defended %s (improvement: %s, from %s to %s)",
+                player.name,
+                tile,
+                f"{improvement:.2f}",
+                f"{old_level:.2f}",
+                f"{occupied_tile.level:.2f}",
+            )
 
-            if not old_player_in_game.has_tiles():
-                logger_play_turn.warning("%s IS NOW DEAD", old_player_in_game.player.name)
-                old_player_in_game.die(turn=turn, killer=player_in_game)
-                dead_during_turn.add(old_player_in_game.id)
-        else:
-            logger_play_turn.info("%s clicked on %s that was not occupied", player.name, tile)
-            OccupiedTile.objects.create(game=game, col=tile.col, row=tile.row, player_in_game=player_in_game)
+            action.success()
 
-        on_protected.discard(player.id)
+        elif action.action_type == ActionType.GROW:
+            if occupied_tile is not None:
+                current_player_in_game = occupied_tile.player_in_game
 
-        action.success()
+                if current_player_in_game.player_id == player.id:
+                    logger_play_turn.warning("%s grew on %s but it's already his tile", player.name, tile)
+                    action.fail(reason=ActionFailureReason.GROW_SELF)
+                    continue
+
+                if not game.config.can_grow_on_occupied:
+                    logger_play_turn.warning(
+                        "%s grew on %s but is occupied by %s",
+                        player.name,
+                        tile,
+                        current_player_in_game.player.name,
+                    )
+                    action.fail(reason=ActionFailureReason.GROW_OCCUPIED)
+                    continue
+
+                if current_player_in_game.is_protected():
+                    logger_play_turn.warning(
+                        "%s grew on %s but is occupied by %s and protected",
+                        player.name,
+                        tile,
+                        current_player_in_game.player.name,
+                    )
+                    action.fail(reason=ActionFailureReason.GROW_PROTECTED)
+                    on_protected.add(player.id)
+                    continue
+
+            if (
+                game.config.neighbors_only
+                and player_in_game.has_tiles()
+                and not OccupiedTile.has_occupied_neighbors(player_in_game.id, tile, grid)
+            ):
+                logger_play_turn.warning("%s grew on %s but has no neighbors", player.name, tile)
+                action.fail(reason=ActionFailureReason.GROW_NO_NEIGHBOR)
+                continue
+
+            if occupied_tile is not None:
+                current_player_in_game = occupied_tile.player_in_game
+                logger_play_turn.info(
+                    "%s grew on %s that was occupied by %s", player.name, tile, current_player_in_game.player.name
+                )
+                occupied_tile.player_in_game = player_in_game
+                occupied_tile.save()
+
+                if not current_player_in_game.has_tiles():
+                    logger_play_turn.warning("%s IS NOW DEAD", current_player_in_game.player.name)
+                    current_player_in_game.die(turn=turn, killer=player_in_game)
+                    dead_during_turn.add(current_player_in_game.id)
+            else:
+                logger_play_turn.info("%s grew on %s that was not occupied", player.name, tile)
+                OccupiedTile.objects.create(
+                    game=game,
+                    col=tile.col,
+                    row=tile.row,
+                    player_in_game=player_in_game,
+                    level=game.config.tile_start_level * action.efficiency,
+                )
+
+            on_protected.discard(player.id)
+
+            action.success()
 
     for player_id, (player, tile) in seen_in_turn.items():
         if player_id in seen_players_ids or player_id in dead_during_turn:
@@ -164,15 +292,17 @@ def get_free_color(game: Game, default: Color) -> Color:
     return free_colors.pop() if free_colors else default
 
 
-def save_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Action]:
+def save_action(
+    player: Player, game: Game, tile: Optional[Tile], action_type: ActionType = ActionType.GROW, efficiency: float = 1
+) -> Optional[Action]:
     """Save the player action if they clicked one a tile."""
-    if tile is None:
+    if tile is None and action_type != ActionType.BANK:
         return None
 
     default_player_attrs = dict(  # noqa: C408
         started_turn=game.current_turn,
-        start_tile_col=tile.col,
-        start_tile_row=tile.row,
+        start_tile_col=tile.col if tile else None,
+        start_tile_row=tile.row if tile else None,
         level=game.config.player_start_level,
     )
 
@@ -184,6 +314,20 @@ def save_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Ac
         .first()
     )
 
+    action_log_attrs: tuple[Any, ...]
+    if action_type == ActionType.GROW:
+        action_log = "grows in %s"
+        action_log_attrs = (player.name, tile)
+    elif action_type == ActionType.ATTACK:
+        action_log = "attacks %s"
+        action_log_attrs = (player.name, tile)
+    elif action_type == ActionType.DEFEND:
+        action_log = "defends %s"
+        action_log_attrs = (player.name, tile)
+    else:
+        action_log = "bank"
+        action_log_attrs = (player.name,)
+
     if player_in_game is None:
         player_in_game = PlayerInGame.objects.create(
             player=player,
@@ -191,10 +335,10 @@ def save_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Ac
             color=get_free_color(game, PALETTE[player.id % NB_COLORS]).as_hex,
             **default_player_attrs,
         )
-        logger_save_action.warning("%s clicked on %s AND IS A NEW PLAYER", player.name, tile)
+        logger_save_action.warning(f"%s {action_log} AND IS A NEW PLAYER", *action_log_attrs)
     elif player_in_game.ended_turn is not None:
         if not player_in_game.can_respawn():
-            logger_save_action.warning("%s clicked on %s but IS STILL DEAD", player.name, tile)
+            logger_save_action.warning(f"%s {action_log} but IS STILL DEAD", *action_log_attrs)
             return None
 
         player_in_game = PlayerInGame.objects.create(
@@ -203,28 +347,35 @@ def save_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Ac
             color=get_free_color(game, player_in_game.color_object).as_hex,
             **default_player_attrs,
         )
-        logger_save_action.warning("%s clicked on %s AND IS ALIVE AGAIN", player.name, tile)
+        logger_save_action.warning(f"%s {action_log} AND IS ALIVE AGAIN", *action_log_attrs)
     elif player_in_game.get_available_actions() <= 0:
-        logger_save_action.warning("%s clicked on %s BUT HAS NOT ACTIONS LEFT", player.name, tile)
+        logger_save_action.warning(f"%s {action_log} BUT HAS NOT ACTIONS LEFT", *action_log_attrs)
         return None
     else:
-        logger_save_action.info("%s clicked on %s", player.name, tile)
+        logger_save_action.info(f"%s {action_log}", *action_log_attrs)
 
     return Action.objects.create(
         game=game,
         player_in_game=player_in_game,
         turn=game.current_turn,
-        action_type=ActionType.GROW,
-        tile_col=tile.col,
-        tile_row=tile.row,
+        action_type=action_type,
+        tile_col=tile.col if tile else None,
+        tile_row=tile.row if tile else None,
         confirmed_at=timezone.now(),
         state=ActionState.CONFIRMED,
+        efficiency=efficiency,
     )
 
 
-async def asave_action(player: Player, game: Game, tile: Optional[Tile]) -> Optional[Action]:
+async def asave_action(
+    player: Player,
+    game: Game,
+    tile: Optional[Tile],
+    action_type: ActionType = ActionType.GROW,
+    efficiency: float = 1.0,
+) -> Optional[Action]:
     """Save the player action if they clicked one a tile."""
-    return cast(Optional[Action], await sync_to_async(save_action)(player, game, tile))
+    return cast(Optional[Action], await sync_to_async(save_action)(player, game, tile, action_type, efficiency))
 
 
 async def on_click(  # pylint: disable=unused-argument

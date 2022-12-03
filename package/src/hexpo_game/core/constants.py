@@ -23,6 +23,12 @@ class GameModeConfig(NamedTuple):
     neighbors_only: bool
     turn_duration: timedelta
     player_start_level: int
+    tile_start_level: float
+    attack_damage: float
+    attack_farthest_efficiency: float
+    defend_improvement: float
+    bank_value: float
+    can_grow_on_occupied: bool
     respawn_cooldown_turns: int
     respawn_cooldown_max_duration: timedelta | None
     respawn_protected_max_turns: int
@@ -35,6 +41,12 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         neighbors_only=False,
         turn_duration=timedelta(seconds=1),
         player_start_level=3,
+        tile_start_level=100.0,
+        attack_damage=0.0,
+        attack_farthest_efficiency=0.0,
+        defend_improvement=0.0,
+        bank_value=0.0,
+        can_grow_on_occupied=True,
         respawn_cooldown_turns=10,
         respawn_cooldown_max_duration=timedelta(seconds=10),
         respawn_protected_max_turns=30,
@@ -45,6 +57,12 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         neighbors_only=True,
         turn_duration=timedelta(seconds=1),
         player_start_level=3,
+        tile_start_level=100.0,
+        attack_damage=0.0,
+        attack_farthest_efficiency=0.0,
+        defend_improvement=0.0,
+        bank_value=0.0,
+        can_grow_on_occupied=True,
         respawn_cooldown_turns=10,
         respawn_cooldown_max_duration=timedelta(seconds=10),
         respawn_protected_max_turns=30,
@@ -55,6 +73,12 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         neighbors_only=True,
         turn_duration=timedelta(minutes=5),
         player_start_level=1,
+        tile_start_level=20.0,
+        attack_damage=20.0,
+        attack_farthest_efficiency=0.2,
+        defend_improvement=20.0,
+        bank_value=0.8,
+        can_grow_on_occupied=False,
         respawn_cooldown_turns=5,
         respawn_cooldown_max_duration=None,
         respawn_protected_max_turns=10,
@@ -89,6 +113,11 @@ class ActionFailureReason(models.TextChoices):
     GROW_SELF = "grow_self", "Already it's tile"
     GROW_PROTECTED = "grow_protected", "Tile is protected"
     GROW_NO_NEIGHBOR = "grow_no_neighbor", "Not on a neighbor"
+    GROW_OCCUPIED = "grow_occupied", "Tile is occupied"
+    ATTACK_EMPTY = "attack_empty", "Tile is empty"
+    ATTACK_PROTECTED = "attack_protected", "Tile is protected"
+    DEFEND_EMPTY = "defend_empty", "Tile is empty"
+    DEFEND_OTHER = "defend_other", "Not your tile"
 
 
 class RandomEventType(models.TextChoices):

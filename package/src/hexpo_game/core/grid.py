@@ -19,56 +19,7 @@ import numpy as np
 import numpy.typing as npt
 
 from .constants import PALETTE_BGR
-from .types import Color, Point, Tile
-
-
-class AxialCoordinate(NamedTuple):
-    """Tile coordinate in the axial coordinate space."""
-
-    q: float
-    r: float
-
-    def to_cubic(self) -> CubicCoordinate:
-        """Convert to cubic coordinate."""
-        return CubicCoordinate(q=self.q, r=self.r, s=-self.q - self.r)
-
-    def to_tile(self) -> Tile:
-        """Convert to tile."""
-        return Tile(col=round(self.q), row=round(self.r + (self.q - (self.q % 2)) / 2))
-
-    def round(self) -> AxialCoordinate:
-        """Round the axial coordinate to the nearest integer one."""
-        return self.to_cubic().round().to_axial()
-
-
-class CubicCoordinate(NamedTuple):
-    """Tile coordinate in the cubic coordinate space."""
-
-    q: float
-    r: float
-    s: float
-
-    def to_axial(self) -> AxialCoordinate:
-        """Convert to axial coordinate."""
-        return AxialCoordinate(q=self.q, r=self.r)
-
-    def round(self) -> CubicCoordinate:
-        """Round the cubic coordinate to the nearest integer one."""
-        # pylint: disable=invalid-name
-        q = round(self.q)
-        r = round(self.r)
-        s = round(self.s)
-        q_diff = abs(q - self.q)
-        r_diff = abs(r - self.r)
-        s_diff = abs(s - self.s)
-        if q_diff > r_diff and q_diff > s_diff:
-            q = -r - s
-        elif r_diff > s_diff:
-            r = -q - s
-        else:
-            s = -q - r
-        return CubicCoordinate(q=q, r=r, s=s)
-
+from .types import AxialCoordinate, Color, Point, Tile
 
 SQRT3 = sqrt(3)
 HEX_WIDTH_TO_HEIGHT_RATIO = SQRT3 / 2  # height = width * HEX_WIDTH_TO_HEIGHT_RATIO
@@ -128,6 +79,7 @@ class Grid:
         """Create the grid."""
         self.tiles = tuple(tuple(Tile(col, row) for col in range(self.nb_cols)) for row in range(self.nb_rows))
         self.neighbors = {tile: self.compute_neighbors(tile) for tile in self}
+        self.max_distance = self.tiles[0][0].distance(self.tiles[-1][-1])
 
     def __iter__(self) -> Iterator[Tile]:
         """Iterate over the tiles."""

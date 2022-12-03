@@ -31,9 +31,14 @@ async def make_game(mode: GameMode = GameMode.FREE_NEIGHBOR) -> Game:
     )
 
 
-async def make_player(external_id: int = 1, name: str = "Player") -> Player:
+async def make_turn_game() -> Game:
+    """Create a turn game."""
+    return await make_game(mode=GameMode.TURN_BY_TURN)
+
+
+async def make_player(external_id: int = 1) -> Player:
     """Create a player."""
-    return await Player.objects.acreate(external_id=external_id, name=name)
+    return await Player.objects.acreate(external_id=external_id, name=f"Player {external_id}")
 
 
 async def make_player_in_game(
@@ -57,6 +62,7 @@ async def make_player_in_game(
             row=tile.row,
             defaults=dict(  # noqa: C408
                 player_in_game=player_in_game,
+                level=game.config.tile_start_level,
             ),
         )
         await Action.objects.acreate(
@@ -81,6 +87,11 @@ async def make_game_and_player(
     player = await make_player()
     player_in_game = await make_player_in_game(game, player, [first_tile], player_level)
     return game, player, player_in_game
+
+
+async def make_turn_game_and_player(first_tile: Tile, player_level: int = 1) -> tuple[Game, Player, PlayerInGame]:
+    """Make a turn game and a player in it."""
+    return await make_game_and_player(first_tile, GameMode.TURN_BY_TURN, player_level)
 
 
 def get_grid(game: Game) -> Grid:
@@ -473,3 +484,213 @@ async def test_cannot_use_more_than_allowed_actions():
     await player_in_game.asave()
     assert await asave_action(player_in_game.player, game, Tile(0, 0)) is not None
     assert await asave_action(player_in_game.player, game, Tile(0, 0)) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_can_attack_self():  # yes, this is a weird test, but it's possible
+    """Test that a player can attack themselves in turn mode."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    await aplay_turn(game, get_grid(game), set())
+
+    for _ in range(game.config.respawn_protected_max_turns + 1):
+        await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(0, 0), ActionType.ATTACK, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.SUCCESS)
+    assert (
+        await game.occupiedtile_set.aget(col=0, row=0)
+    ).level == game.config.tile_start_level - game.config.attack_damage * 0.6
+    await assert_has_tiles(player_in_game, [Tile(0, 0)])
+    await assert_death(player_in_game, False)
+
+    await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(0, 0), ActionType.ATTACK, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.SUCCESS)
+    assert (await game.occupiedtile_set.filter(col=0, row=0).afirst()) is None
+    await assert_has_tiles(player_in_game, [])
+    await assert_death(player_in_game, True, player_in_game.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_cannot_attack_empty_tile():
+    """Test that a player cannot attack an empty tile in turn mode."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    await aplay_turn(game, get_grid(game), set())
+    await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(1, 1), ActionType.ATTACK, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.ATTACK_EMPTY)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_cannot_attack_self_protected_tile():
+    """Test that a player cannot attack a protected tile of its own in turn mode."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    await aplay_turn(game, get_grid(game), set())
+    await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(0, 0), ActionType.ATTACK, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.ATTACK_PROTECTED)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_cannot_attack_other_protected_tile():
+    """Test that a player cannot attack a protected tile of another player in turn mode."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    await make_player_in_game(game, await make_player(2), [Tile(0, 1)])
+    await aplay_turn(game, get_grid(game), set())
+    await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.ATTACK, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.ATTACK_PROTECTED)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_can_attack():
+    """Test that a player can attack a tile in turn mode."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    player_in_game2 = await make_player_in_game(game, await make_player(2), [Tile(0, 1)])
+    await aplay_turn(game, get_grid(game), set())
+
+    for _ in range(game.config.respawn_protected_max_turns + 1):
+        await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.ATTACK, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.SUCCESS)
+    assert (
+        await game.occupiedtile_set.aget(col=0, row=1)
+    ).level == game.config.tile_start_level - game.config.attack_damage * 0.6
+    await assert_has_tiles(player_in_game2, [Tile(0, 1)])
+    await assert_death(player_in_game2, False)
+
+    await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.ATTACK, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.SUCCESS)
+    assert (await game.occupiedtile_set.filter(col=0, row=1).afirst()) is None
+    await assert_has_tiles(player_in_game2, [])
+    await assert_death(player_in_game2, True, player_in_game.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_farther_attack_is_less_efficient():
+    """Test that attacking a far tile is less efficient than a near one in turn mode"""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    far_tile = Tile(game.grid_nb_cols - 1, game.grid_nb_rows - 1)
+    await make_player_in_game(game, await make_player(2), [far_tile])
+    await aplay_turn(game, get_grid(game), set())
+
+    for _ in range(game.config.respawn_protected_max_turns + 1):
+        await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, far_tile, ActionType.ATTACK, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.SUCCESS)
+    assert (
+        await game.occupiedtile_set.aget(col=far_tile.col, row=far_tile.row)
+    ).level == game.config.tile_start_level - game.config.attack_damage * 0.6 * 0.2
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_cannot_defend_empty():
+    """Test that a player cannot defend an empty tile in turn mode."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    await aplay_turn(game, get_grid(game), set())
+    await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.DEFEND, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.DEFEND_EMPTY)
+    assert (await game.occupiedtile_set.filter(col=0, row=1).afirst()) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_cannot_defend_other():
+    """Test that a player cannot defend a tile of another player in turn mode."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    await make_player_in_game(game, await make_player(2), [Tile(0, 1)])
+    await aplay_turn(game, get_grid(game), set())
+    await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.DEFEND, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.DEFEND_OTHER)
+    assert (await game.occupiedtile_set.aget(col=0, row=1)).level == game.config.tile_start_level
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_can_defend_self_tile():
+    """Test that a player can defend a tile of its own in turn mode."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    await aplay_turn(game, get_grid(game), set())
+    await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(0, 0), ActionType.DEFEND, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.SUCCESS)
+    assert (
+        await game.occupiedtile_set.aget(col=0, row=0)
+    ).level == game.config.tile_start_level + game.config.defend_improvement * 0.6
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_cannot_grow_occupied():
+    """Test that a player cannot grow an occupied tile in turn mode."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    player_in_game2 = await make_player_in_game(game, await make_player(2), [Tile(0, 1)])
+    await aplay_turn(game, get_grid(game), set())
+
+    for _ in range(game.config.respawn_protected_max_turns + 1):
+        await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.GROW, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_OCCUPIED)
+    assert (await game.occupiedtile_set.aget(col=0, row=1)).player_in_game_id == player_in_game2.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_can_grow_empty():
+    """Test that a player can grow an empty tile in turn mode."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    await aplay_turn(game, get_grid(game), set())
+    await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.GROW, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.SUCCESS)
+    assert (await game.occupiedtile_set.aget(col=0, row=1)).level == game.config.tile_start_level * 0.6
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_can_bank():
+    """Test that a player can bank in turn mode."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    await aplay_turn(game, get_grid(game), set())
+    await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, None, ActionType.BANK, 0.6)) is not None
+    await aplay_turn(game, get_grid(game), set())
+    await assert_action_state(action, ActionState.SUCCESS)
+    await player_in_game.arefresh_from_db()
+    assert player_in_game.banked_actions == game.config.bank_value * 0.6

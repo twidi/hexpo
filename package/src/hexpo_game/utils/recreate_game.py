@@ -5,7 +5,7 @@ from typing import Optional, cast
 from tqdm import tqdm
 
 from hexpo_game import django_setup  # noqa: F401  # pylint: disable=unused-import
-from hexpo_game.core.constants import ActionState
+from hexpo_game.core.constants import ActionState, ActionType
 from hexpo_game.core.models import Action, Game, OccupiedTile, PlayerInGame
 from hexpo_game.core.types import Tile
 
@@ -70,7 +70,7 @@ def recreate_game(game: Game) -> Game:
         Action.objects.create(
             player_in_game=current_pig_by_player_id[player_id],
             turn=new_game.current_turn,
-            action_type="grow",
+            action_type=ActionType.GROW,
             tile_col=tile.col,
             tile_row=tile.row,
             confirmed_at=now,

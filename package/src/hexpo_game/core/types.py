@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from random import randint
 from textwrap import wrap
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple, Optional, cast
 
 
 class Point(NamedTuple):
@@ -76,8 +76,81 @@ class Color(NamedTuple):
         return Color(randint(0, 255), randint(0, 255), randint(0, 255))
 
 
+TileDistanceCache: dict[tuple[Tile, Tile], int] = {}
+
+
 class Tile(NamedTuple):
     """Represent a tile."""
 
     col: int
     row: int
+
+    def to_axial(self) -> AxialCoordinate:
+        """Convert to axial coordinate."""
+        return AxialCoordinate(self.col, self.row - (self.col - (self.col % 2)) // 2)
+
+    def distance(self, other: Tile) -> int:
+        """Return the distance between two tiles."""
+        ordered_tiles = cast(tuple[Tile, Tile], tuple(sorted((self, other))))
+        if ordered_tiles not in TileDistanceCache:
+            TileDistanceCache[ordered_tiles] = self.to_axial().distance(other.to_axial())
+        return TileDistanceCache[ordered_tiles]
+
+
+class AxialCoordinate(NamedTuple):
+    """Tile coordinate in the axial coordinate space."""
+
+    q: float
+    r: float
+
+    def to_cubic(self) -> CubicCoordinate:
+        """Convert to cubic coordinate."""
+        return CubicCoordinate(q=self.q, r=self.r, s=-self.q - self.r)
+
+    def to_tile(self) -> Tile:
+        """Convert to tile."""
+        return Tile(col=round(self.q), row=round(self.r + (self.q - (self.q % 2)) / 2))
+
+    def round(self) -> AxialCoordinate:
+        """Round the axial coordinate to the nearest integer one."""
+        return self.to_cubic().round().to_axial()
+
+    def __sub__(self, other: AxialCoordinate) -> AxialCoordinate:
+        """Subtract two axial coordinates."""
+        if isinstance(other, AxialCoordinate):
+            return AxialCoordinate(self.q - other.q, self.r - other.r)
+        return NotImplemented  # type: ignore[unreachable]
+
+    def distance(self, other: AxialCoordinate) -> int:
+        """Return the distance between two axial coordinates."""
+        diff = self - other
+        return int((abs(diff.q) + abs(diff.r) + abs(diff.q + diff.r)) // 2)
+
+
+class CubicCoordinate(NamedTuple):
+    """Tile coordinate in the cubic coordinate space."""
+
+    q: float
+    r: float
+    s: float
+
+    def to_axial(self) -> AxialCoordinate:
+        """Convert to axial coordinate."""
+        return AxialCoordinate(q=self.q, r=self.r)
+
+    def round(self) -> CubicCoordinate:
+        """Round the cubic coordinate to the nearest integer one."""
+        # pylint: disable=invalid-name
+        q = round(self.q)
+        r = round(self.r)
+        s = round(self.s)
+        q_diff = abs(q - self.q)
+        r_diff = abs(r - self.r)
+        s_diff = abs(s - self.s)
+        if q_diff > r_diff and q_diff > s_diff:
+            q = -r - s
+        elif r_diff > s_diff:
+            r = -q - s
+        else:
+            s = -q - r
+        return CubicCoordinate(q=q, r=r, s=s)

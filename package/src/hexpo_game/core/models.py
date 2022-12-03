@@ -228,9 +228,7 @@ class PlayerInGame(BaseModel):
         help_text="The grid row of the start tile in the offset `odd-q` coordinate system."
     )
     level = models.PositiveIntegerField(default=1, help_text="Current level of the player.")
-    banked_actions = models.PositiveIntegerField(
-        default=0, help_text="Current number of banked actions points of the player."
-    )
+    banked_actions = models.FloatField(default=0, help_text="Current number of banked actions points of the player.")
     dead_at = models.DateTimeField(null=True, help_text="When the player died. Null if the player is alive.")
     killed_by = models.ForeignKey(
         "self",
@@ -320,9 +318,7 @@ class OccupiedTile(BaseModel):
     game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the tile is in.")
     col = models.IntegerField(help_text="The grid column of the tile in the offset `odd-q` coordinate system.")
     row = models.IntegerField(help_text="The grid row of the tile in the offset `odd-q` coordinate system.")
-    level = models.PositiveSmallIntegerField(
-        default=20, help_text="Current level of the tile. Max 100. Destroyed at 0."
-    )
+    level = models.FloatField(default=20, help_text="Current level of the tile. Max 100. Destroyed at 0.")
     updated_at = models.DateTimeField(auto_now=True, help_text="When the tile was last updated.", db_index=True)
 
     class Meta:
@@ -338,6 +334,11 @@ class OccupiedTile(BaseModel):
         for neighbor in neighbors[1:]:
             neighbor_filter |= Q(col=neighbor.col, row=neighbor.row)
         return cls.objects.filter(player_in_game_id=player_in_game_id).filter(neighbor_filter).exists()
+
+    @cached_property
+    def tile(self) -> Tile:
+        """Get the tile object."""
+        return Tile(self.col, self.row)
 
 
 class Drop(BaseModel):
