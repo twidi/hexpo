@@ -60,31 +60,6 @@ async def test_update_messages_nothing() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_update_messages_remove_old() -> None:
-    """Test that old messages are removed."""
-    game_state = await make_game_state()
-    game_state.messages.append(
-        Message(text="test1", kind=MessageKind.OTHER, display_until=timezone.now() - timedelta(seconds=10))
-    )
-    game_state.messages.append(
-        Message(text="test2", kind=MessageKind.OTHER, display_until=timezone.now() - timedelta(seconds=1))
-    )
-    game_state.messages.append(
-        message3 := Message(
-            text="test3", kind=MessageKind.OTHER, display_until=timezone.now() + timedelta(seconds=10)
-        )
-    )
-    game_state.messages.append(
-        message4 := Message(
-            text="test3", kind=MessageKind.OTHER, display_until=timezone.now() + timedelta(seconds=100)
-        )
-    )
-    await game_state.update_messages()
-    assert game_state.messages == [message3, message4]
-
-
-@pytest.mark.asyncio
-@pytest.mark.django_db(transaction=True)
 async def test_update_messages_first_message() -> None:
     """Test a first message."""
     game_state = await make_game_state()
@@ -96,7 +71,6 @@ async def test_update_messages_first_message() -> None:
         expected_message = Message(
             text=f"{player_in_game.player.name} est arrivé en A‑1",
             kind=MessageKind.NEW_PLAYER,
-            display_until=timezone.now() + timedelta(seconds=15),
             color=Color(0, 0, 0),
         )
     assert game_state.messages == [expected_message]
@@ -113,7 +87,6 @@ async def test_update_messages_new_messages() -> None:
         expected_message_1 = Message(
             text=f"{player_in_game.player.name} est arrivé en A‑1",
             kind=MessageKind.NEW_PLAYER,
-            display_until=timezone.now() + timedelta(seconds=15),
             color=Color(0, 0, 0),
         )
     assert game_state.messages == [expected_message_1]
@@ -123,7 +96,6 @@ async def test_update_messages_new_messages() -> None:
         expected_message_2 = Message(
             text=f"{player_in_game2.player.name} est arrivé en B‑2",
             kind=MessageKind.NEW_PLAYER,
-            display_until=timezone.now() + timedelta(seconds=15),
             color=Color(0, 0, 0),
         )
     assert game_state.messages == [expected_message_1, expected_message_2]

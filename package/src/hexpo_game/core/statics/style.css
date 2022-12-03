@@ -51,7 +51,7 @@ body#page-index #main-container {
         "top-left-corner top-bar      top-bar      top-bar"
         "left-bar        coord-empty  coord-hor    right-bar"
         "left-bar        coord-ver    grid-area    right-bar"
-        "left-bar        .            bottom-bar   right-bar"
+        "left-bar        bottom-bar   bottom-bar   right-bar"
         ".               .            .            .";
 }
 body#page-players #main-container {
@@ -289,27 +289,35 @@ body#page-players #main-container {
     grid-area: bottom-bar;
     display: flex;
     justify-content: center;
-    width: var(--map-width);
-    padding-left: 9px;
-    padding-right: 9px;
+    width: calc(var(--map-width) + var(--coordinates-size));
 }
+#messages-queue { display: none; }
 #messages {
     font-size: 30px;
-    display: flex;
-    gap: 20px;
-    justify-content: center;
-    width: 100%;
-    overflow: hidden;
-    margin-bottom: 10px;
     font-weight: bold;
+    width: 100%;
+    margin-bottom: 10px;
+    position: relative;
 }
 .message {
     border: solid 5px var(--message-color, var(--bright-color));
-    max-width: 25%;
     display: flex;
     justify-content: center;
     align-items: center;
     text-align: center;
     padding: 20px;
     background: rgba(0, 0, 0, 0.2);
+    box-shadow: 7px 7px 11px 2px var(--shell-shadow);
+    width: var(--message-width, 25%);
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    opacity: 0;
+    transform: translateX(calc( 1px + var(--messages-width, 500%)));
+    transition: transform ease-out var(--animation-duration, 1000ms), opacity ease-out var(--animation-duration, 1000ms);
+}
+.message-removed {
+  transform: translateX(-90%) !important;
+  opacity: 0 !important;
 }

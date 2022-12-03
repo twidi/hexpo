@@ -6,7 +6,7 @@ import asyncio
 import enum
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from operator import itemgetter
 from pathlib import Path
 from string import ascii_letters
@@ -18,7 +18,6 @@ from aiohttp.web import Response
 from asgiref.sync import sync_to_async
 from django.db.models import Count
 from django.template import loader
-from django.utils import timezone
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .game import get_game_and_grid, human_coordinates
@@ -54,13 +53,12 @@ class Message(NamedTuple):
 
     text: str
     kind: MessageKind
-    display_until: datetime
     color: Optional[Color] = None
 
     @classmethod
-    def create(cls, text: str, kind: MessageKind, duration: int, color: Optional[Color] = None) -> Message:
+    def create(cls, text: str, kind: MessageKind, color: Optional[Color] = None) -> Message:
         """Create a message to display during `duration` seconds."""
-        return cls(text=text, kind=kind, display_until=timezone.now() + timedelta(seconds=duration), color=color)
+        return cls(text=text, kind=kind, color=color)
 
 
 @dataclass
@@ -112,10 +110,6 @@ class GameState:
 
     async def update_messages(self) -> None:
         """Update the list of messages to display."""
-        # first we remove the old messages
-        now = timezone.now()
-        self.messages = [message for message in self.messages if message.display_until > now]
-
         # then we add the new ones (new players and dead ones)
         current_players_ids = await sync_to_async(self.get_players_in_game_ids)()
         new_players_ids = current_players_ids - self.last_players_ids
@@ -133,14 +127,12 @@ class GameState:
                         Message.create(
                             text=f"{pig.player.name} est arrivé en {coordinates}",
                             kind=MessageKind.NEW_PLAYER,
-                            duration=15,
                             color=pig.color_object,
                         )
                         if pig.nb_pigs == 1
                         else Message.create(
                             text=f"{pig.player.name} est revenu en {coordinates}",
                             kind=MessageKind.RESPAWN,
-                            duration=15,
                             color=pig.color_object,
                         ),
                     )
@@ -154,7 +146,6 @@ class GameState:
                     Message.create(
                         f"{pig.player.name} a été tué par {pig.killed_by.player.name}",
                         kind=MessageKind.DEATH,
-                        duration=15,
                         color=pig.color_object,
                     ),
                 )
@@ -214,6 +205,7 @@ class GameState:
         """Get the messages partial."""
         context = {"messages": self.messages}
         html = loader.render_to_string("core/include_messages.html", context)
+        self.messages.clear()
         return Response(text=html, content_type="text/html")
 
     async def http_get_players_partial(self, request: web.Request) -> web.Response:
