@@ -19,6 +19,7 @@ from asgiref.sync import sync_to_async
 from django.db.models import Count
 from django.template import loader
 
+from .click_handler import COORDINATES
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .game import get_game_and_grid, human_coordinates
 from .grid import ConcreteGrid
@@ -235,6 +236,8 @@ class GameState:
             "reload": request.rel_url.query.get("reload", "true") != "false",
             "map_width": int(self.grid.map_size.x),
             "map_height": int(self.grid.map_size.y),
+            "map_margin_right": COORDINATES["grid-area"][1][0] - COORDINATES["grid-area"][0][0] - int(self.grid.map_size.x),
+            "map_margin_bottom": COORDINATES["grid-area"][1][1] - COORDINATES["grid-area"][0][1] - int(self.grid.map_size.y),
             "tile_width": self.grid.tile_width,
             "tile_height": self.grid.tile_height,
             "coordinates_horizontal": list(range(1, self.grid.nb_cols + 1)),

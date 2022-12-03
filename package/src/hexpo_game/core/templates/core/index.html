@@ -4,7 +4,7 @@
         <link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet'>
         <link rel="stylesheet" type="text/css" href="/statics/style.css?ts={{ timestamp }}">
     </head>
-    <body data-reload="{% if reload %}true{% else %}false{% endif %}" id="page-index" style="--map-width: {{ map_width }}px; --map-height: {{ map_height }}px; --tile-width: {{ tile_width }}px; --tile-height: {{ tile_height }}px">
+    <body data-reload="{% if reload %}true{% else %}false{% endif %}" id="page-index" style="--map-width: {{ map_width }}px; --map-height: {{ map_height }}px; --tile-width: {{ tile_width }}px; --tile-height: {{ tile_height }}px; --map-margin-right: {{ map_margin_right }}px; --map-margin-bottom: {{ map_margin_bottom }}px;">
         <div id="main-container">
             <div id="empty-top"></div>
             <div id="top-bar">
@@ -25,29 +25,42 @@
                     {% include "core/include_players.html" with players=players %}
                 </div>
             </div>
-            <div id="coord-empty"></div>
-            <div id="coord-hor">
+            <div id="coord-empty-left" class="coord-empty"></div>
+            <div id="coord-empty-right" class="coord-empty"></div>
+            <div class="coord-hor coord-hor-top">
                 {% for coord in coordinates_horizontal %}
                     <span class="{% cycle "odd" "even" %}">{{ coord }}</span>
                 {% endfor %}
             </div>
-            <div id="coord-ver-odd" class="coord-ver">
+            <div class="coord-ver coord-ver-left coord-ver-odd">
                 {% for coord in coordinates_vertical %}<span>{{ coord }}</span>{% endfor %}
             </div>
-            <div id="coord-ver-even" class="coord-ver">
+            <div class="coord-ver coord-ver-left coord-ver-even">
                 {% for coord in coordinates_vertical %}<span>{{ coord }}</span>{% endfor %}
             </div>
             <div id="grid-area" class="positioned">
                 <img id="grid" src="data:image/png;base64,{{ grid_base64 }}" />
+            </div>
+            <div class="coord-hor coord-hor-bottom">
+                {% for coord in coordinates_horizontal %}
+                    <span class="{% cycle "odd" "even" %}">{{ coord }}</span>
+                {% endfor %}
+            </div>
+            <div class="coord-ver coord-ver-right coord-ver-odd">
+                {% for coord in coordinates_vertical %}<span>{{ coord }}</span>{% endfor %}
+            </div>
+            <div class="coord-ver coord-ver-right coord-ver-even">
+                {% for coord in coordinates_vertical %}<span>{{ coord }}</span>{% endfor %}
             </div>
             <div id="right-bar"></div>
             <div id="bottom-bar">
                 <div id="messages-queue">
                     {% include "core/include_messages.html" with messages=messages %}
                 </div>
-                <div id="messages"></div>
+                <div id="messages">
+                    <div class="message" style="opacity: 1; transform: translateX(700px);">dkfjh askdfjha slkdjfhb sakldghslkfdjsfkjgsdlkjgh </div>
+                </div>
             </div>
-            <div id="empty-bottom"></div>
         </div>
     <script src="/statics/script.js?ts={{ timestamp }}"></script>
     </body>

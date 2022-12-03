@@ -38,21 +38,23 @@ p {
 }
 body#page-index #main-container {
     grid-template-columns:
-            calc(450px - 34px) var(--coordinates-size) 1fr calc(15% - 50px - var(--coordinates-size));
+            414px var(--coordinates-size) 1fr var(--coordinates-size) calc(15% - 50px - var(--coordinates-size) * 2);
     grid-template-rows:
             68px
-            calc(15% - 68px - 34px)
+            114px
             var(--coordinates-size)
             1fr
-            calc(15%  - 34px - var(--coordinates-size))
+            var(--coordinates-size)
+            100px
             34px;
     grid-template-areas:
-        "empty-top       empty-top    empty-top    empty-top"
-        "top-left-corner top-bar      top-bar      top-bar"
-        "left-bar        coord-empty  coord-hor    right-bar"
-        "left-bar        coord-ver    grid-area    right-bar"
-        "left-bar        bottom-bar   bottom-bar   right-bar"
-        ".               .            .            .";
+        "empty-top       empty-top        empty-top      empty-top         empty-top"
+        "top-left-corner top-bar          top-bar        top-bar           top-bar"
+        "left-bar        coord-empty-left coord-hor-top  coord-empty-right right-bar"
+        "left-bar        coord-ver-left   grid-area      coord-ver-right   right-bar"
+        "left-bar        ..               coord-hor-bot  ..                right-bar"
+        "left-bar        bottom-bar       bottom-bar     bottom-bar        right-bar"
+        ".               .                .              .                 .";
 }
 body#page-players #main-container {
     grid-template-columns: 1fr calc(450px);
@@ -227,41 +229,67 @@ body#page-players #main-container {
     color: #999;
 }
 
-#coord-empty, #coord-hor {
+.coord-empty, .coord-hor-top {
     border-top: solid 2px var(--bright-color);
 }
+#coord-empty-left {
+    grid-area: coord-empty-left;
+}
+#coord-empty-right {
+    grid-area: coord-empty-right;
+}
 
-#coord-hor {
+.coord-hor-top {
     padding-left: calc(0.125 * var(--tile-width));
+    padding-bottom: 10px;
     display: flex;
     align-items: end;
-    padding-bottom: 10px;
-    grid-area: coord-hor;
+    grid-area: coord-hor-top;
 }
-#coord-hor span {
+.coord-hor-bottom {
+    padding-left: calc(0.125 * var(--tile-width));
+    padding-top: 10px;
+    display: flex;
+    align-items: start;
+    grid-area: coord-hor-bot;
+    transform: translateY(calc( -1 * var(--map-margin-bottom) - var(--tile-height) / 2));
+}
+.coord-hor span {
   width: calc(var(--tile-width) * 0.75);
   display: inline-block;
   text-align: center;
 }
-#coord-hor span.even {
+.coord-hor span.even {
     transform: translateY(calc(var(--tile-height) / 2));
 }
-.coord-ver {
+.coord-ver-left {
     display: flex;
     flex-direction: column;
     align-items: end;
     padding-right: 10px;
-    grid-area: coord-ver;
+    grid-area: coord-ver-left;
+}
+.coord-ver-right {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    padding-left: 10px;
+    grid-area: coord-ver-right;
 }
 .coord-ver span {
     height: var(--tile-height);
     line-height: var(--tile-height);
 }
-#coord-ver-even {
-    transform: translateX(calc(var(--tile-width) * 0.25)) translateY(calc(var(--tile-height) / 2));
+.coord-ver-even {
     opacity: calc(var(--opacity) * 0.75);
 }
-#coord-hor span, .coord-ver span {
+.coord-ver-even.coord-ver-left {
+    transform: translateX(calc(var(--tile-width) * 0.25)) translateY(calc(var(--tile-height) / 2));
+}
+.coord-ver-even.coord-ver-right {
+    transform: translateX(calc(var(--tile-width) * -0.25 - var(--map-margin-right))) translateY(calc(var(--tile-height) / 2));
+}
+.coord-hor span, .coord-ver span {
     font-size: 24px;
     color: var(--text-color);
     opacity: var(--opacity);
@@ -293,21 +321,21 @@ body#page-players #main-container {
 }
 #messages-queue { display: none; }
 #messages {
-    font-size: 30px;
+    font-size: 28px;
     font-weight: bold;
     width: 100%;
     margin-bottom: 10px;
     position: relative;
 }
 .message {
-    border: solid 5px var(--message-color, var(--bright-color));
+    border: solid 4px var(--message-color, var(--bright-color));
     display: flex;
     justify-content: center;
     align-items: center;
     text-align: center;
-    padding: 20px;
     background: rgba(0, 0, 0, 0.2);
     box-shadow: 7px 7px 11px 2px var(--shell-shadow);
+    padding-inline: 5px;
     width: var(--message-width, 25%);
     height: 100%;
     position: absolute;
