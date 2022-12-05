@@ -62,11 +62,12 @@ class TwitchClient(Bot):
         self.channel = self.get_channel(CHANEL_NAME)
 
     async def send_messages(self, queue: ChatMessagesQueue) -> None:
-        """Send a message to the chat."""
+        """Send messages from the queue to the chat."""
         while True:
             if self.channel is None:
                 await asyncio.sleep(1)
                 continue
+            # pylint: disable=duplicate-code
             try:
                 message = await asyncio.wait_for(queue.get(), timeout=1)
             except asyncio.TimeoutError:

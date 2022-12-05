@@ -191,6 +191,9 @@ class Player(BaseModel):
     name = models.CharField(max_length=255, help_text="Name of the player.")
     games = models.ManyToManyField(Game, through="PlayerInGame")
     allowed = models.BooleanField(default=True, help_text="Whether the player is allowed or not.", db_index=True)
+    welcome_chat_message_sent_at = models.DateTimeField(
+        default=None, null=True, help_text="Date of the welcome message."
+    )
 
     def __str__(self) -> str:
         """Return the string representation of the player."""
@@ -222,10 +225,10 @@ class PlayerInGame(BaseModel):
     ended_turn = models.PositiveIntegerField(null=True, blank=True, help_text="Turn number when the player died.")
     color = models.CharField(max_length=7, help_text="Color of the player.")
     start_tile_col = models.IntegerField(
-        help_text="The grid column of the start tile in the offset `odd-q` coordinate system."
+        help_text="The grid column of the start tile in the offset `odd-q` coordinate system.", null=True
     )
     start_tile_row = models.IntegerField(
-        help_text="The grid row of the start tile in the offset `odd-q` coordinate system."
+        help_text="The grid row of the start tile in the offset `odd-q` coordinate system.", null=True
     )
     level = models.PositiveIntegerField(default=1, help_text="Current level of the player.")
     banked_actions = models.FloatField(default=0, help_text="Current number of banked actions points of the player.")
@@ -237,6 +240,9 @@ class PlayerInGame(BaseModel):
         null=True,
         on_delete=models.SET_NULL,
         help_text="Who killed the player.",
+    )
+    first_in_game_for_player = models.BooleanField(
+        default=False, help_text="Whether this is the first appearance of the player in the game."
     )
 
     class Meta:
@@ -262,15 +268,15 @@ class PlayerInGame(BaseModel):
         """Return whether the player has tiles or not."""
         return self.occupiedtile_set.exists()
 
-    def count_tiles(self) -> int:
+    def count_tiles(self, precomputed: Optional[int] = None) -> int:
         """Return the number of tiles the player has."""
-        return self.occupiedtile_set.count()
+        return self.occupiedtile_set.count() if precomputed is None else precomputed
 
-    def is_protected(self) -> bool:
+    def is_protected(self, nb_tiles: Optional[int] = None) -> bool:
         """Return whether the player is protected or not."""
         return (
             self.started_turn + self.game.config.respawn_protected_max_turns + 1 > self.game.current_turn
-            and self.count_tiles() <= self.game.config.respawn_protected_max_tiles
+            and self.count_tiles(nb_tiles) <= self.game.config.respawn_protected_max_tiles
             and (
                 self.game.config.respawn_protected_max_duration is None
                 or self.started_at + self.game.config.respawn_protected_max_duration > timezone.now()
@@ -281,6 +287,7 @@ class PlayerInGame(BaseModel):
         """Return whether the player can respawn or not."""
         return (
             self.ended_turn is None
+            or self.start_tile_col is None
             or self.ended_turn + self.game.config.respawn_cooldown_turns + 1 <= self.game.current_turn
             or (
                 self.dead_at is not None
@@ -307,6 +314,12 @@ class PlayerInGame(BaseModel):
     def get_nb_actions_in_turn(self) -> int:
         """Return the number of actions the player has done in the current turn."""
         return self.action_set.filter(turn=self.game.current_turn).exclude(state=ActionState.CREATED).count()
+
+    def reset_start_tile(self, col: Optional[int] = None, row: Optional[int] = None) -> None:
+        """Reset the start tile of the player."""
+        self.start_tile_col = col
+        self.start_tile_row = row
+        self.save()
 
 
 class OccupiedTile(BaseModel):

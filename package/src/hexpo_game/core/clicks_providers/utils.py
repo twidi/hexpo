@@ -104,7 +104,7 @@ async def handle_click(
     x_relative: float,
     y_relative: float,
     twitch_client: TwitchClient,
-    chats_messages_queue: ChatMessagesQueue,
+    chat_messages_queue: ChatMessagesQueue,
     refused_ids: set[str],
     callback: ClickCallback,
 ) -> None:
@@ -120,7 +120,7 @@ async def handle_click(
         The y coordinate of the click, relative to the screen size.
     twitch_client: TwitchClient
         The Twitch client to use to get the username.
-    chats_messages_queue: ChatMessagesQueue
+    chat_messages_queue: ChatMessagesQueue
         The queue to use to send messages to the chat.
     refused_ids: set[str]
         The set of refused user IDs.
@@ -135,13 +135,13 @@ async def handle_click(
         final_user_id = await validate_user_id(user_id)
     except ValueError as exc:
         if isinstance(exc, AnonymousUser):
-            await chats_messages_queue.put(
+            await chat_messages_queue.put(
                 "A toi, joueur inconnu et non connecté à Twitch, qui vient de cliquer sur le stream, "
                 "si tu veux jouer tu dois te connecter à Twitch "
                 "puis suivre les instructions affichées en haut du stream !"
             )
         elif isinstance(exc, OpaqueUser):
-            await chats_messages_queue.put(
+            await chat_messages_queue.put(
                 "A toi, joueur inconnu, qui vient de cliquer sur le stream, "
                 "si tu veux jouer tu dois suivre les instructions affichées en haut du stream !"
             )

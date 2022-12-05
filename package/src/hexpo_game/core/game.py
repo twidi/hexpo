@@ -4,9 +4,10 @@ import logging
 from asyncio import Queue
 from datetime import datetime
 from string import ascii_letters
-from typing import Any, Optional, TypeAlias, cast
+from typing import Any, NamedTuple, Optional, TypeAlias, cast
 
 from asgiref.sync import sync_to_async
+from django.db.models import Count
 from django.utils import timezone
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
@@ -15,7 +16,15 @@ from .constants import NB_COLORS, PALETTE, ActionFailureReason, ActionState, Act
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame
 from .twitch import ChatMessagesQueue
-from .types import Color, Point, Tile
+from .types import (
+    Color,
+    GameMessage,
+    GameMessageKind,
+    GameMessages,
+    GameMessagesQueue,
+    Point,
+    Tile,
+)
 
 logger = logging.getLogger("hexpo_game.game")
 logger_save_action = logging.getLogger("hexpo_game.game.save_action")
@@ -30,18 +39,25 @@ def human_coordinates(col: int, row: int) -> str:
     return f"{ascii_letters[26:][row]}‑{col + 1}"
 
 
-async def dequeue_clicks(queue: ClicksQueue, game: Game, grid: Grid, chats_messages_queue: ChatMessagesQueue) -> None:
+async def dequeue_clicks(
+    queue: ClicksQueue,
+    game: Game,
+    grid: Grid,
+    chat_messages_queue: ChatMessagesQueue,
+    game_messages_queue: GameMessagesQueue,
+) -> None:
     """Dequeue clicks and process them."""
     now: datetime
     next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
-    seen_players_ids: set[int] = await sync_to_async(game.get_all_players_ids_in_game)()
     while True:
         if (now := timezone.now()) >= next_turn_min_at and await game.confirmed_actions_for_turn().aexists():
             await game.anext_turn(now)
             next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
-            messages = await aplay_turn(game, grid, seen_players_ids, game.current_turn - 1)
+            messages = await aplay_turn(game, grid, game.current_turn - 1)
             for message in messages:
-                await chats_messages_queue.put(message)
+                if message.chat_text is not None:
+                    await chat_messages_queue.put(message.chat_text)
+                await game_messages_queue.put(message)
         try:
             player, tile = await asyncio.wait_for(queue.get(), timeout=1)
         except asyncio.TimeoutError:
@@ -54,26 +70,60 @@ async def dequeue_clicks(queue: ClicksQueue, game: Game, grid: Grid, chats_messa
             queue.task_done()
 
 
+class PlayerInGameExtra(NamedTuple):
+    """A type to help mypy understand data retrieved with annotated values from the database."""
+
+    nb_tiles: int
+
+
 def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-statements
-    game: Game, grid: Grid, seen_players_ids: set[int], turn: Optional[int] = None
-) -> list[str]:
+    game: Game, grid: Grid, turn: Optional[int] = None
+) -> GameMessages:
     """Play a turn."""
     turn = game.current_turn if turn is None else turn
-    messages = []
     queryset = game.confirmed_actions_for_turn(turn)
     logger_play_turn.info("Playing turn %s: %s actions", turn, len(queryset))
-    dead_during_turn: set[int] = set()  # id of dead player in games
-    on_protected: set[int] = set()  # id of player that clicked only a protected tile
-    seen_in_turn: dict[int, tuple[Player, Tile]] = {}  # id of player: (player, tile)
-    for action in queryset.order_by("confirmed_at").select_related("player_in_game__player"):
+
+    dead_during_turn: set[int] = set()
+
+    messages: GameMessages = []
+
+    def new_death(player_in_game: PlayerInGame, killer: PlayerInGame) -> None:
+        logger_play_turn.warning("%s IS NOW DEAD", player_in_game.player.name)
+        player_in_game.die(turn=turn, killer=killer)
+        dead_during_turn.add(player_in_game.id)
+        messages.append(
+            GameMessage(
+                f"{player_in_game.player.name} a été tué par {killer.player.name}",
+                kind=GameMessageKind.DEATH,
+                color=player_in_game.color_object,
+            )
+        )
+
+    for action in queryset.order_by("confirmed_at"):
+
         if (action.tile_col is None or action.tile_row is None) and action.action_type != ActionType.BANK:
             continue
-        player_in_game = action.player_in_game
+
+        # as the player can be changed by previous actions, we need to load it from db for each action
+        player_in_game = (
+            PlayerInGame.objects.filter(id=action.player_in_game_id)
+            .select_related("player")
+            .annotate(nb_tiles=Count("occupiedtile"))
+            .get()
+        )
         player = player_in_game.player
 
         if player_in_game.id in dead_during_turn:
             action.fail(reason=ActionFailureReason.DEAD)
             logger_play_turn.warning("%s IS DEAD (killed in this turn)", player.name)
+            continue
+
+        if not player_in_game.nb_tiles and action.action_type != ActionType.GROW:
+            action.fail(reason=ActionFailureReason.BAD_FIRST)
+            logger_play_turn.warning(
+                "%s had no tiles but did a wrong first action: %s", player.name, action.action_type
+            )
             continue
 
         if action.action_type == ActionType.BANK:
@@ -91,10 +141,10 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
             continue
 
         tile = Tile(action.tile_col, action.tile_row)  # type: ignore[arg-type]  # we know we have a tile
-        seen_in_turn[player.id] = (player, tile)
         occupied_tile = (
             OccupiedTile.objects.filter(game=game, col=tile.col, row=tile.row)
             .select_related("player_in_game__player")
+            .annotate(occupier_nb_tiles=Count("player_in_game__occupiedtile"))
             .first()
         )
 
@@ -104,20 +154,19 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                 action.fail(reason=ActionFailureReason.ATTACK_EMPTY)
                 continue
 
-            current_player_in_game = occupied_tile.player_in_game
-            current_player_name = (
-                current_player_in_game.player.name if current_player_in_game.player_id != player.id else "themselves"
-            )
+            if occupied_tile.player_in_game_id == player_in_game.id:
+                logger_play_turn.warning("%s attacked %s but it's their own", player.name, tile)
+                action.fail(reason=ActionFailureReason.ATTACK_SELF)
+                continue
 
-            if current_player_in_game.is_protected():
+            if occupied_tile.player_in_game.is_protected(occupied_tile.occupier_nb_tiles):
                 logger_play_turn.warning(
-                    "%s attacked %s but is occupied by %s and protected",
+                    "%s attacked %s but it's occupied by %s and protected",
                     player.name,
                     tile,
-                    current_player_name,
+                    occupied_tile.player_in_game.player.name,
                 )
                 action.fail(reason=ActionFailureReason.ATTACK_PROTECTED)
-                on_protected.add(player.id)
                 continue
 
             old_level = occupied_tile.level
@@ -140,22 +189,20 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                     "%s attacked and destroyed %s that was occupied by %s (damage: %s, from %s)",
                     player.name,
                     tile,
-                    current_player_name,
+                    occupied_tile.player_in_game.player.name,
                     f"{damage:.2f}",
                     f"{old_level:.2f}",
                 )
+                if occupied_tile.occupier_nb_tiles <= 1:
+                    new_death(occupied_tile.player_in_game, player_in_game)
                 occupied_tile.delete()
-                if not current_player_in_game.has_tiles():
-                    logger_play_turn.warning("%s IS NOW DEAD", current_player_in_game.player.name)
-                    current_player_in_game.die(turn=turn, killer=player_in_game)
-                    dead_during_turn.add(current_player_in_game.id)
             else:
                 occupied_tile.save()
                 logger_play_turn.info(
                     "%s attacked %s that is occupied by %s (damage: %s, from %s to %s)",
                     player.name,
                     tile,
-                    current_player_name,
+                    occupied_tile.player_in_game.player.name,
                     f"{damage:.2f}",
                     f"{old_level:.2f}",
                     f"{occupied_tile.level:.2f}",
@@ -169,10 +216,12 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                 action.fail(reason=ActionFailureReason.DEFEND_EMPTY)
                 continue
 
-            current_player_in_game = occupied_tile.player_in_game
-            if current_player_in_game.player_id != player.id:
+            if occupied_tile.player_in_game_id != player_in_game.id:
                 logger_play_turn.warning(
-                    "%s defended %s but it's occupied by %s", player.name, tile, current_player_in_game.player.name
+                    "%s defended %s but it's occupied by %s",
+                    player.name,
+                    tile,
+                    occupied_tile.player_in_game.player.name,
                 )
                 action.fail(reason=ActionFailureReason.DEFEND_OTHER)
                 continue
@@ -193,38 +242,14 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
             action.success()
 
         elif action.action_type == ActionType.GROW:
-            if occupied_tile is not None:
-                current_player_in_game = occupied_tile.player_in_game
-
-                if current_player_in_game.player_id == player.id:
-                    logger_play_turn.warning("%s grew on %s but it's already his tile", player.name, tile)
-                    action.fail(reason=ActionFailureReason.GROW_SELF)
-                    continue
-
-                if not game.config.can_grow_on_occupied:
-                    logger_play_turn.warning(
-                        "%s grew on %s but is occupied by %s",
-                        player.name,
-                        tile,
-                        current_player_in_game.player.name,
-                    )
-                    action.fail(reason=ActionFailureReason.GROW_OCCUPIED)
-                    continue
-
-                if current_player_in_game.is_protected():
-                    logger_play_turn.warning(
-                        "%s grew on %s but is occupied by %s and protected",
-                        player.name,
-                        tile,
-                        current_player_in_game.player.name,
-                    )
-                    action.fail(reason=ActionFailureReason.GROW_PROTECTED)
-                    on_protected.add(player.id)
-                    continue
+            if occupied_tile is not None and occupied_tile.player_in_game_id == player_in_game.id:
+                logger_play_turn.warning("%s grew on %s but it's already their tile", player.name, tile)
+                action.fail(reason=ActionFailureReason.GROW_SELF)
+                continue
 
             if (
                 game.config.neighbors_only
-                and player_in_game.has_tiles()
+                and player_in_game.nb_tiles
                 and not OccupiedTile.has_occupied_neighbors(player_in_game.id, tile, grid)
             ):
                 logger_play_turn.warning("%s grew on %s but has no neighbors", player.name, tile)
@@ -232,17 +257,75 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                 continue
 
             if occupied_tile is not None:
-                current_player_in_game = occupied_tile.player_in_game
+                if not game.config.can_grow_on_occupied:
+                    logger_play_turn.warning(
+                        "%s %s on %s but it's occupied by %s",
+                        player.name,
+                        "grew" if player_in_game.nb_tiles else "started",
+                        tile,
+                        occupied_tile.player_in_game.player.name,
+                    )
+                    action.fail(reason=ActionFailureReason.GROW_OCCUPIED)
+                    if not player_in_game.nb_tiles:
+                        messages.append(
+                            GameMessage(
+                                text=f"{player_in_game.player.name} n'a pu "
+                                f"{'commencer' if player_in_game.first_in_game_for_player else 'revenir'} "
+                                f"en {human_coordinates(tile.col, tile.row)} (case occupée)",
+                                kind=GameMessageKind.SPAWN_FAILED,
+                                color=player_in_game.color_object,
+                                player_id=player.id,
+                                chat_text=None
+                                if player.welcome_chat_message_sent_at
+                                else (
+                                    f"Bienvenue dans la partie @{player_in_game.player.name} ! "
+                                    "Mais tu as cliqué sur une case occupée ! "
+                                    "Essaye sur une case libre !"
+                                ),
+                            )
+                        )
+                    continue
+
+                if occupied_tile.player_in_game.is_protected():
+                    logger_play_turn.warning(
+                        "%s %s on %s but it's occupied by %s and protected",
+                        player.name,
+                        "grew" if player_in_game.nb_tiles else "started",
+                        tile,
+                        occupied_tile.player_in_game.player.name,
+                    )
+                    action.fail(reason=ActionFailureReason.GROW_PROTECTED)
+                    if not player_in_game.nb_tiles:
+                        messages.append(
+                            GameMessage(
+                                text=f"{player_in_game.player.name} n'a pu "
+                                f"{'commencer' if player_in_game.first_in_game_for_player else 'revenir'} "
+                                f"en {human_coordinates(tile.col, tile.row)} (case protégée)",
+                                kind=GameMessageKind.SPAWN_FAILED,
+                                color=player_in_game.color_object,
+                                player_id=player.id,
+                                chat_text=None
+                                if player.welcome_chat_message_sent_at
+                                else (
+                                    f"Bienvenue dans la partie @{player_in_game.player.name} ! "
+                                    "Mais tu as cliqué sur une case protégée ! "
+                                    "Essaye sur une case sans rond au milieu !"
+                                ),
+                            )
+                        )
+
+                    continue
+
                 logger_play_turn.info(
-                    "%s grew on %s that was occupied by %s", player.name, tile, current_player_in_game.player.name
+                    "%s grew on %s that was occupied by %s",
+                    player.name,
+                    tile,
+                    occupied_tile.player_in_game.player.name,
                 )
+                if occupied_tile.occupier_nb_tiles <= 1:
+                    new_death(occupied_tile.player_in_game, player_in_game)
                 occupied_tile.player_in_game = player_in_game
                 occupied_tile.save()
-
-                if not current_player_in_game.has_tiles():
-                    logger_play_turn.warning("%s IS NOW DEAD", current_player_in_game.player.name)
-                    current_player_in_game.die(turn=turn, killer=player_in_game)
-                    dead_during_turn.add(current_player_in_game.id)
             else:
                 logger_play_turn.info("%s grew on %s that was not occupied", player.name, tile)
                 OccupiedTile.objects.create(
@@ -253,34 +336,50 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                     level=game.config.tile_start_level * action.efficiency,
                 )
 
-            on_protected.discard(player.id)
+            if not player_in_game.nb_tiles:
+                messages = [
+                    message
+                    for message in messages
+                    if message.player_id != player.id or message.kind != GameMessageKind.SPAWN_FAILED
+                ]
+                messages.append(
+                    GameMessage(
+                        text=f"{player_in_game.player.name} est "
+                        f"{'arrivé' if player_in_game.first_in_game_for_player else 'revenu'} "
+                        f"en {human_coordinates(tile.col, tile.row)}",
+                        kind=GameMessageKind.SPAWN,
+                        color=player_in_game.color_object,
+                        player_id=player.id,
+                        chat_text=None
+                        if player.welcome_chat_message_sent_at
+                        else (
+                            f"Bienvenue dans la partie @{player_in_game.player.name} ! "
+                            f"Tu commences en {human_coordinates(tile.col, tile.row)} ! "
+                            "Au prochain tour tu pourras t'aggrandir, te défendre ou attaquer !"
+                        )
+                        if game.config.multi_steps
+                        else (
+                            f"Bienvenue dans la partie @{player_in_game.player.name} ! "
+                            f"Tu vas apparaître en {human_coordinates(tile.col, tile.row)} dans quelques secondes ! "
+                            "Clique sur les cases autour pour t'agrandir (le délai est normal "
+                            "et tu n'es pas obligé·e d'attendre l'affichage d'une case cliquée pour continuer !)"
+                        ),
+                    )
+                )
+                if not player.welcome_chat_message_sent_at:
+                    player.welcome_chat_message_sent_at = timezone.now()
+                    player.save()
+
+            player_in_game.reset_start_tile(tile.col, tile.row)
 
             action.success()
-
-    for player_id, (player, tile) in seen_in_turn.items():
-        if player_id in seen_players_ids or player_id in dead_during_turn:
-            continue
-        if on_protected:
-            messages.append(
-                f"Bienvenue dans la partie @{player.name} ! "
-                "Mais tu as cliqué sur une case protégée ! "
-                "Essaye sur une case sans rond au milieu !"
-            )
-        else:
-            messages.append(
-                f"Bienvenue dans la partie @{player.name} ! "
-                f"Tu vas apparaître en {human_coordinates(tile.col, tile.row)} dans quelques secondes ! "
-                "Clique sur les cases autour pour t'agrandir (le délai est normal "
-                "et tu n'es pas obligé·e d'attendre l'affichage d'une case cliquée pour continuer !)"
-            )
-            seen_players_ids.add(player.id)
 
     return messages
 
 
-async def aplay_turn(game: Game, grid: Grid, seen_players_ids: set[int], turn: Optional[int] = None) -> list[str]:
+async def aplay_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> GameMessages:
     """Play a turn."""
-    return cast(list[str], await sync_to_async(play_turn)(game, grid, seen_players_ids, turn))
+    return cast(GameMessages, await sync_to_async(play_turn)(game, grid, turn))
 
 
 def get_free_color(game: Game, default: Color) -> Color:
@@ -292,7 +391,7 @@ def get_free_color(game: Game, default: Color) -> Color:
     return free_colors.pop() if free_colors else default
 
 
-def save_action(
+def save_action(  # pylint: disable=too-many-return-statements,too-many-branches
     player: Player, game: Game, tile: Optional[Tile], action_type: ActionType = ActionType.GROW, efficiency: float = 1
 ) -> Optional[Action]:
     """Save the player action if they clicked one a tile."""
@@ -301,8 +400,6 @@ def save_action(
 
     default_player_attrs = dict(  # noqa: C408
         started_turn=game.current_turn,
-        start_tile_col=tile.col if tile else None,
-        start_tile_row=tile.row if tile else None,
         level=game.config.player_start_level,
     )
 
@@ -329,10 +426,14 @@ def save_action(
         action_log_attrs = (player.name,)
 
     if player_in_game is None:
+        if action_type != ActionType.GROW:
+            logger_save_action.warning(f"%s cannot {action_log} AS A NEW PLAYER", *action_log_attrs)
+            return None
         player_in_game = PlayerInGame.objects.create(
             player=player,
             game=game,
             color=get_free_color(game, PALETTE[player.id % NB_COLORS]).as_hex,
+            first_in_game_for_player=True,
             **default_player_attrs,
         )
         logger_save_action.warning(f"%s {action_log} AND IS A NEW PLAYER", *action_log_attrs)
@@ -340,11 +441,15 @@ def save_action(
         if not player_in_game.can_respawn():
             logger_save_action.warning(f"%s {action_log} but IS STILL DEAD", *action_log_attrs)
             return None
+        if action_type != ActionType.GROW:
+            logger_save_action.warning(f"%s cannot {action_log} AS A RETURNING PLAYER", *action_log_attrs)
+            return None
 
         player_in_game = PlayerInGame.objects.create(
             player=player,
             game=game,
             color=get_free_color(game, player_in_game.color_object).as_hex,
+            first_in_game_for_player=False,
             **default_player_attrs,
         )
         logger_save_action.warning(f"%s {action_log} AND IS ALIVE AGAIN", *action_log_attrs)
@@ -352,6 +457,14 @@ def save_action(
         logger_save_action.warning(f"%s {action_log} BUT HAS NOT ACTIONS LEFT", *action_log_attrs)
         return None
     else:
+        if player_in_game.start_tile_col is None and action_type != ActionType.GROW:
+            logger_save_action.warning(
+                f"%s cannot {action_log} AS A %s PLAYER",
+                *action_log_attrs,
+                "NEW" if player_in_game.first_in_game_for_player else "RETURNING",
+            )
+            return None
+
         logger_save_action.info(f"%s {action_log}", *action_log_attrs)
 
     return Action.objects.create(

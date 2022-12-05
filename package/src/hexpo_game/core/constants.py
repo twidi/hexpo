@@ -22,6 +22,7 @@ class GameModeConfig(NamedTuple):
 
     neighbors_only: bool
     turn_duration: timedelta
+    multi_steps: bool
     player_start_level: int
     tile_start_level: float
     attack_damage: float
@@ -40,6 +41,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
     GameMode.FREE_FULL: GameModeConfig(
         neighbors_only=False,
         turn_duration=timedelta(seconds=1),
+        multi_steps=False,
         player_start_level=3,
         tile_start_level=100.0,
         attack_damage=0.0,
@@ -56,6 +58,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
     GameMode.FREE_NEIGHBOR: GameModeConfig(
         neighbors_only=True,
         turn_duration=timedelta(seconds=1),
+        multi_steps=False,
         player_start_level=3,
         tile_start_level=100.0,
         attack_damage=0.0,
@@ -72,6 +75,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
     GameMode.TURN_BY_TURN: GameModeConfig(
         neighbors_only=True,
         turn_duration=timedelta(minutes=5),
+        multi_steps=True,
         player_start_level=1,
         tile_start_level=20.0,
         attack_damage=20.0,
@@ -110,11 +114,13 @@ class ActionFailureReason(models.TextChoices):
     """Represent the different reasons of action failure."""
 
     DEAD = "dead", "Dead"
+    BAD_FIRST = "bad-first", "Bad first"
     GROW_SELF = "grow_self", "Already it's tile"
     GROW_PROTECTED = "grow_protected", "Tile is protected"
     GROW_NO_NEIGHBOR = "grow_no_neighbor", "Not on a neighbor"
     GROW_OCCUPIED = "grow_occupied", "Tile is occupied"
     ATTACK_EMPTY = "attack_empty", "Tile is empty"
+    ATTACK_SELF = "attack_self", "Already it's tile"
     ATTACK_PROTECTED = "attack_protected", "Tile is protected"
     DEFEND_EMPTY = "defend_empty", "Tile is empty"
     DEFEND_OTHER = "defend_other", "Not your tile"

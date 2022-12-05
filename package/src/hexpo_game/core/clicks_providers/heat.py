@@ -95,7 +95,7 @@ def get_data(raw_data: bytes | str) -> tuple[str, float, float]:
 
 async def catch_clicks(
     twitch_client: TwitchClient,
-    chats_messages_queue: ChatMessagesQueue,
+    chat_messages_queue: ChatMessagesQueue,
     refused_ids: set[str],
     callback: ClickCallback,
 ) -> None:
@@ -105,7 +105,7 @@ async def catch_clicks(
     ----------
     twitch_client: TwitchClient
         The Twitch client to use.
-    chats_messages_queue: ChatMessagesQueue
+    chat_messages_queue: ChatMessagesQueue
         The queue to use to send messages to the chat.
     refused_ids: set[str]
         The IDs of the users to ignore.
@@ -142,7 +142,7 @@ async def catch_clicks(
                         continue
 
                     await handle_click(
-                        user_id, x_relative, y_relative, twitch_client, chats_messages_queue, refused_ids, callback
+                        user_id, x_relative, y_relative, twitch_client, chat_messages_queue, refused_ids, callback
                     )
 
                 except Exception:  # pylint: disable=broad-except

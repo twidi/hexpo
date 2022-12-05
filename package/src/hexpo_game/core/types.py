@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import enum
+from asyncio import Queue
 from random import randint
 from textwrap import wrap
-from typing import Any, NamedTuple, Optional, cast
+from typing import Any, NamedTuple, Optional, TypeAlias, cast
 
 
 class Point(NamedTuple):
@@ -154,3 +156,26 @@ class CubicCoordinate(NamedTuple):
         else:
             s = -q - r
         return CubicCoordinate(q=q, r=r, s=s)
+
+
+class GameMessageKind(enum.Enum):
+    """Kind of message."""
+
+    SPAWN = "spawn"
+    SPAWN_FAILED = "spawn_failed"
+    DEATH = "death"
+    OTHER = "other"
+
+
+class GameMessage(NamedTuple):
+    """Message to display."""
+
+    text: str
+    kind: GameMessageKind
+    color: Optional[Color] = None
+    chat_text: Optional[str] = None
+    player_id: Optional[int] = None
+
+
+GameMessages: TypeAlias = list[GameMessage]
+GameMessagesQueue: TypeAlias = Queue[GameMessage]

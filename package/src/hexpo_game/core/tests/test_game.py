@@ -16,7 +16,7 @@ from hexpo_game.core.constants import (
 from hexpo_game.core.game import aplay_turn, asave_action
 from hexpo_game.core.grid import Grid
 from hexpo_game.core.models import Action, Game, OccupiedTile, Player, PlayerInGame
-from hexpo_game.core.types import Color, Tile
+from hexpo_game.core.types import Color, GameMessageKind, Tile
 
 
 async def make_game(mode: GameMode = GameMode.FREE_NEIGHBOR) -> Game:
@@ -49,10 +49,11 @@ async def make_player_in_game(
         game=game,
         player=player,
         started_turn=0,
-        start_tile_col=0,
-        start_tile_row=0,
+        start_tile_col=occupied_tiles[0].col if occupied_tiles else None,
+        start_tile_row=occupied_tiles[0].row if occupied_tiles else None,
         color=Color(0, 0, 0).as_hex,
         level=level,
+        first_in_game_for_player=True,
     )
     for tile in occupied_tiles or []:
         # pylint: disable=duplicate-code
@@ -163,7 +164,7 @@ async def test_on_click_new_player():
 
     assert (player_in_game := action.player_in_game).player_id == player.id
 
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, get_grid(game))
 
     await assert_has_actions(player_in_game, [Tile(0, 0)])
     await assert_has_tiles(player_in_game, [Tile(0, 0)])
@@ -197,7 +198,7 @@ async def test_on_click_free_tile():
 
     assert action.player_in_game_id == player_in_game.id
 
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, get_grid(game))
 
     await assert_action_state(action, ActionState.SUCCESS)
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(0, 1)])
@@ -212,7 +213,7 @@ async def test_on_click_non_neighbor_tile_in_free_neighbor_mode():
 
     await game.anext_turn()
     assert (action := await asave_action(player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, get_grid(game))
 
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_NO_NEIGHBOR)
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(1, 1)])
@@ -227,7 +228,7 @@ async def test_on_click_non_neighbor_tile_in_free_full_mode():
 
     await game.anext_turn()
     assert (action := await asave_action(player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, get_grid(game))
 
     await assert_action_state(action, ActionState.SUCCESS)
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(1, 1)])
@@ -242,7 +243,7 @@ async def test_on_click_self_occupied_tile():
 
     await game.anext_turn()
     assert (action := await asave_action(player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, get_grid(game))
 
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_SELF)
     await assert_has_actions(player_in_game, [Tile(0, 0), Tile(0, 0)])
@@ -258,7 +259,7 @@ async def test_on_click_protected_tile():
 
     await game.anext_turn()
     assert (action := await asave_action(player, game, Tile(0, 1))) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, get_grid(game))
 
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_PROTECTED)
 
@@ -286,7 +287,7 @@ async def test_on_click_tile_occupied_by_other():
         await game.anext_turn()
 
     assert (action := await asave_action(player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, get_grid(game))
 
     await assert_action_state(action, ActionState.SUCCESS)
 
@@ -310,7 +311,7 @@ async def test_on_click_tile_last_occupied_by_other():
         await game.anext_turn()
 
     assert (action := await asave_action(player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, get_grid(game))
 
     await assert_action_state(action, ActionState.SUCCESS)
 
@@ -334,12 +335,12 @@ async def test_on_click_tile_after_recent_death():
         await game.anext_turn()
 
     await asave_action(player_in_game2.player, game, Tile(0, 0))
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
     await assert_death(player_in_game, True, player_in_game2.id)
 
     await game.anext_turn()
     assert await asave_action(player, game, Tile(0, 1)) is None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
 
     await assert_has_actions(player_in_game, [Tile(0, 0)])
     await assert_has_tiles(player_in_game, [])
@@ -361,14 +362,14 @@ async def test_on_click_tile_after_not_recent_death():
         await game.anext_turn()
 
     await asave_action(player_in_game2.player, game, Tile(0, 0))
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
     await assert_death(player_in_game, True, player_in_game2.id)
 
     for _ in range(game.config.respawn_protected_max_turns + 1):
         await game.anext_turn()
 
     assert (action := await asave_action(player, game, Tile(0, 1))) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
 
     await assert_action_state(action, ActionState.SUCCESS)
 
@@ -404,7 +405,7 @@ async def test_die_during_a_turn():
     assert (action_3 := await asave_action(player_in_game2.player, game, Tile(0, 1))) is not None
     assert (action_4 := await asave_action(player, game, Tile(1, 1))) is not None
 
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, get_grid(game))
 
     await assert_action_state(action_1, ActionState.SUCCESS)
     await assert_action_state(action_2, ActionState.SUCCESS)
@@ -424,13 +425,13 @@ async def test_die_during_a_turn():
 async def test_first_click_on_protected():
     """Test that a player can click on a protected tile on the first turn."""
     game, _, player_in_game = await make_game_and_player(Tile(0, 0))
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
 
     player_in_game2 = await make_player_in_game(game, await make_player(2), [])
 
     await game.anext_turn()
     assert (action := await asave_action(player_in_game2.player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_PROTECTED)
 
     await assert_has_actions(player_in_game, [Tile(0, 0)])
@@ -444,7 +445,7 @@ async def test_first_click_on_protected():
         await game.anext_turn()
 
     assert (action := await asave_action(player_in_game2.player, game, Tile(0, 0))) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.SUCCESS)
 
     await assert_has_actions(player_in_game, [Tile(0, 0)])
@@ -460,7 +461,7 @@ async def test_first_click_on_protected():
 async def test_cannot_use_more_than_allowed_actions():
     """Test that a player cannot confirm more actions than allowed."""
     game, _, player_in_game = await make_game_and_player(Tile(0, 0))
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, get_grid(game))
     await game.anext_turn()
 
     assert await asave_action(player_in_game.player, game, Tile(0, 1)) is not None
@@ -488,31 +489,15 @@ async def test_cannot_use_more_than_allowed_actions():
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_turn_mode_can_attack_self():  # yes, this is a weird test, but it's possible
-    """Test that a player can attack themselves in turn mode."""
+async def test_turn_mode_cannot_attack_self_tile():
+    """Test that a player cannot attack a protected tile of its own in turn mode."""
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
-    await aplay_turn(game, get_grid(game), set())
-
-    for _ in range(game.config.respawn_protected_max_turns + 1):
-        await game.anext_turn()
-
-    assert (action := await asave_action(player_in_game.player, game, Tile(0, 0), ActionType.ATTACK, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
-    await assert_action_state(action, ActionState.SUCCESS)
-    assert (
-        await game.occupiedtile_set.aget(col=0, row=0)
-    ).level == game.config.tile_start_level - game.config.attack_damage * 0.6
-    await assert_has_tiles(player_in_game, [Tile(0, 0)])
-    await assert_death(player_in_game, False)
-
+    await aplay_turn(game, grid := get_grid(game))
     await game.anext_turn()
 
     assert (action := await asave_action(player_in_game.player, game, Tile(0, 0), ActionType.ATTACK, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
-    await assert_action_state(action, ActionState.SUCCESS)
-    assert (await game.occupiedtile_set.filter(col=0, row=0).afirst()) is None
-    await assert_has_tiles(player_in_game, [])
-    await assert_death(player_in_game, True, player_in_game.id)
+    await aplay_turn(game, grid)
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.ATTACK_SELF)
 
 
 @pytest.mark.asyncio
@@ -520,25 +505,12 @@ async def test_turn_mode_can_attack_self():  # yes, this is a weird test, but it
 async def test_turn_mode_cannot_attack_empty_tile():
     """Test that a player cannot attack an empty tile in turn mode."""
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
     await game.anext_turn()
 
     assert (action := await asave_action(player_in_game.player, game, Tile(1, 1), ActionType.ATTACK, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.ATTACK_EMPTY)
-
-
-@pytest.mark.asyncio
-@pytest.mark.django_db(transaction=True)
-async def test_turn_mode_cannot_attack_self_protected_tile():
-    """Test that a player cannot attack a protected tile of its own in turn mode."""
-    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
-    await aplay_turn(game, get_grid(game), set())
-    await game.anext_turn()
-
-    assert (action := await asave_action(player_in_game.player, game, Tile(0, 0), ActionType.ATTACK, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
-    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.ATTACK_PROTECTED)
 
 
 @pytest.mark.asyncio
@@ -547,11 +519,11 @@ async def test_turn_mode_cannot_attack_other_protected_tile():
     """Test that a player cannot attack a protected tile of another player in turn mode."""
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
     await make_player_in_game(game, await make_player(2), [Tile(0, 1)])
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
     await game.anext_turn()
 
     assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.ATTACK, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.ATTACK_PROTECTED)
 
 
@@ -561,13 +533,13 @@ async def test_turn_mode_can_attack():
     """Test that a player can attack a tile in turn mode."""
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
     player_in_game2 = await make_player_in_game(game, await make_player(2), [Tile(0, 1)])
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
 
     for _ in range(game.config.respawn_protected_max_turns + 1):
         await game.anext_turn()
 
     assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.ATTACK, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.SUCCESS)
     assert (
         await game.occupiedtile_set.aget(col=0, row=1)
@@ -578,7 +550,7 @@ async def test_turn_mode_can_attack():
     await game.anext_turn()
 
     assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.ATTACK, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.SUCCESS)
     assert (await game.occupiedtile_set.filter(col=0, row=1).afirst()) is None
     await assert_has_tiles(player_in_game2, [])
@@ -592,13 +564,13 @@ async def test_turn_mode_farther_attack_is_less_efficient():
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
     far_tile = Tile(game.grid_nb_cols - 1, game.grid_nb_rows - 1)
     await make_player_in_game(game, await make_player(2), [far_tile])
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
 
     for _ in range(game.config.respawn_protected_max_turns + 1):
         await game.anext_turn()
 
     assert (action := await asave_action(player_in_game.player, game, far_tile, ActionType.ATTACK, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.SUCCESS)
     assert (
         await game.occupiedtile_set.aget(col=far_tile.col, row=far_tile.row)
@@ -610,11 +582,11 @@ async def test_turn_mode_farther_attack_is_less_efficient():
 async def test_turn_mode_cannot_defend_empty():
     """Test that a player cannot defend an empty tile in turn mode."""
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
     await game.anext_turn()
 
     assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.DEFEND, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.DEFEND_EMPTY)
     assert (await game.occupiedtile_set.filter(col=0, row=1).afirst()) is None
 
@@ -625,11 +597,11 @@ async def test_turn_mode_cannot_defend_other():
     """Test that a player cannot defend a tile of another player in turn mode."""
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
     await make_player_in_game(game, await make_player(2), [Tile(0, 1)])
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
     await game.anext_turn()
 
     assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.DEFEND, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.DEFEND_OTHER)
     assert (await game.occupiedtile_set.aget(col=0, row=1)).level == game.config.tile_start_level
 
@@ -639,11 +611,11 @@ async def test_turn_mode_cannot_defend_other():
 async def test_turn_mode_can_defend_self_tile():
     """Test that a player can defend a tile of its own in turn mode."""
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
     await game.anext_turn()
 
     assert (action := await asave_action(player_in_game.player, game, Tile(0, 0), ActionType.DEFEND, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.SUCCESS)
     assert (
         await game.occupiedtile_set.aget(col=0, row=0)
@@ -656,13 +628,13 @@ async def test_turn_mode_cannot_grow_occupied():
     """Test that a player cannot grow an occupied tile in turn mode."""
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
     player_in_game2 = await make_player_in_game(game, await make_player(2), [Tile(0, 1)])
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
 
     for _ in range(game.config.respawn_protected_max_turns + 1):
         await game.anext_turn()
 
     assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.GROW, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_OCCUPIED)
     assert (await game.occupiedtile_set.aget(col=0, row=1)).player_in_game_id == player_in_game2.id
 
@@ -672,11 +644,11 @@ async def test_turn_mode_cannot_grow_occupied():
 async def test_turn_mode_can_grow_empty():
     """Test that a player can grow an empty tile in turn mode."""
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
     await game.anext_turn()
 
     assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.GROW, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.SUCCESS)
     assert (await game.occupiedtile_set.aget(col=0, row=1)).level == game.config.tile_start_level * 0.6
 
@@ -686,11 +658,164 @@ async def test_turn_mode_can_grow_empty():
 async def test_turn_mode_can_bank():
     """Test that a player can bank in turn mode."""
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid := get_grid(game))
     await game.anext_turn()
 
     assert (action := await asave_action(player_in_game.player, game, None, ActionType.BANK, 0.6)) is not None
-    await aplay_turn(game, get_grid(game), set())
+    await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.SUCCESS)
     await player_in_game.arefresh_from_db()
     assert player_in_game.banked_actions == game.config.bank_value * 0.6
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_welcome_chat_message_if_protected():
+    """Test that a welcome chat message is sent if the first grow is on a protected tile."""
+    game, _, _ = await make_game_and_player(Tile(0, 0))
+    await aplay_turn(game, get_grid(game))
+    await game.anext_turn()
+
+    player_in_game2 = await make_player_in_game(game, (player2 := await make_player(2)))
+
+    # message should be sent the first time, with a chat message
+    assert (action := await asave_action(player_in_game2.player, game, Tile(0, 0), ActionType.GROW)) is not None
+    messages = await aplay_turn(game, grid := get_grid(game))
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_PROTECTED)
+    assert len(messages) == 1
+    assert messages[0].player_id == player_in_game2.player_id
+    assert messages[0].kind == GameMessageKind.SPAWN_FAILED
+    assert messages[0].chat_text is not None
+    await player2.arefresh_from_db()
+    assert player2.welcome_chat_message_sent_at is None
+
+    await game.anext_turn()
+
+    # and next time too
+    assert (action := await asave_action(player_in_game2.player, game, Tile(0, 0), ActionType.GROW)) is not None
+    messages = await aplay_turn(game, grid)
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_PROTECTED)
+    assert len(messages) == 1
+    assert messages[0].player_id == player_in_game2.player_id
+    assert messages[0].kind == GameMessageKind.SPAWN_FAILED
+    assert messages[0].chat_text is not None
+    await player2.arefresh_from_db()
+    assert player2.welcome_chat_message_sent_at is None
+
+    await game.anext_turn()
+
+    # but if a real welcome chat message was sent, no new one should be sent
+    player2.welcome_chat_message_sent_at = timezone.now()
+    await player2.asave()
+
+    assert (action := await asave_action(player_in_game2.player, game, Tile(0, 0), ActionType.GROW)) is not None
+    messages = await aplay_turn(game, grid)
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_PROTECTED)
+    assert len(messages) == 1
+    assert messages[0].player_id == player_in_game2.player_id
+    assert messages[0].kind == GameMessageKind.SPAWN_FAILED
+    assert messages[0].chat_text is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_welcome_chat_message_if_protected_then_free():
+    """Test that a welcome chat message is sent if the first grow is on a protected tile but not the second."""
+    game, _, _ = await make_game_and_player(Tile(0, 0))
+    await aplay_turn(game, get_grid(game))
+    await game.anext_turn()
+
+    player_in_game2 = await make_player_in_game(game, (player2 := await make_player(2)), level=2)
+
+    assert (action1 := await asave_action(player_in_game2.player, game, Tile(0, 0), ActionType.GROW)) is not None
+    assert (action2 := await asave_action(player_in_game2.player, game, Tile(0, 1), ActionType.GROW)) is not None
+    messages = await aplay_turn(game, get_grid(game))
+    await assert_action_state(action1, ActionState.FAILURE, ActionFailureReason.GROW_PROTECTED)
+    await assert_action_state(action2, ActionState.SUCCESS)
+    assert len(messages) == 1
+    assert messages[0].player_id == player_in_game2.player_id
+    assert messages[0].kind == GameMessageKind.SPAWN
+    assert messages[0].chat_text is not None
+    await player2.arefresh_from_db()
+    assert player2.welcome_chat_message_sent_at is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_welcome_chat_message_if_occupied_in_turn_mode():
+    """Test that a welcome chat message is sent if the first grow is on an occupied tile in turn mode."""
+    game, _, _ = await make_turn_game_and_player(Tile(0, 0))
+    await aplay_turn(game, get_grid(game))
+    await game.anext_turn()
+
+    player_in_game2 = await make_player_in_game(game, (player2 := await make_player(2)))
+
+    # message should be sent the first time, with a chat message
+    assert (action := await asave_action(player_in_game2.player, game, Tile(0, 0), ActionType.GROW)) is not None
+    messages = await aplay_turn(game, grid := get_grid(game))
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_OCCUPIED)
+    assert len(messages) == 1
+    assert messages[0].player_id == player_in_game2.player_id
+    assert messages[0].kind == GameMessageKind.SPAWN_FAILED
+    assert messages[0].chat_text is not None
+    await player2.arefresh_from_db()
+    assert player2.welcome_chat_message_sent_at is None
+
+    await game.anext_turn()
+
+    # and next time too
+    assert (action := await asave_action(player_in_game2.player, game, Tile(0, 0), ActionType.GROW)) is not None
+    messages = await aplay_turn(game, grid)
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_OCCUPIED)
+    assert len(messages) == 1
+    assert messages[0].player_id == player_in_game2.player_id
+    assert messages[0].kind == GameMessageKind.SPAWN_FAILED
+    assert messages[0].chat_text is not None
+    await player2.arefresh_from_db()
+    assert player2.welcome_chat_message_sent_at is None
+
+    await game.anext_turn()
+
+    # but if a real welcome chat message was sent, no new one should be sent
+    player2.welcome_chat_message_sent_at = timezone.now()
+    await player2.asave()
+
+    assert (action := await asave_action(player_in_game2.player, game, Tile(0, 0), ActionType.GROW)) is not None
+    messages = await aplay_turn(game, grid)
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.GROW_OCCUPIED)
+    assert len(messages) == 1
+    assert messages[0].player_id == player_in_game2.player_id
+    assert messages[0].kind == GameMessageKind.SPAWN_FAILED
+    assert messages[0].chat_text is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_welcome_chat_message_is_not_sent_twice():
+    """Test that a welcome chat message is not sent twice."""
+    game, _, _ = await make_game_and_player(Tile(0, 0))
+    await aplay_turn(game, get_grid(game))
+    await game.anext_turn()
+
+    player_in_game2 = await make_player_in_game(game, (player2 := await make_player(2)), level=2)
+
+    # message should be sent the first time, with a chat message
+    assert (action1 := await asave_action(player_in_game2.player, game, Tile(0, 1), ActionType.GROW)) is not None
+    assert (action2 := await asave_action(player_in_game2.player, game, Tile(1, 0), ActionType.GROW)) is not None
+    messages = await aplay_turn(game, get_grid(game))
+    await assert_action_state(action1, ActionState.SUCCESS)
+    await assert_action_state(action2, ActionState.SUCCESS)
+    assert len(messages) == 1
+    assert messages[0].player_id == player_in_game2.player_id
+    assert messages[0].kind == GameMessageKind.SPAWN
+    assert messages[0].chat_text is not None
+    await player2.arefresh_from_db()
+    assert player2.welcome_chat_message_sent_at is not None
+
+    await game.anext_turn()
+
+    # but not the second time
+    assert (action := await asave_action(player_in_game2.player, game, Tile(1, 1), ActionType.GROW)) is not None
+    messages = await aplay_turn(game, get_grid(game))
+    await assert_action_state(action, ActionState.SUCCESS)
+    assert len(messages) == 0

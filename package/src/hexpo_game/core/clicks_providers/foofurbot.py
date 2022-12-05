@@ -76,7 +76,7 @@ def get_data(raw_data: bytes | str) -> tuple[str, str, float, float]:
 async def on_connection(
     websocket: WebSocketServerProtocol,
     twitch_client: TwitchClient,
-    chats_messages_queue: ChatMessagesQueue,
+    chat_messages_queue: ChatMessagesQueue,
     refused_ids: set[str],
     callback: ClickCallback,
 ) -> None:
@@ -99,7 +99,7 @@ async def on_connection(
                     continue
 
                 await handle_click(
-                    user_id, x_relative, y_relative, twitch_client, chats_messages_queue, refused_ids, callback
+                    user_id, x_relative, y_relative, twitch_client, chat_messages_queue, refused_ids, callback
                 )
 
             except Exception:  # pylint: disable=broad-except
@@ -108,7 +108,7 @@ async def on_connection(
 
 async def catch_clicks(
     twitch_client: TwitchClient,
-    chats_messages_queue: ChatMessagesQueue,
+    chat_messages_queue: ChatMessagesQueue,
     refused_ids: set[str],
     callback: ClickCallback,
 ) -> None:
@@ -117,7 +117,7 @@ async def catch_clicks(
         partial(
             on_connection,
             twitch_client=twitch_client,
-            chats_messages_queue=chats_messages_queue,
+            chat_messages_queue=chat_messages_queue,
             refused_ids=refused_ids,
             callback=callback,
         ),

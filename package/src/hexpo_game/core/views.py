@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import enum
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from operator import itemgetter
 from pathlib import Path
 from string import ascii_letters
 from time import time
-from typing import Any, NamedTuple, Optional
+from typing import Any
 
 from aiohttp import web
 from aiohttp.web import Response
@@ -19,12 +17,12 @@ from asgiref.sync import sync_to_async
 from django.db.models import Count
 from django.template import loader
 
-from .click_handler import COORDINATES
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
-from .game import get_game_and_grid, human_coordinates
+from .click_handler import COORDINATES
+from .game import get_game_and_grid
 from .grid import ConcreteGrid
 from .models import Game, PlayerInGame
-from .types import Color, Tile
+from .types import Color, GameMessage, GameMessagesQueue, Tile
 
 logger = logging.getLogger(__name__)
 
@@ -40,28 +38,6 @@ logger = logging.getLogger(__name__)
 #
 
 
-class MessageKind(enum.Enum):
-    """Kind of message."""
-
-    NEW_PLAYER = "new_player"
-    RESPAWN = "respawn"
-    DEATH = "death"
-    OTHER = "other"
-
-
-class Message(NamedTuple):
-    """Message to display."""
-
-    text: str
-    kind: MessageKind
-    color: Optional[Color] = None
-
-    @classmethod
-    def create(cls, text: str, kind: MessageKind, color: Optional[Color] = None) -> Message:
-        """Create a message to display during `duration` seconds."""
-        return cls(text=text, kind=kind, color=color)
-
-
 @dataclass
 class GameState:
     """The state of the current running game."""
@@ -72,8 +48,7 @@ class GameState:
 
     def __post_init__(self) -> None:
         """Get the last players and prepare the list of messages."""
-        self.last_players_ids: set[int] = self.get_players_in_game_ids()
-        self.messages: list[Message] = []
+        self.messages: list[GameMessage] = []
 
     def get_players_in_game_ids(self) -> set[int]:
         """Get the ids of the players in game."""
@@ -85,11 +60,11 @@ class GameState:
         game, grid = get_game_and_grid()
         return cls(game=game, grid=grid, last_updated=game.started_at)
 
-    async def update_forever(self, delay: float) -> None:
+    async def update_forever(self, game_messages_queue: GameMessagesQueue, delay: float) -> None:
         """Update the game state forever."""
         while True:
             await self.game.arefresh_from_db()
-            await self.update_messages()
+            await self.update_messages(game_messages_queue)
             await asyncio.sleep(delay)
 
     def get_new_players(self, ids: list[int]) -> list[PlayerInGame]:
@@ -109,53 +84,17 @@ class GameState:
             .order_by("dead_at")
         )
 
-    async def update_messages(self) -> None:
+    async def update_messages(self, queue: GameMessagesQueue) -> None:
         """Update the list of messages to display."""
-        # then we add the new ones (new players and dead ones)
-        current_players_ids = await sync_to_async(self.get_players_in_game_ids)()
-        new_players_ids = current_players_ids - self.last_players_ids
-        dead_players_ids = self.last_players_ids - current_players_ids
-
-        new_messages: list[tuple[datetime, Message]] = []
-
-        if new_players_ids:
-            new_players = await sync_to_async(self.get_new_players)(new_players_ids)
-            for pig in new_players:
-                coordinates = human_coordinates(pig.start_tile_col, pig.start_tile_row)
-                new_messages.append(
-                    (
-                        pig.started_at,
-                        Message.create(
-                            text=f"{pig.player.name} est arrivé en {coordinates}",
-                            kind=MessageKind.NEW_PLAYER,
-                            color=pig.color_object,
-                        )
-                        if pig.nb_pigs == 1
-                        else Message.create(
-                            text=f"{pig.player.name} est revenu en {coordinates}",
-                            kind=MessageKind.RESPAWN,
-                            color=pig.color_object,
-                        ),
-                    )
-                )
-
-        if dead_players_ids:
-            dead_players = await sync_to_async(self.get_dead_players)(dead_players_ids)
-            new_messages.extend(
-                (
-                    pig.dead_at,
-                    Message.create(
-                        f"{pig.player.name} a été tué par {pig.killed_by.player.name}",
-                        kind=MessageKind.DEATH,
-                        color=pig.color_object,
-                    ),
-                )
-                for pig in dead_players
-            )
-
-        self.messages.extend(message for message_date, message in sorted(new_messages, key=itemgetter(0)))
-
-        self.last_players_ids = current_players_ids
+        # pylint: disable=duplicate-code
+        while True:
+            try:
+                message = await asyncio.wait_for(queue.get(), timeout=1)
+            except asyncio.TimeoutError:
+                continue
+            else:
+                self.messages.append(message)
+                queue.task_done()
 
     async def draw_grid(self) -> bool:
         """Redraw the grid."""
@@ -236,8 +175,12 @@ class GameState:
             "reload": request.rel_url.query.get("reload", "true") != "false",
             "map_width": int(self.grid.map_size.x),
             "map_height": int(self.grid.map_size.y),
-            "map_margin_right": COORDINATES["grid-area"][1][0] - COORDINATES["grid-area"][0][0] - int(self.grid.map_size.x),
-            "map_margin_bottom": COORDINATES["grid-area"][1][1] - COORDINATES["grid-area"][0][1] - int(self.grid.map_size.y),
+            "map_margin_right": COORDINATES["grid-area"][1][0]
+            - COORDINATES["grid-area"][0][0]
+            - int(self.grid.map_size.x),
+            "map_margin_bottom": COORDINATES["grid-area"][1][1]
+            - COORDINATES["grid-area"][0][1]
+            - int(self.grid.map_size.y),
             "tile_width": self.grid.tile_width,
             "tile_height": self.grid.tile_height,
             "coordinates_horizontal": list(range(1, self.grid.nb_cols + 1)),

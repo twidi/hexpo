@@ -8,6 +8,8 @@ from typing import Any
 
 from aiohttp import web
 
+from hexpo_game.core.types import GameMessagesQueue
+
 from . import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .core.clicks_providers.foofurbot import catch_clicks as foofurbot_catch_clicks
 from .core.clicks_providers.heat import catch_clicks as heat_catch_clicks
@@ -26,7 +28,8 @@ def main() -> None:
     game, grid = get_game_and_grid()
 
     clicks_queue: ClicksQueue = asyncio.Queue()
-    chats_messages_queue: ChatMessagesQueue = asyncio.Queue()
+    chat_messages_queue: ChatMessagesQueue = asyncio.Queue()
+    game_messages_queue: GameMessagesQueue = asyncio.Queue()
     click_callback = partial(on_click, game=game, grid=grid, clicks_queue=clicks_queue)
 
     async def on_web_startup(app: web.Application) -> None:  # pylint: disable=unused-argument
@@ -35,18 +38,20 @@ def main() -> None:
         async_tasks.append(twitch_client.running_task)
         refused_ids = await init_refused_ids()
         async_tasks.append(
-            ensure_future(heat_catch_clicks(twitch_client, chats_messages_queue, refused_ids, click_callback))
+            ensure_future(heat_catch_clicks(twitch_client, chat_messages_queue, refused_ids, click_callback))
         )
         async_tasks.append(
-            ensure_future(foofurbot_catch_clicks(twitch_client, chats_messages_queue, refused_ids, click_callback))
+            ensure_future(foofurbot_catch_clicks(twitch_client, chat_messages_queue, refused_ids, click_callback))
         )
-        async_tasks.append(ensure_future(dequeue_clicks(clicks_queue, game, grid.grid, chats_messages_queue)))
-        async_tasks.append(ensure_future(twitch_client.send_messages(chats_messages_queue)))
-        async_tasks.append(ensure_future(game_state.update_forever(delay=1)))
+        async_tasks.append(
+            ensure_future(dequeue_clicks(clicks_queue, game, grid.grid, chat_messages_queue, game_messages_queue))
+        )
+        async_tasks.append(ensure_future(twitch_client.send_messages(chat_messages_queue)))
+        async_tasks.append(ensure_future(game_state.update_forever(game_messages_queue, delay=1)))
 
     async def on_web_shutdown(app: web.Application) -> None:  # pylint: disable=unused-argument
         await clicks_queue.join()
-        await chats_messages_queue.join()
+        await chat_messages_queue.join()
         for task in async_tasks:
             with suppress(Exception):
                 task.cancel()
