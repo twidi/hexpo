@@ -94,7 +94,7 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
         dead_during_turn.add(player_in_game.id)
         messages.append(
             GameMessage(
-                f"{player_in_game.player.name} a été tué par {killer.player.name}",
+                f"{player_in_game.player.name} a péri sous l'assaut de {killer.player.name}",
                 kind=GameMessageKind.DEATH,
                 color=player_in_game.color_object,
             )
@@ -344,8 +344,8 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                 ]
                 messages.append(
                     GameMessage(
-                        text=f"{player_in_game.player.name} est "
-                        f"{'arrivé' if player_in_game.first_in_game_for_player else 'revenu'} "
+                        text=f"{player_in_game.player.name} "
+                        f"{'arrive' if player_in_game.first_in_game_for_player else 'est de retour'} "
                         f"en {human_coordinates(tile.col, tile.row)}",
                         kind=GameMessageKind.SPAWN,
                         color=player_in_game.color_object,
