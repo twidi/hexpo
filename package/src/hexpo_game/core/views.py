@@ -19,6 +19,7 @@ from django.template import loader
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES
+from .constants import ClickTarget
 from .game import get_game_and_grid
 from .grid import ConcreteGrid
 from .models import Game, PlayerInGame
@@ -175,11 +176,11 @@ class GameState:
             "reload": request.rel_url.query.get("reload", "true") != "false",
             "map_width": int(self.grid.map_size.x),
             "map_height": int(self.grid.map_size.y),
-            "map_margin_right": COORDINATES["grid-area"][1][0]
-            - COORDINATES["grid-area"][0][0]
+            "map_margin_right": COORDINATES[ClickTarget.MAP][1][0]
+            - COORDINATES[ClickTarget.MAP][0][0]
             - int(self.grid.map_size.x),
-            "map_margin_bottom": COORDINATES["grid-area"][1][1]
-            - COORDINATES["grid-area"][0][1]
+            "map_margin_bottom": COORDINATES[ClickTarget.MAP][1][1]
+            - COORDINATES[ClickTarget.MAP][0][1]
             - int(self.grid.map_size.y),
             "tile_width": self.grid.tile_width,
             "tile_height": self.grid.tile_height,

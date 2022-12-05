@@ -1,8 +1,9 @@
 """Main game loop and functions."""
+
 import asyncio
 import logging
 from asyncio import Queue
-from datetime import datetime
+from datetime import timedelta
 from string import ascii_letters
 from typing import Any, NamedTuple, Optional, TypeAlias, cast
 
@@ -12,7 +13,15 @@ from django.utils import timezone
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES, get_click_target
-from .constants import NB_COLORS, PALETTE, ActionFailureReason, ActionState, ActionType
+from .constants import (
+    NB_COLORS,
+    PALETTE,
+    ActionFailureReason,
+    ActionState,
+    ActionType,
+    ClickTarget,
+    GameStep,
+)
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame
 from .twitch import ChatMessagesQueue
@@ -31,7 +40,15 @@ logger_save_action = logging.getLogger("hexpo_game.game.save_action")
 logger_play_turn = logging.getLogger("hexpo_game.game.play_turn")
 
 
-ClicksQueue: TypeAlias = Queue[tuple[Player, Optional[Tile]]]
+class PlayerClick(NamedTuple):
+    """A player click on a valid target."""
+
+    player: Player
+    target: ClickTarget
+    tile: Optional[Tile]
+
+
+ClicksQueue: TypeAlias = Queue[PlayerClick]
 
 
 def human_coordinates(col: int, row: int) -> str:
@@ -39,35 +56,133 @@ def human_coordinates(col: int, row: int) -> str:
     return f"{ascii_letters[26:][row]}‑{col + 1}"
 
 
-async def dequeue_clicks(
-    queue: ClicksQueue,
-    game: Game,
-    grid: Grid,
-    chat_messages_queue: ChatMessagesQueue,
-    game_messages_queue: GameMessagesQueue,
-) -> None:
-    """Dequeue clicks and process them."""
-    now: datetime
-    next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
-    while True:
-        if (now := timezone.now()) >= next_turn_min_at and await game.confirmed_actions_for_turn().aexists():
-            await game.anext_turn(now)
-            next_turn_min_at = game.current_turn_started_at + game.config.turn_duration
-            messages = await aplay_turn(game, grid, game.current_turn - 1)
-            for message in messages:
-                if message.chat_text is not None:
-                    await chat_messages_queue.put(message.chat_text)
-                await game_messages_queue.put(message)
-        try:
-            player, tile = await asyncio.wait_for(queue.get(), timeout=1)
-        except asyncio.TimeoutError:
-            continue
-        else:
+class GameLoop:  # pylint: disable=too-many-instance-attributes
+    """Loop of the game, step by step, forever."""
+
+    def __init__(
+        self,
+        clicks_queue: ClicksQueue,
+        game: Game,
+        grid: Grid,
+        chat_messages_queue: ChatMessagesQueue,
+        game_messages_queue: GameMessagesQueue,
+        waiting_for_players_duration: Optional[timedelta] = None,
+        collecting_actions_duration: Optional[timedelta] = None,
+        go_next_turn_if_no_actions: bool = False,
+    ):
+        """Initialize the game loop."""
+        self.clicks_queue: ClicksQueue = clicks_queue
+        self.game: Game = game
+        self.grid: Grid = grid
+        self.chat_messages_queue: ChatMessagesQueue = chat_messages_queue
+        self.game_messages_queue: GameMessagesQueue = game_messages_queue
+        self.waiting_for_players_duration: timedelta = (
+            game.config.step_waiting_for_players_duration
+            if waiting_for_players_duration is None
+            else waiting_for_players_duration
+        )
+        self.collecting_actions_duration: timedelta = (
+            game.config.step_collecting_actions_duration
+            if collecting_actions_duration is None
+            else collecting_actions_duration
+        )
+        self.go_next_turn_if_no_actions: bool = go_next_turn_if_no_actions
+        self.end_loop_event: asyncio.Event = asyncio.Event()
+        self.end_step_event: asyncio.Event = asyncio.Event()
+
+    async def step_waiting_for_players(self) -> None:
+        """Wait for new players to join the game."""
+
+    async def step_collecting_actions(self) -> None:
+        """Collect actions from players."""
+        next_turn_min_at = timezone.now() + self.collecting_actions_duration
+        while True:
+            if self.end_step_event.is_set() or self.end_loop_event.is_set():
+                break
+            if timezone.now() >= next_turn_min_at and (
+                self.go_next_turn_if_no_actions or await self.game.confirmed_actions_for_turn().aexists()
+            ):
+                break
             try:
-                await asave_action(player, game, tile)
-            except Exception:  # pylint:disable=broad-except
-                logger.exception("Error while processing click for %s", player.name)
-            queue.task_done()
+                player_click = await asyncio.wait_for(
+                    self.clicks_queue.get(), timeout=min(1.0, self.collecting_actions_duration.total_seconds())
+                )
+            except asyncio.TimeoutError:
+                continue
+            else:
+                try:
+                    if (
+                        player_click.target == ClickTarget.MAP
+                    ):  # this is temporary as we do not handle clicks on buttons yet
+                        await asave_action(player_click.player, self.game, player_click.tile)
+                except Exception:  # pylint:disable=broad-except
+                    logger.exception("Error while processing click for %s", player_click.player.name)
+                self.clicks_queue.task_done()
+
+    async def step_random_events_before(self) -> None:
+        """Generate some random events after collecting the actions and before executing them."""
+
+    async def step_executing_actions(self) -> None:
+        """Execute the actions of the current turn."""
+        messages = await aplay_turn(self.game, self.grid)
+        await self.send_messages(messages)
+
+    async def step_random_events_after(self) -> None:
+        """Generate some random events after executing the actions."""
+
+    async def send_messages(self, messages: GameMessages) -> None:
+        """Send the messages to the game messages queue."""
+        for message in messages:
+            if message.chat_text is not None:
+                await self.chat_messages_queue.put(message.chat_text)
+            await self.game_messages_queue.put(message)
+
+    async def run_current_step(self) -> None:
+        """Run the current step."""
+        self.end_step_event.clear()
+
+        step = GameStep(self.game.current_turn_step)
+        if self.game.config.multi_steps:
+            await self.game_messages_queue.put(
+                GameMessage(
+                    text=f"Current step: {step.label}",
+                    kind=GameMessageKind.GAME_STEP_CHANGED,
+                    color=Color(255, 0, 0),
+                )
+            )
+            logger.info("Current step: %s", step)
+
+        if step == GameStep.WAITING_FOR_PLAYERS:
+            await self.step_waiting_for_players()
+        elif step == GameStep.COLLECTING_ACTIONS:
+            await self.step_collecting_actions()
+        elif step == GameStep.RANDOM_EVENTS_BEFORE:
+            await self.step_random_events_before()
+        elif step == GameStep.EXECUTING_ACTIONS:
+            await self.step_executing_actions()
+        elif step == GameStep.RANDOM_EVENTS_AFTER:
+            await self.step_random_events_after()
+        else:
+            raise ValueError(f"Unknown step {step}")
+
+    async def run(self) -> None:
+        """Run the game loop."""
+        while not self.end_loop_event.is_set() and not self.game.is_over():
+            await self.run_current_step()
+            await self.game.anext_step()  # will change the turn if needed
+
+    async def end(self) -> None:
+        """End the game loop."""
+        self.end_loop_event.set()
+        self.end_step_event.set()
+
+        for _ in range(self.chat_messages_queue.qsize()):
+            self.chat_messages_queue.get_nowait()
+            self.chat_messages_queue.task_done()
+
+        for _ in range(self.game_messages_queue.qsize()):
+            self.game_messages_queue.get_nowait()
+            self.game_messages_queue.task_done()
 
 
 class PlayerInGameExtra(NamedTuple):
@@ -496,20 +611,17 @@ async def on_click(  # pylint: disable=unused-argument
 ) -> None:
     """Display a message when a click is received."""
     target, point = get_click_target(x_relative, y_relative)
-    if target == "grid-area":
-        area = COORDINATES["grid-area"]
+    if target == ClickTarget.MAP:
+        area = COORDINATES[target]
         tile = grid.get_tile_at_point(Point(x=point.x - area[0][0], y=point.y - area[0][1]))
-
-        await clicks_queue.put((player, tile))
-        if tile is not None:
-            return
-
-    logger.info("%s clicked on %s (%s)", player.name, target, point)
+        await clicks_queue.put(PlayerClick(player, target, tile))
+    elif target is not None:
+        await clicks_queue.put(PlayerClick(player, target, None))
 
 
 def get_game_and_grid() -> tuple[Game, ConcreteGrid]:
     """Get the current game."""
-    area = COORDINATES["grid-area"]
+    area = COORDINATES[ClickTarget.MAP]
     width = area[1][0] - area[0][0]
     height = area[1][1] - area[0][1]
     nb_cols, nb_rows, tile_size = ConcreteGrid.compute_grid_size(500, width, height)

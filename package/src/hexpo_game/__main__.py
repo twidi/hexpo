@@ -14,7 +14,7 @@ from . import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .core.clicks_providers.foofurbot import catch_clicks as foofurbot_catch_clicks
 from .core.clicks_providers.heat import catch_clicks as heat_catch_clicks
 from .core.clicks_providers.utils import init_refused_ids
-from .core.game import ClicksQueue, dequeue_clicks, get_game_and_grid, on_click
+from .core.game import ClicksQueue, GameLoop, get_game_and_grid, on_click
 from .core.twitch import ChatMessagesQueue, get_twitch_client, get_twitch_tokens
 from .core.views import prepare_views
 
@@ -44,7 +44,7 @@ def main() -> None:
             ensure_future(foofurbot_catch_clicks(twitch_client, chat_messages_queue, refused_ids, click_callback))
         )
         async_tasks.append(
-            ensure_future(dequeue_clicks(clicks_queue, game, grid.grid, chat_messages_queue, game_messages_queue))
+            ensure_future(GameLoop(clicks_queue, game, grid.grid, chat_messages_queue, game_messages_queue).run())
         )
         async_tasks.append(ensure_future(twitch_client.send_messages(chat_messages_queue)))
         async_tasks.append(ensure_future(game_state.update_forever(game_messages_queue, delay=1)))

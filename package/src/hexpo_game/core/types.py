@@ -164,6 +164,7 @@ class GameMessageKind(enum.Enum):
     SPAWN = "spawn"
     SPAWN_FAILED = "spawn_failed"
     DEATH = "death"
+    GAME_STEP_CHANGED = "game_step_changed"
     OTHER = "other"
 
 

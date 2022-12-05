@@ -1,4 +1,7 @@
 """Constants for the game."""
+from __future__ import annotations
+
+import enum
 from datetime import timedelta
 from typing import NamedTuple
 
@@ -21,7 +24,9 @@ class GameModeConfig(NamedTuple):
     """The configuration of a game mode."""
 
     neighbors_only: bool
-    turn_duration: timedelta
+    step_waiting_for_players_duration: timedelta
+    step_collecting_actions_duration: timedelta
+    can_end: bool
     multi_steps: bool
     player_start_level: int
     tile_start_level: float
@@ -40,7 +45,9 @@ class GameModeConfig(NamedTuple):
 GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
     GameMode.FREE_FULL: GameModeConfig(
         neighbors_only=False,
-        turn_duration=timedelta(seconds=1),
+        step_waiting_for_players_duration=timedelta(seconds=0),
+        step_collecting_actions_duration=timedelta(seconds=1),
+        can_end=False,
         multi_steps=False,
         player_start_level=3,
         tile_start_level=100.0,
@@ -57,7 +64,9 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
     ),
     GameMode.FREE_NEIGHBOR: GameModeConfig(
         neighbors_only=True,
-        turn_duration=timedelta(seconds=1),
+        step_waiting_for_players_duration=timedelta(seconds=0),
+        step_collecting_actions_duration=timedelta(seconds=1),
+        can_end=False,
         multi_steps=False,
         player_start_level=3,
         tile_start_level=100.0,
@@ -74,7 +83,9 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
     ),
     GameMode.TURN_BY_TURN: GameModeConfig(
         neighbors_only=True,
-        turn_duration=timedelta(minutes=5),
+        step_waiting_for_players_duration=timedelta(seconds=20),
+        step_collecting_actions_duration=timedelta(minutes=5),
+        can_end=True,
         multi_steps=True,
         player_start_level=1,
         tile_start_level=20.0,
@@ -146,6 +157,38 @@ class RandomEventTurnMoment(models.TextChoices):
 
     BEFORE = "before", "Before executions of actions"
     AFTER = "after", "After executions of actions"
+
+
+class GameStep(models.TextChoices):
+    """Represent the different steps of a game."""
+
+    WAITING_FOR_PLAYERS = "waiting_for_players", "Waiting for players"
+    COLLECTING_ACTIONS = "collecting_actions", "Collecting actions"
+    RANDOM_EVENTS_BEFORE = "random_events_before", "Random events before"
+    EXECUTING_ACTIONS = "executing_actions", "Executing actions"
+    RANDOM_EVENTS_AFTER = "random_events_after", "Random events after"
+
+    def next(self) -> GameStep:
+        """Return the next step."""
+        steps = list(GameStep)
+        return steps[(steps.index(self) + 1) % len(steps)]
+
+    def is_first(self) -> bool:
+        """Return True if the step is the first one."""
+        return self == FirstGameStep
+
+
+FirstGameStep = list(GameStep)[0]
+
+
+class ClickTarget(str, enum.Enum):
+    """Represent the different click targets of the game board."""
+
+    MAP = "grid-area"
+    BTN_ATTACK = "action-btn-attack"
+    BTN_DEFEND = "action-btn-defend"
+    BTN_GROW = "action-btn-grow"
+    BTN_BANK = "action-btn-bank"
 
 
 # this palette was generated glasbey (using the command next line), removing the first one, white

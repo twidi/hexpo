@@ -20,6 +20,7 @@ from .constants import (
     ActionType,
     GameMode,
     GameModeConfig,
+    GameStep,
     RandomEventTurnMoment,
 )
 from .grid import Grid
@@ -53,6 +54,9 @@ class Game(BaseModel):
     grid_nb_rows = models.PositiveIntegerField(help_text="Number of rows in the grid.")
     max_players_allowed = models.PositiveIntegerField(help_text="Maximum number of players allowed.")
     current_turn = models.PositiveIntegerField(default=0, help_text="Current turn number.")
+    current_turn_step = models.CharField(
+        max_length=255, null=False, choices=GameStep.choices, default=GameStep.WAITING_FOR_PLAYERS
+    )
     current_turn_started_at = models.DateTimeField(auto_now_add=True, help_text="When the current turn started.")
     current_turn_end = models.DateTimeField(help_text="When the current turn ends.")
 
@@ -104,6 +108,19 @@ class Game(BaseModel):
     async def anext_turn(self, started_at: Optional[datetime] = None) -> int:
         """Go to the next turn."""
         return cast(int, await sync_to_async(self.next_turn)(started_at))
+
+    def next_step(self) -> GameStep:
+        """Go to the next step."""
+        self.current_turn_step = GameStep(self.current_turn_step).next()
+        if self.current_turn_step.is_first():
+            self.next_turn()
+        else:
+            self.save(update_fields=["current_turn_step"])
+        return self.current_turn_step
+
+    async def anext_step(self) -> GameStep:
+        """Go to the next step."""
+        return cast(GameStep, await sync_to_async(self.next_step)())
 
     def get_last_tile_update_at(self) -> Optional[datetime]:
         """Get the date of the last updated tile of the game."""
@@ -180,6 +197,10 @@ class Game(BaseModel):
         if turn is None:
             turn = self.current_turn
         return self.action_set.filter(state=ActionState.CONFIRMED, turn=turn)
+
+    def is_over(self) -> bool:
+        """Check if the game is over."""
+        return self.ended_at is not None
 
 
 class Player(BaseModel):
@@ -432,6 +453,13 @@ class Action(BaseModel):
         """Set the action as successful."""
         self.state = ActionState.SUCCESS
         self.save()
+
+    @cached_property
+    def tile(self) -> Optional[Tile]:
+        """Get the tile object."""
+        if self.tile_col is None or self.tile_row is None:
+            return None
+        return Tile(self.tile_col, self.tile_row)
 
 
 class RandomEvent(BaseModel):

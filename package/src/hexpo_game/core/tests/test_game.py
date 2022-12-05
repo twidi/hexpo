@@ -1,6 +1,8 @@
 """Tests for the grid package."""
-
+# pylint: disable=too-many-lines
+import asyncio
 from datetime import timedelta
+from time import time
 from typing import Optional, Sequence, Set, cast
 
 import pytest
@@ -11,12 +13,21 @@ from hexpo_game.core.constants import (
     ActionFailureReason,
     ActionState,
     ActionType,
+    ClickTarget,
     GameMode,
+    GameStep,
 )
-from hexpo_game.core.game import aplay_turn, asave_action
+from hexpo_game.core.game import (
+    ClicksQueue,
+    GameLoop,
+    PlayerClick,
+    aplay_turn,
+    asave_action,
+)
 from hexpo_game.core.grid import Grid
 from hexpo_game.core.models import Action, Game, OccupiedTile, Player, PlayerInGame
-from hexpo_game.core.types import Color, GameMessageKind, Tile
+from hexpo_game.core.twitch import ChatMessagesQueue
+from hexpo_game.core.types import Color, GameMessageKind, GameMessagesQueue, Tile
 
 
 async def make_game(mode: GameMode = GameMode.FREE_NEIGHBOR) -> Game:
@@ -853,3 +864,138 @@ async def test_first_action_must_be_grow():
     assert (await asave_action(player4, game, Tile(0, 0), ActionType.ATTACK)) is None
     assert (await asave_action(player4, game, Tile(0, 0), ActionType.DEFEND)) is None
     assert (await asave_action(player4, game, None, ActionType.BANK)) is None
+
+
+async def create_game_loop(
+    game: Optional[Game] = None,
+    waiting_for_players_duration: Optional[timedelta] = None,
+    collecting_actions_duration: Optional[timedelta] = None,
+) -> GameLoop:
+    """Create a game loop and start it."""
+    clicks_queue: ClicksQueue = asyncio.Queue()
+    chat_messages_queue: ChatMessagesQueue = asyncio.Queue()
+    game_messages_queue: GameMessagesQueue = asyncio.Queue()
+
+    if game is None:
+        game = await make_game()
+    grid = get_grid(game)
+
+    return GameLoop(
+        clicks_queue,
+        game,
+        grid,
+        chat_messages_queue,
+        game_messages_queue,
+        waiting_for_players_duration=waiting_for_players_duration,
+        collecting_actions_duration=collecting_actions_duration,
+        go_next_turn_if_no_actions=True,
+    )
+
+
+async def start_game_loop(game_loop: GameLoop) -> asyncio.Task[None]:
+    """Start a game loop."""
+    return asyncio.create_task(game_loop.run(), name="game_loop")
+
+
+async def end_game_loop(game_loop: GameLoop, game_task: asyncio.Task[None]):
+    """End a game loop."""
+    await game_loop.end()
+    await game_task
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_game_loop():
+    """Test the game loop."""
+    game_loop = await create_game_loop(collecting_actions_duration=timedelta(seconds=0.01))
+    game_task = await start_game_loop(game_loop)
+    await asyncio.sleep(0.1)
+    await end_game_loop(game_loop, game_task)
+    assert game_loop.game.current_turn > 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_game_loop_step_collecting_actions():
+    """Test the game loop step "collecting actions"."""
+    game_loop = await create_game_loop(collecting_actions_duration=timedelta(seconds=5))
+    game_loop.game.current_turn_step = GameStep.COLLECTING_ACTIONS
+    await game_loop.game.asave()
+
+    player1 = await make_player(1)
+    player2 = await make_player(2)
+    await game_loop.clicks_queue.put(PlayerClick(player1, ClickTarget.MAP, Tile(0, 0)))
+    await game_loop.clicks_queue.put(PlayerClick(player2, ClickTarget.MAP, Tile(2, 2)))
+
+    start_time = time()
+    step_task = asyncio.create_task(game_loop.run_current_step())
+    await asyncio.sleep(0.1)
+    game_loop.end_step_event.set()
+    await step_task
+    assert time() - start_time < 2  # to ensure that the loop ended before the timeout, thanks to end_step_event
+
+    player_in_game1 = await PlayerInGame.objects.filter(player=player1, game=game_loop.game).afirst()
+    assert player_in_game1 is not None
+    actions = await sync_to_async(lambda: list(Action.objects.filter(player_in_game=player_in_game1).all()))()
+    assert len(actions) == 1
+    action1 = actions[0]
+    assert action1.action_type == ActionType.GROW
+    assert action1.tile == Tile(0, 0)
+    assert action1.state == ActionState.CONFIRMED
+
+    player_in_game2 = await PlayerInGame.objects.filter(player=player2, game=game_loop.game).afirst()
+    assert player_in_game2 is not None
+    actions = await sync_to_async(lambda: list(Action.objects.filter(player_in_game=player_in_game2).all()))()
+    assert len(actions) == 1
+    action2 = actions[0]
+    assert action2.action_type == ActionType.GROW
+    assert action2.tile == Tile(2, 2)
+    assert action2.state == ActionState.CONFIRMED
+
+    assert action2.confirmed_at > action1.confirmed_at
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_game_loop_step_executing_actions():
+    """Test the game loop step "executing actions"."""
+    game_loop = await create_game_loop(collecting_actions_duration=timedelta(seconds=0.01))
+
+    player = await make_player()
+    await game_loop.clicks_queue.put(PlayerClick(player, ClickTarget.MAP, Tile(0, 0)))
+
+    game_loop.game.current_turn_step = GameStep.COLLECTING_ACTIONS
+    await game_loop.game.asave()
+    await game_loop.run_current_step()
+
+    game_loop.game.current_turn_step = GameStep.EXECUTING_ACTIONS
+    await game_loop.game.asave()
+    await game_loop.run_current_step()
+
+    player_in_game = await PlayerInGame.objects.filter(player=player, game=game_loop.game).afirst()
+    assert player_in_game is not None
+    await assert_has_tiles(player_in_game, [Tile(0, 0)])
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_game_loop_next_step():
+    """Test the game loop next step."""
+    game_loop = await create_game_loop(collecting_actions_duration=timedelta(seconds=0.01))
+    assert game_loop.game.current_turn_step == GameStep.WAITING_FOR_PLAYERS
+    assert game_loop.game.current_turn == 0
+    await game_loop.game.anext_step()
+    assert game_loop.game.current_turn_step == GameStep.COLLECTING_ACTIONS
+    assert game_loop.game.current_turn == 0
+    await game_loop.game.anext_step()
+    assert game_loop.game.current_turn_step == GameStep.RANDOM_EVENTS_BEFORE
+    assert game_loop.game.current_turn == 0
+    await game_loop.game.anext_step()
+    assert game_loop.game.current_turn_step == GameStep.EXECUTING_ACTIONS
+    assert game_loop.game.current_turn == 0
+    await game_loop.game.anext_step()
+    assert game_loop.game.current_turn_step == GameStep.RANDOM_EVENTS_AFTER
+    assert game_loop.game.current_turn == 0
+    await game_loop.game.anext_step()
+    assert game_loop.game.current_turn_step == GameStep.WAITING_FOR_PLAYERS
+    assert game_loop.game.current_turn == 1
