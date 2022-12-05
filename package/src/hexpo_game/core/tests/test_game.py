@@ -81,12 +81,14 @@ async def make_player_in_game(
 
 
 async def make_game_and_player(
-    first_tile: Tile, game_mode: GameMode = GameMode.FREE_NEIGHBOR, player_level: int = 1
+    first_tile: Optional[Tile] = None, game_mode: GameMode = GameMode.FREE_NEIGHBOR, player_level: int = 1
 ) -> tuple[Game, Player, PlayerInGame]:
     """Make a game and a player in it."""
     game = await make_game(mode=game_mode)
     player = await make_player()
-    player_in_game = await make_player_in_game(game, player, [first_tile], player_level)
+    player_in_game = await make_player_in_game(
+        game, player, None if first_tile is None else [first_tile], player_level
+    )
     return game, player, player_in_game
 
 
@@ -819,3 +821,35 @@ async def test_welcome_chat_message_is_not_sent_twice():
     messages = await aplay_turn(game, get_grid(game))
     await assert_action_state(action, ActionState.SUCCESS)
     assert len(messages) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_first_action_must_be_grow():
+    """Test that the first action must be "grow"."""
+    game, _, player_in_game = await make_game_and_player(Tile(0, 0))
+    await aplay_turn(game, get_grid(game))
+    await game.anext_turn()
+
+    # should work whether we have a fresh PlayerInGame object
+    player_in_game2 = await make_player_in_game(game, await make_player(2))
+    assert (await asave_action(player_in_game2.player, game, Tile(0, 0), ActionType.ATTACK)) is None
+    assert (await asave_action(player_in_game2.player, game, Tile(0, 0), ActionType.DEFEND)) is None
+    assert (await asave_action(player_in_game2.player, game, None, ActionType.BANK)) is None
+
+    # or a dead one
+    player_in_game3 = await make_player_in_game(game, await make_player(3), [Tile(0, 1)])
+    await player_in_game3.adie(game.current_turn, player_in_game)
+
+    for _ in range(game.config.respawn_cooldown_turns + 1):
+        await game.anext_turn()
+
+    assert (await asave_action(player_in_game3.player, game, Tile(0, 0), ActionType.ATTACK)) is None
+    assert (await asave_action(player_in_game3.player, game, Tile(0, 0), ActionType.DEFEND)) is None
+    assert (await asave_action(player_in_game3.player, game, None, ActionType.BANK)) is None
+
+    # or no PlayerInGame object at all
+    player4 = await make_player(4)
+    assert (await asave_action(player4, game, Tile(0, 0), ActionType.ATTACK)) is None
+    assert (await asave_action(player4, game, Tile(0, 0), ActionType.DEFEND)) is None
+    assert (await asave_action(player4, game, None, ActionType.BANK)) is None
