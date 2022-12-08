@@ -20,9 +20,19 @@ class GameMode(models.TextChoices):
     TURN_BY_TURN = "turn-by-turn", "Turn by turn"
 
 
+class ActionType(models.TextChoices):
+    """Represent the different types of actions."""
+
+    ATTACK = "attack", "Attack"
+    DEFEND = "defend", "Defend"
+    GROW = "grow", "Grow"
+    BANK = "bank", "Bank"
+
+
 class GameModeConfig(NamedTuple):
     """The configuration of a game mode."""
 
+    max_players: int
     neighbors_only: bool
     step_waiting_for_players_duration: timedelta
     step_collecting_actions_duration: timedelta
@@ -44,6 +54,7 @@ class GameModeConfig(NamedTuple):
 
 GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
     GameMode.FREE_FULL: GameModeConfig(
+        max_players=50,
         neighbors_only=False,
         step_waiting_for_players_duration=timedelta(seconds=0),
         step_collecting_actions_duration=timedelta(seconds=1),
@@ -63,6 +74,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         respawn_protected_max_duration=timedelta(seconds=30),
     ),
     GameMode.FREE_NEIGHBOR: GameModeConfig(
+        max_players=50,
         neighbors_only=True,
         step_waiting_for_players_duration=timedelta(seconds=0),
         step_collecting_actions_duration=timedelta(seconds=1),
@@ -82,6 +94,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         respawn_protected_max_duration=timedelta(seconds=30),
     ),
     GameMode.TURN_BY_TURN: GameModeConfig(
+        max_players=15,
         neighbors_only=True,
         step_waiting_for_players_duration=timedelta(seconds=20),
         step_collecting_actions_duration=timedelta(minutes=5),
@@ -101,15 +114,6 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         respawn_protected_max_duration=None,
     ),
 }
-
-
-class ActionType(models.TextChoices):
-    """Represent the different types of actions."""
-
-    ATTACK = "attack", "Attack"
-    DEFEND = "defend", "Defend"
-    GROW = "grow", "Grow"
-    BANK = "bank", "Bank"
 
 
 class ActionState(models.TextChoices):
@@ -189,6 +193,15 @@ class ClickTarget(str, enum.Enum):
     BTN_DEFEND = "action-btn-defend"
     BTN_GROW = "action-btn-grow"
     BTN_BANK = "action-btn-bank"
+    BTN_CONFIRM = "action-btn-confirm"
+
+
+ButtonToAction: dict[ClickTarget, ActionType] = {
+    ClickTarget.BTN_ATTACK: ActionType.ATTACK,
+    ClickTarget.BTN_DEFEND: ActionType.DEFEND,
+    ClickTarget.BTN_GROW: ActionType.GROW,
+    ClickTarget.BTN_BANK: ActionType.BANK,
+}
 
 
 # this palette was generated glasbey (using the command next line), removing the first one, white

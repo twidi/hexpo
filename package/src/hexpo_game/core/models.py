@@ -332,6 +332,10 @@ class PlayerInGame(BaseModel):
         """Return the number of available actions for the player for the current turn."""
         return floor(self.level + self.banked_actions - self.get_nb_actions_in_turn())
 
+    def can_create_action(self) -> bool:
+        """Return whether the player can create an action or not."""
+        return self.get_available_actions() > 0
+
     def get_nb_actions_in_turn(self) -> int:
         """Return the number of actions the player has done in the current turn."""
         return self.action_set.filter(turn=self.game.current_turn).exclude(state=ActionState.CREATED).count()
@@ -443,6 +447,13 @@ class Action(BaseModel):
             ),
         ]
 
+    def confirm(self, efficiency: float = 1.0) -> None:
+        """Confirm the action."""
+        self.state = ActionState.CONFIRMED
+        self.confirmed_at = timezone.now()
+        self.efficiency = efficiency
+        self.save()
+
     def fail(self, reason: ActionFailureReason) -> None:
         """Set the action as failed."""
         self.state = ActionState.FAILURE
@@ -454,12 +465,28 @@ class Action(BaseModel):
         self.state = ActionState.SUCCESS
         self.save()
 
-    @cached_property
+    @property
     def tile(self) -> Optional[Tile]:
         """Get the tile object."""
         if self.tile_col is None or self.tile_row is None:
             return None
         return Tile(self.tile_col, self.tile_row)
+
+    def set_tile(self, tile: Tile | None) -> None:
+        """Set the tile of the action."""
+        if self.tile == tile:
+            return
+        if tile is None:
+            self.tile_col = None
+            self.tile_row = None
+        else:
+            self.tile_col = tile.col
+            self.tile_row = tile.row
+        self.save()
+
+    def is_tile_set(self) -> bool:
+        """Check if the tile of the action is set."""
+        return self.tile_col is not None and self.tile_row is not None
 
 
 class RandomEvent(BaseModel):

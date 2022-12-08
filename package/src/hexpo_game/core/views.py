@@ -51,10 +51,6 @@ class GameState:
         """Get the last players and prepare the list of messages."""
         self.messages: list[GameMessage] = []
 
-    def get_players_in_game_ids(self) -> set[int]:
-        """Get the ids of the players in game."""
-        return set(self.game.get_current_players_in_game().values_list("id", flat=True))
-
     @classmethod
     def load_from_db(cls) -> GameState:
         """Load the game state from the database."""

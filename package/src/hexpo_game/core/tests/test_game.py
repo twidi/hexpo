@@ -13,17 +13,12 @@ from hexpo_game.core.constants import (
     ActionFailureReason,
     ActionState,
     ActionType,
+    ButtonToAction,
     ClickTarget,
     GameMode,
     GameStep,
 )
-from hexpo_game.core.game import (
-    ClicksQueue,
-    GameLoop,
-    PlayerClick,
-    aplay_turn,
-    asave_action,
-)
+from hexpo_game.core.game import ClicksQueue, GameLoop, PlayerClick, aplay_turn
 from hexpo_game.core.grid import Grid
 from hexpo_game.core.models import Action, Game, OccupiedTile, Player, PlayerInGame
 from hexpo_game.core.twitch import ChatMessagesQueue
@@ -106,6 +101,53 @@ async def make_game_and_player(
 async def make_turn_game_and_player(first_tile: Tile, player_level: int = 1) -> tuple[Game, Player, PlayerInGame]:
     """Make a turn game and a player in it."""
     return await make_game_and_player(first_tile, GameMode.TURN_BY_TURN, player_level)
+
+
+def save_action(  # pylint: disable=too-many-return-statements,too-many-branches
+    player: Player, game: Game, tile: Optional[Tile], action_type: ActionType = ActionType.GROW, efficiency: float = 1
+) -> Optional[Action]:
+    """Save the player action if they clicked one a tile."""
+    if game.config.multi_steps:
+        # make player enter the game
+        GameLoop.step_waiting_for_players_handle_click(
+            PlayerClick(player, ClickTarget.MAP, tile), game, get_grid(game)
+        )
+        # make player click the button
+        action_to_button = {action_type: target for target, action_type in ButtonToAction.items()}
+        action = GameLoop.step_collecting_actions_handle_click_multi_steps(
+            PlayerClick(player, action_to_button[action_type], None), game
+        )
+        # make player click the tile if any
+        if action is not None and tile is not None:
+            action = GameLoop.step_collecting_actions_handle_click_multi_steps(
+                PlayerClick(player, ClickTarget.MAP, tile), game
+            )
+        # then make the player confirm the action
+        if action is not None:
+            action = GameLoop.step_collecting_actions_handle_click_multi_steps(
+                PlayerClick(player, ClickTarget.BTN_CONFIRM, None), game
+            )
+
+    else:
+        player_click = PlayerClick(player, ClickTarget.MAP, tile)
+        action = GameLoop.step_collecting_actions_handle_click_single_step(player_click, game)
+
+    if action is not None and action.efficiency != efficiency:
+        action.efficiency = efficiency
+        action.save()
+
+    return action
+
+
+async def asave_action(
+    player: Player,
+    game: Game,
+    tile: Optional[Tile],
+    action_type: ActionType = ActionType.GROW,
+    efficiency: float = 1.0,
+) -> Optional[Action]:
+    """Save the player action if they clicked one a tile."""
+    return cast(Optional[Action], await sync_to_async(save_action)(player, game, tile, action_type, efficiency))
 
 
 def get_grid(game: Game) -> Grid:
@@ -838,7 +880,7 @@ async def test_welcome_chat_message_is_not_sent_twice():
 @pytest.mark.django_db(transaction=True)
 async def test_first_action_must_be_grow():
     """Test that the first action must be "grow"."""
-    game, _, player_in_game = await make_game_and_player(Tile(0, 0))
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
     await aplay_turn(game, get_grid(game))
     await game.anext_turn()
 
@@ -999,3 +1041,79 @@ async def test_game_loop_next_step():
     await game_loop.game.anext_step()
     assert game_loop.game.current_turn_step == GameStep.WAITING_FOR_PLAYERS
     assert game_loop.game.current_turn == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_only_new_player_can_click_on_waiting_for_players_step():  # pylint: disable=too-many-statements
+    """Test that only new players can click on the "waiting for players" step."""
+    game = await make_game(mode=GameMode.TURN_BY_TURN)
+    game_loop = await create_game_loop(game=game, waiting_for_players_duration=timedelta(seconds=0.5))
+    game_loop.game.current_turn_step = GameStep.WAITING_FOR_PLAYERS
+    await game_loop.game.asave()
+
+    player1 = await make_player(1)
+    player2 = await make_player(2)
+    player3 = await make_player(3)
+    await game_loop.clicks_queue.put(PlayerClick(player1, ClickTarget.MAP, Tile(0, 0)))
+    await game_loop.clicks_queue.put(PlayerClick(player2, ClickTarget.MAP, Tile(2, 2)))
+    await game_loop.clicks_queue.put(PlayerClick(player3, ClickTarget.MAP, Tile(2, 2)))
+
+    await game_loop.run_current_step()
+
+    player_in_game1 = await PlayerInGame.objects.filter(player=player1, game=game_loop.game).afirst()
+    assert player_in_game1 is not None
+    actions = await sync_to_async(lambda: list(Action.objects.filter(player_in_game=player_in_game1).all()))()
+    assert len(actions) == 1
+    action = actions[0]
+    assert action.action_type == ActionType.GROW
+    assert action.tile == Tile(0, 0)
+    assert action.state == ActionState.SUCCESS
+
+    player_in_game2 = await PlayerInGame.objects.filter(player=player2, game=game_loop.game).afirst()
+    assert player_in_game2 is not None
+    actions = await sync_to_async(lambda: list(Action.objects.filter(player_in_game=player_in_game2).all()))()
+    assert len(actions) == 1
+    action = actions[0]
+    assert action.action_type == ActionType.GROW
+    assert action.tile == Tile(2, 2)
+    assert action.state == ActionState.SUCCESS
+
+    player_in_game3 = await PlayerInGame.objects.filter(player=player3, game=game_loop.game).afirst()
+    assert player_in_game3 is not None
+    actions = await sync_to_async(lambda: list(Action.objects.filter(player_in_game=player_in_game3).all()))()
+    assert len(actions) == 1
+    action3 = actions[0]
+    assert action3.action_type == ActionType.GROW
+    assert action3.tile == Tile(2, 2)
+    await assert_action_state(action3, ActionState.FAILURE, ActionFailureReason.GROW_OCCUPIED)
+
+    # next turn, only player3 would be able to join
+    await game.anext_turn()
+    game_loop.game.current_turn_step = GameStep.WAITING_FOR_PLAYERS
+    await game_loop.game.asave()
+
+    await game_loop.clicks_queue.put(PlayerClick(player1, ClickTarget.MAP, Tile(0, 1)))
+    await game_loop.clicks_queue.put(PlayerClick(player2, ClickTarget.MAP, Tile(1, 2)))
+    await game_loop.clicks_queue.put(PlayerClick(player3, ClickTarget.MAP, Tile(2, 1)))
+
+    await game_loop.run_current_step()
+
+    assert await PlayerInGame.objects.filter(player=player1, game=game_loop.game).acount() == 1
+    actions = await sync_to_async(lambda: list(Action.objects.filter(player_in_game=player_in_game1).all()))()
+    assert len(actions) == 1  # no new actions, as expected
+
+    assert await PlayerInGame.objects.filter(player=player2, game=game_loop.game).acount() == 1
+    actions = await sync_to_async(lambda: list(Action.objects.filter(player_in_game=player_in_game2).all()))()
+    assert len(actions) == 1  # no new actions, as expected
+
+    assert await PlayerInGame.objects.filter(player=player3, game=game_loop.game).acount() == 2
+    player_in_game3 = await PlayerInGame.objects.filter(player=player3, game=game_loop.game).alast()
+    assert player_in_game3 is not None
+    actions = await sync_to_async(lambda: list(Action.objects.filter(player_in_game=player_in_game3).all()))()
+    assert len(actions) == 1
+    action = actions[0]
+    assert action.action_type == ActionType.GROW
+    assert action.tile == Tile(2, 1)
+    assert action.state == ActionState.SUCCESS
+    assert player_in_game3.first_in_game_for_player is True

@@ -5,7 +5,7 @@ import logging
 from asyncio import Queue
 from datetime import timedelta
 from string import ascii_letters
-from typing import Any, NamedTuple, Optional, TypeAlias, cast
+from typing import NamedTuple, Optional, TypeAlias, cast
 
 from asgiref.sync import sync_to_async
 from django.db.models import Count
@@ -19,6 +19,7 @@ from .constants import (
     ActionFailureReason,
     ActionState,
     ActionType,
+    ButtonToAction,
     ClickTarget,
     GameStep,
 )
@@ -92,14 +93,57 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
 
     async def step_waiting_for_players(self) -> None:
         """Wait for new players to join the game."""
-
-    async def step_collecting_actions(self) -> None:
-        """Collect actions from players."""
-        next_turn_min_at = timezone.now() + self.collecting_actions_duration
+        if not self.game.config.multi_steps or await self.game.occupiedtile_set.acount() == self.grid.nb_tiles:
+            return
+        end_step_at = timezone.now() + self.waiting_for_players_duration
         while True:
             if self.end_step_event.is_set() or self.end_loop_event.is_set():
                 break
-            if timezone.now() >= next_turn_min_at and (
+            if timezone.now() >= end_step_at:
+                break
+            try:
+                player_click = await asyncio.wait_for(
+                    self.clicks_queue.get(), timeout=min(1.0, self.waiting_for_players_duration.total_seconds())
+                )
+            except asyncio.TimeoutError:
+                continue
+            else:
+                try:
+                    messages = await sync_to_async(self.step_waiting_for_players_handle_click)(
+                        player_click, self.game, self.grid
+                    )
+                    if messages:
+                        await self.send_messages(messages)
+                except Exception:  # pylint:disable=broad-except
+                    logger.exception("Error while processing click for %s", player_click.player.name)
+                self.clicks_queue.task_done()
+
+    @classmethod
+    def step_waiting_for_players_handle_click(cls, player_click: PlayerClick, game: Game, grid: Grid) -> GameMessages:
+        """Handle a click during the waiting for players step."""
+        player, target, tile = player_click.player, player_click.target, player_click.tile
+        if target != ClickTarget.MAP or tile is None:
+            return []
+        player_in_game = get_or_create_player_in_game(player, game, allow_new=True, allow_existing=False)
+        if player_in_game is None:
+            return []
+        # a user entering the game is like in the single step mode where the user clicks a tile
+        action = cls.step_collecting_actions_handle_click_single_step(player_click, game)
+        if action is None:
+            return []
+        messages = play_turn(game, grid)
+        action.refresh_from_db()
+        if action.state == ActionState.FAILURE:
+            player_in_game.die()
+        return messages
+
+    async def step_collecting_actions(self) -> None:  # pylint: disable=too-many-branches
+        """Collect actions from players."""
+        end_step_at = timezone.now() + self.collecting_actions_duration
+        while True:
+            if self.end_step_event.is_set() or self.end_loop_event.is_set():
+                break
+            if timezone.now() >= end_step_at and (
                 self.go_next_turn_if_no_actions or await self.game.confirmed_actions_for_turn().aexists()
             ):
                 break
@@ -111,13 +155,55 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
                 continue
             else:
                 try:
-                    if (
-                        player_click.target == ClickTarget.MAP
-                    ):  # this is temporary as we do not handle clicks on buttons yet
-                        await asave_action(player_click.player, self.game, player_click.tile)
+                    if self.game.config.multi_steps:
+                        await sync_to_async(self.step_collecting_actions_handle_click_multi_steps)(
+                            player_click, self.game
+                        )
+                    else:
+                        await sync_to_async(self.step_collecting_actions_handle_click_single_step)(
+                            player_click, self.game
+                        )
                 except Exception:  # pylint:disable=broad-except
                     logger.exception("Error while processing click for %s", player_click.player.name)
                 self.clicks_queue.task_done()
+
+    @classmethod
+    def step_collecting_actions_handle_click_single_step(
+        cls, player_click: PlayerClick, game: Game
+    ) -> Optional[Action]:
+        """Handle a click for a single step game."""
+        player, target, tile = player_click.player, player_click.target, player_click.tile
+        if target != ClickTarget.MAP or tile is None:
+            return None
+        player_in_game = get_or_create_player_in_game(player, game, allow_new=True, allow_existing=True)
+        if player_in_game is None:
+            return None
+        if not can_create_action(player_in_game):
+            return None
+        if (action := create_or_update_action(player_in_game, game, ActionType.GROW)) is None:
+            return None
+        set_action_tile(player_in_game, game, tile, action=action)
+        confirm_action(player_in_game, game, action=action)
+        return action
+
+    @classmethod
+    def step_collecting_actions_handle_click_multi_steps(
+        cls, player_click: PlayerClick, game: Game
+    ) -> Optional[Action]:
+        """Handle a click for a multi steps game."""
+        player, target, tile = player_click.player, player_click.target, player_click.tile
+        player_in_game = get_or_create_player_in_game(player, game, allow_new=False, allow_existing=True)
+        if player_in_game is None:
+            return None
+        if not can_create_action(player_in_game):
+            return None
+        if (action_type := ButtonToAction.get(target)) is not None:
+            return create_or_update_action(player_in_game, game, action_type)
+        if target == ClickTarget.MAP and tile is not None:
+            return set_action_tile(player_in_game, game, tile)
+        if target == ClickTarget.BTN_CONFIRM:
+            return confirm_action(player_in_game, game)
+        return None
 
     async def step_random_events_before(self) -> None:
         """Generate some random events after collecting the actions and before executing them."""
@@ -183,12 +269,6 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
         for _ in range(self.game_messages_queue.qsize()):
             self.game_messages_queue.get_nowait()
             self.game_messages_queue.task_done()
-
-
-class PlayerInGameExtra(NamedTuple):
-    """A type to help mypy understand data retrieved with annotated values from the database."""
-
-    nb_tiles: int
 
 
 def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-statements
@@ -470,7 +550,7 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                         else (
                             f"Bienvenue dans la partie @{player_in_game.player.name} ! "
                             f"Tu commences en {human_coordinates(tile.col, tile.row)} ! "
-                            "Au prochain tour tu pourras t'aggrandir, te défendre ou attaquer !"
+                            "Tu vas bientôt pouvoir t'aggrandir, te défendre ou attaquer !"
                         )
                         if game.config.multi_steps
                         else (
@@ -506,18 +586,10 @@ def get_free_color(game: Game, default: Color) -> Color:
     return free_colors.pop() if free_colors else default
 
 
-def save_action(  # pylint: disable=too-many-return-statements,too-many-branches
-    player: Player, game: Game, tile: Optional[Tile], action_type: ActionType = ActionType.GROW, efficiency: float = 1
-) -> Optional[Action]:
-    """Save the player action if they clicked one a tile."""
-    if tile is None and action_type != ActionType.BANK:
-        return None
-
-    default_player_attrs = dict(  # noqa: C408
-        started_turn=game.current_turn,
-        level=game.config.player_start_level,
-    )
-
+def get_or_create_player_in_game(
+    player: Player, game: Game, allow_new: bool, allow_existing: bool
+) -> Optional[PlayerInGame]:
+    """Get the player in game, or create it if not existing."""
     player_in_game = (
         game.playeringame_set.filter(
             player=player,
@@ -526,84 +598,124 @@ def save_action(  # pylint: disable=too-many-return-statements,too-many-branches
         .first()
     )
 
-    action_log_attrs: tuple[Any, ...]
-    if action_type == ActionType.GROW:
-        action_log = "grows in %s"
-        action_log_attrs = (player.name, tile)
-    elif action_type == ActionType.ATTACK:
-        action_log = "attacks %s"
-        action_log_attrs = (player.name, tile)
-    elif action_type == ActionType.DEFEND:
-        action_log = "defends %s"
-        action_log_attrs = (player.name, tile)
-    else:
-        action_log = "bank"
-        action_log_attrs = (player.name,)
+    if player_in_game is not None and player_in_game.ended_turn is None:
+        return player_in_game if allow_existing else None
 
-    if player_in_game is None:
-        if action_type != ActionType.GROW:
-            logger_save_action.warning(f"%s cannot {action_log} AS A NEW PLAYER", *action_log_attrs)
-            return None
-        player_in_game = PlayerInGame.objects.create(
-            player=player,
-            game=game,
-            color=get_free_color(game, PALETTE[player.id % NB_COLORS]).as_hex,
-            first_in_game_for_player=True,
-            **default_player_attrs,
-        )
-        logger_save_action.warning(f"%s {action_log} AND IS A NEW PLAYER", *action_log_attrs)
-    elif player_in_game.ended_turn is not None:
-        if not player_in_game.can_respawn():
-            logger_save_action.warning(f"%s {action_log} but IS STILL DEAD", *action_log_attrs)
-            return None
-        if action_type != ActionType.GROW:
-            logger_save_action.warning(f"%s cannot {action_log} AS A RETURNING PLAYER", *action_log_attrs)
-            return None
-
-        player_in_game = PlayerInGame.objects.create(
-            player=player,
-            game=game,
-            color=get_free_color(game, player_in_game.color_object).as_hex,
-            first_in_game_for_player=False,
-            **default_player_attrs,
-        )
-        logger_save_action.warning(f"%s {action_log} AND IS ALIVE AGAIN", *action_log_attrs)
-    elif player_in_game.get_available_actions() <= 0:
-        logger_save_action.warning(f"%s {action_log} BUT HAS NOT ACTIONS LEFT", *action_log_attrs)
+    if not allow_new:
         return None
-    else:
-        if player_in_game.start_tile_col is None and action_type != ActionType.GROW:
-            logger_save_action.warning(
-                f"%s cannot {action_log} AS A %s PLAYER",
-                *action_log_attrs,
-                "NEW" if player_in_game.first_in_game_for_player else "RETURNING",
-            )
-            return None
 
-        logger_save_action.info(f"%s {action_log}", *action_log_attrs)
+    if game.get_current_players_in_game().count() >= game.config.max_players:
+        logger.warning("%s tried to join but the game is full", player.name)
+        return None
 
-    return Action.objects.create(
+    if player_in_game is not None and not player_in_game.can_respawn():
+        logger_save_action.warning("%s is still dead", player.name)
+        return None
+
+    logger.warning("%s is a %s player", player.name, "NEW" if player_in_game is None else "returning")
+    return PlayerInGame.objects.create(
+        player=player,
         game=game,
-        player_in_game=player_in_game,
-        turn=game.current_turn,
-        action_type=action_type,
-        tile_col=tile.col if tile else None,
-        tile_row=tile.row if tile else None,
-        confirmed_at=timezone.now(),
-        state=ActionState.CONFIRMED,
-        efficiency=efficiency,
+        color=get_free_color(game, PALETTE[player.id % NB_COLORS]).as_hex,
+        first_in_game_for_player=player_in_game is None
+        or (player_in_game.first_in_game_for_player and player_in_game.start_tile_col is None),
+        started_turn=game.current_turn,
+        level=game.config.player_start_level,
     )
 
 
-async def asave_action(
-    player: Player,
-    game: Game,
-    tile: Optional[Tile],
-    action_type: ActionType = ActionType.GROW,
-    efficiency: float = 1.0,
+def can_create_action(player_in_game: PlayerInGame) -> bool:
+    """Check if the player can create an action."""
+    if not player_in_game.can_create_action():
+        logger_save_action.warning("%s has no action left", player_in_game.player.name)
+        return False
+    return True
+
+
+def get_current_action(player_in_game: PlayerInGame, game: Game) -> Optional[Action]:
+    """Get the current action of a player in game."""
+    return (
+        player_in_game.action_set.filter(
+            turn=game.current_turn,
+            state=ActionState.CREATED,
+        )
+        .order_by("-id")
+        .first()
+    )
+
+
+def set_action_tile(
+    player_in_game: PlayerInGame, game: Game, tile: Tile, action: Optional[Action] = None
 ) -> Optional[Action]:
-    """Save the player action if they clicked one a tile."""
-    return cast(Optional[Action], await sync_to_async(save_action)(player, game, tile, action_type, efficiency))
+    """Set the tile of the action currently being created."""
+    if action is None:
+        action = get_current_action(player_in_game, game)
+    if action is None:
+        logger.warning("%s has no current action", player_in_game.player.name)
+        return None
+    if action.action_type == ActionType.BANK:
+        logger.warning(
+            "%s has a %s action so cannot set a tile", player_in_game.player.name, ActionType(action.action_type).name
+        )
+        return None
+    action.set_tile(tile)
+    logger.info("%s set tile %s for action %s", player_in_game.player.name, tile, ActionType(action.action_type).name)
+    return action
+
+
+def create_or_update_action(player_in_game: PlayerInGame, game: Game, action_type: ActionType) -> Optional[Action]:
+    """Create or update an action for a player in game."""
+    if player_in_game.start_tile_col is None and action_type != ActionType.GROW:
+        logger_save_action.warning(
+            "%s cannot %s as a %s player",
+            player_in_game.player.name,
+            ActionType(action_type).name,
+            "new" if player_in_game.first_in_game_for_player else "returning",
+        )
+        return None
+    action = get_current_action(player_in_game, game)
+    if action is not None:
+        action.set_tile(None)
+        action.action_type = action_type
+        logger.info("%s updated its action to a %s action", player_in_game.player.name, action_type.name)
+        return action
+    logger.info("%s created a %s action", player_in_game.player.name, action_type.name)
+    return Action.objects.create(
+        player_in_game=player_in_game,
+        game=game,
+        turn=game.current_turn,
+        action_type=action_type,
+        state=ActionState.CREATED,
+    )
+
+
+def confirm_action(
+    player_in_game: PlayerInGame, game: Game, efficiency: float = 1.0, action: Optional[Action] = None
+) -> Optional[Action]:
+    """Confirm the current action of a player in game."""
+    if action is None:
+        action = get_current_action(player_in_game, game)
+    if action is None:
+        logger.warning("%s has no current action", player_in_game.player.name)
+        return None
+    if action.action_type != ActionType.BANK and not action.is_tile_set():
+        logger.warning(
+            "%s has no tile set for its current %s action",
+            player_in_game.player.name,
+            ActionType(action.action_type).name,
+        )
+        return None
+    action.confirm(efficiency)
+    if action.action_type == ActionType.BANK:
+        logger.info("%s confirmed its %s action", player_in_game.player.name, ActionType(action.action_type).name)
+    else:
+        logger.info(
+            "%s confirmed its %s action on %s",
+            player_in_game.player.name,
+            ActionType(action.action_type).name,
+            action.tile,
+        )
+    return action
 
 
 async def on_click(  # pylint: disable=unused-argument
