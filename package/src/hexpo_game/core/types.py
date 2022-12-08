@@ -5,6 +5,7 @@ from __future__ import annotations
 import enum
 from asyncio import Queue
 from random import randint
+from string import ascii_letters
 from textwrap import wrap
 from typing import Any, NamedTuple, Optional, TypeAlias, cast
 
@@ -98,6 +99,10 @@ class Tile(NamedTuple):
             TileDistanceCache[ordered_tiles] = self.to_axial().distance(other.to_axial())
         return TileDistanceCache[ordered_tiles]
 
+    def for_human(self) -> str:
+        """Return the tile as a human-readable string."""
+        return f"{ascii_letters[26:][self.row]}‑{self.col + 1}"
+
 
 class AxialCoordinate(NamedTuple):
     """Tile coordinate in the axial coordinate space."""
@@ -165,6 +170,7 @@ class GameMessageKind(enum.Enum):
     SPAWN_FAILED = "spawn_failed"
     DEATH = "death"
     GAME_STEP_CHANGED = "game_step_changed"
+    ACTION = "action"
     OTHER = "other"
 
 
