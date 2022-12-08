@@ -1117,3 +1117,34 @@ async def test_only_new_player_can_click_on_waiting_for_players_step():  # pylin
     assert action.tile == Tile(2, 1)
     assert action.state == ActionState.SUCCESS
     assert player_in_game3.first_in_game_for_player is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_actions_efficiency_during_a_turn():
+    """Test that actions are executed in the correct order."""
+    game_loop = await create_game_loop()
+
+    player_in_game = await make_player_in_game(game=game_loop.game, player=await make_player(1), level=5)
+    tiles_and_delay = [(Tile(0, 0), 0), (Tile(1, 0), 1), (Tile(0, 1), 3), (Tile(1, 1), 6), (Tile(2, 0), 10)]
+    start_time = timezone.now()
+    for tile, delay in tiles_and_delay:
+        await Action.objects.acreate(
+            player_in_game=player_in_game,
+            game=game_loop.game,
+            turn=game_loop.game.current_turn,
+            action_type=ActionType.GROW,
+            tile_col=tile.col,
+            tile_row=tile.row,
+            state=ActionState.CONFIRMED,
+            confirmed_at=start_time + timedelta(seconds=delay),
+        )
+    await sync_to_async(game_loop.step_collecting_actions_compute_efficiency)(game_loop.game)
+    actions = await sync_to_async(
+        lambda: list(game_loop.game.confirmed_actions_for_turn(game_loop.game.current_turn).order_by("confirmed_at"))
+    )()
+    assert actions[0].efficiency == 1.0
+    assert actions[1].efficiency == 0.95
+    assert actions[2].efficiency == 0.85
+    assert actions[3].efficiency == 0.7
+    assert actions[4].efficiency == 0.5

@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from asyncio import Queue
-from datetime import timedelta
+from datetime import datetime, timedelta
 from string import ascii_letters
 from typing import NamedTuple, Optional, TypeAlias, cast
 
@@ -167,6 +167,9 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
                     logger.exception("Error while processing click for %s", player_click.player.name)
                 self.clicks_queue.task_done()
 
+        if self.game.config.multi_steps:
+            await sync_to_async(self.step_collecting_actions_compute_efficiency)(self.game)
+
     @classmethod
     def step_collecting_actions_handle_click_single_step(
         cls, player_click: PlayerClick, game: Game
@@ -204,6 +207,43 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
         if target == ClickTarget.BTN_CONFIRM:
             return confirm_action(player_in_game, game)
         return None
+
+    @classmethod
+    def step_collecting_actions_compute_efficiency(cls, game: Game) -> None:
+        """Compute the efficiency of the actions.
+
+        We assign an efficiency for each action, the oldest action has the max efficiency and the newest the min,
+        the efficiency is decreasing using the difference in time between two actions.
+        """
+        actions = list(game.confirmed_actions_for_turn(game.current_turn).order_by("confirmed_at"))
+        if len(actions) <= 1:
+            return
+        # we can cast to datetime because we have a constraint on the database to ensure that confirmed_at is not null
+        # when the state is ActionState.CONFIRMED
+        first_date = cast(datetime, actions[0].confirmed_at)
+        last_date = cast(datetime, actions[-1].confirmed_at)
+        if first_date == last_date:
+            return
+        max_efficiency = 1
+        min_efficiency = 0.5
+        if len(actions) == 2:
+            actions[0].efficiency = max_efficiency
+            actions[0].save()
+            actions[1].efficiency = min_efficiency
+            actions[1].save()
+            return
+        total_duration = (last_date - first_date).total_seconds()
+        for i, action in enumerate(actions):
+            if i == 0:
+                action.efficiency = max_efficiency
+            else:
+                action.efficiency = (
+                    max_efficiency
+                    - (max_efficiency - min_efficiency)
+                    * (cast(datetime, action.confirmed_at) - first_date).total_seconds()
+                    / total_duration
+                )
+            action.save()
 
     async def step_random_events_before(self) -> None:
         """Generate some random events after collecting the actions and before executing them."""
