@@ -30,7 +30,10 @@ def main() -> None:
     clicks_queue: ClicksQueue = asyncio.Queue()
     chat_messages_queue: ChatMessagesQueue = asyncio.Queue()
     game_messages_queue: GameMessagesQueue = asyncio.Queue()
-    click_callback = partial(on_click, game=game, grid=grid, clicks_queue=clicks_queue)
+    clicks_allowed_event = asyncio.Event()
+    click_callback = partial(
+        on_click, game=game, grid=grid, clicks_queue=clicks_queue, clicks_allowed_event=clicks_allowed_event
+    )
 
     async def on_web_startup(app: web.Application) -> None:  # pylint: disable=unused-argument
         token, refresh_token = await get_twitch_tokens()
@@ -44,7 +47,11 @@ def main() -> None:
             ensure_future(foofurbot_catch_clicks(twitch_client, chat_messages_queue, refused_ids, click_callback))
         )
         async_tasks.append(
-            ensure_future(GameLoop(clicks_queue, game, grid.grid, chat_messages_queue, game_messages_queue).run())
+            ensure_future(
+                GameLoop(
+                    clicks_queue, clicks_allowed_event, game, grid.grid, chat_messages_queue, game_messages_queue
+                ).run()
+            )
         )
         async_tasks.append(ensure_future(twitch_client.send_messages(chat_messages_queue)))
         async_tasks.append(ensure_future(game_state.update_forever(game_messages_queue, delay=1)))

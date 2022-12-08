@@ -917,6 +917,7 @@ async def create_game_loop(
     clicks_queue: ClicksQueue = asyncio.Queue()
     chat_messages_queue: ChatMessagesQueue = asyncio.Queue()
     game_messages_queue: GameMessagesQueue = asyncio.Queue()
+    clicks_allowed_event = asyncio.Event()
 
     if game is None:
         game = await make_game()
@@ -924,6 +925,7 @@ async def create_game_loop(
 
     return GameLoop(
         clicks_queue,
+        clicks_allowed_event,
         game,
         grid,
         chat_messages_queue,

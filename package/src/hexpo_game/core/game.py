@@ -3,7 +3,9 @@
 import asyncio
 import logging
 from asyncio import Queue
+from contextlib import suppress
 from datetime import datetime, timedelta
+from queue import Empty
 from string import ascii_letters
 from typing import NamedTuple, Optional, TypeAlias, cast
 
@@ -63,6 +65,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
     def __init__(
         self,
         clicks_queue: ClicksQueue,
+        clicks_allowed_event: asyncio.Event,
         game: Game,
         grid: Grid,
         chat_messages_queue: ChatMessagesQueue,
@@ -73,6 +76,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
     ):
         """Initialize the game loop."""
         self.clicks_queue: ClicksQueue = clicks_queue
+        self.clicks_allowed_event: asyncio.Event = clicks_allowed_event
         self.game: Game = game
         self.grid: Grid = grid
         self.chat_messages_queue: ChatMessagesQueue = chat_messages_queue
@@ -95,6 +99,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
         """Wait for new players to join the game."""
         if not self.game.config.multi_steps or await self.game.occupiedtile_set.acount() == self.grid.nb_tiles:
             return
+        self.clicks_allowed_event.set()
         end_step_at = timezone.now() + self.waiting_for_players_duration
         while True:
             if self.end_step_event.is_set() or self.end_loop_event.is_set():
@@ -139,6 +144,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
 
     async def step_collecting_actions(self) -> None:  # pylint: disable=too-many-branches
         """Collect actions from players."""
+        self.clicks_allowed_event.set()
         end_step_at = timezone.now() + self.collecting_actions_duration
         while True:
             if self.end_step_event.is_set() or self.end_loop_event.is_set():
@@ -290,6 +296,12 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
             await self.step_random_events_after()
         else:
             raise ValueError(f"Unknown step {step}")
+
+        self.clicks_allowed_event.clear()
+        with suppress(Empty):
+            for _ in range(self.clicks_queue.qsize()):
+                self.clicks_queue.get_nowait()
+                self.clicks_queue.task_done()
 
     async def run(self) -> None:
         """Run the game loop."""
@@ -759,9 +771,17 @@ def confirm_action(
 
 
 async def on_click(  # pylint: disable=unused-argument
-    player: Player, x_relative: float, y_relative: float, game: Game, grid: ConcreteGrid, clicks_queue: ClicksQueue
+    player: Player,
+    x_relative: float,
+    y_relative: float,
+    game: Game,
+    grid: ConcreteGrid,
+    clicks_queue: ClicksQueue,
+    clicks_allowed_event: asyncio.Event,
 ) -> None:
     """Display a message when a click is received."""
+    if not clicks_allowed_event.is_set():
+        return
     target, point = get_click_target(x_relative, y_relative)
     if target == ClickTarget.MAP:
         area = COORDINATES[target]
