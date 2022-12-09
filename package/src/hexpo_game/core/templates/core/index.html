@@ -4,22 +4,35 @@
         <link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet'>
         <link rel="stylesheet" type="text/css" href="/statics/style.css?ts={{ timestamp }}">
     </head>
-    <body data-reload="{% if reload %}true{% else %}false{% endif %}" id="page-index" style="--map-width: {{ map_width }}px; --map-height: {{ map_height }}px; --tile-width: {{ tile_width }}px; --tile-height: {{ tile_height }}px; --map-margin-right: {{ map_margin_right }}px; --map-margin-bottom: {{ map_margin_bottom }}px;">
+    <body data-reload="{% if reload %}true{% else %}false{% endif %}" id="page-index" style="--map-width: {{ map_width }}px; --map-height: {{ map_height }}px; --tile-width: {{ tile_width }}px; --tile-height: {{ tile_height }}px; --map-margin-right: {{ map_margin_right }}px; --map-margin-bottom: {{ map_margin_bottom }}px;"{% if game.config.multi_steps %} class="multi-steps"{% endif %}>
         <div id="main-container">
             <div id="empty-top"></div>
-            <div id="top-bar">
-                <div id="instructions">
-                    <p>1. Click sur <img style="vertical-align: middle" width="50" height="50" src="/statics/extension-heat.png" style="grid-area: icon;"/> à droite du stream, puis "Gérez vos accès", puis "Accorder" (pc/mac seulement).</p>
-                    <p>2. Clique sur une case puis autour pour agrandir ton territoire (le délai est normal). <strong>!game</strong></p>
-                </div>
+            <div id="turn-step">
+                {% include "core/include_turn_step.html" %}
             </div>
-            <div id="top-left-corner"></div>
+            <div id="top-bar">
+                {% if game.config.multi_steps %}
+                    <div id="step-instructions">
+                        {% include "core/include_step_instructions.html" %}
+                    </div>
+                    <div id="general-instructions">
+                        <p>1. Clique sur <img style="vertical-align: middle" width="50" height="50" src="/statics/extension-heat.png" style="grid-area: icon;"/> à droite du stream, puis "Gérez vos accès", puis "Accorder" (pc/mac seulement).</p>
+                        <p>2. Puis attends l'étape "{{ GameStep.WAITING_FOR_PLAYERS.label }}" (à gauche). <strong><em>!game</em></strong> pour plus de détails.</p>
+                    </div>
+                {% else %}
+                    <div id="general-instructions">
+                        <p>1. Clique sur <img style="vertical-align: middle" width="50" height="50" src="/statics/extension-heat.png" style="grid-area: icon;"/> à droite du stream, puis "Gérez vos accès", puis "Accorder" (pc/mac seulement).</p>
+                        <p>2. Clique sur une case puis autour pour agrandir ton territoire (le délai est normal). <strong>!game</strong></p>
+                    </div>
+                {% endif %}
+            </div>
             <div id="left-bar">
                 <div id="actions">
-                    <div class="action-btn positioned" id="action-btn-attack">Attack</div>
-                    <div class="action-btn positioned" id="action-btn-defend">Defend</div>
-                    <div class="action-btn positioned" id="action-btn-grow">Grow</div>
-                    <div class="action-btn positioned" id="action-btn-bank">Bank</div>
+                    <div class="action-btn positioned" id="action-btn-attack">Attaquer</div>
+                    <div class="action-btn positioned" id="action-btn-defend">Défendre</div>
+                    <div class="action-btn positioned" id="action-btn-grow">Conquérir</div>
+                    <div class="action-btn positioned" id="action-btn-bank">Banquer</div>
+                    <div class="action-btn positioned confirm-symbol" id="action-btn-confirm">✔️</div>
                 </div>
                 <div id="players">
                     {% include "core/include_players.html" with players=players %}

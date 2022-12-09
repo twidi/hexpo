@@ -8,7 +8,7 @@ if (show_positioned_sizes) {
     let log = '\n';
     document.querySelectorAll('.positioned').forEach((el) => {
         const boundingRect = el.getBoundingClientRect();
-        log += `    '${el.id}': ((${boundingRect.left}, ${boundingRect.top}), (${boundingRect.right}, ${boundingRect.bottom})),\n`;
+        log += `    '${el.id}': ((${Math.round(boundingRect.left)}, ${Math.round(boundingRect.top)}), (${Math.round(boundingRect.right)}, ${Math.round(boundingRect.bottom)})),\n`;
     });
     let grid_area = document.querySelector('#grid-area');
     grid_area.classList.add('debug');

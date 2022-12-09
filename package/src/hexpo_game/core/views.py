@@ -19,7 +19,7 @@ from django.template import loader
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES
-from .constants import ClickTarget
+from .constants import ClickTarget, GameStep
 from .game import get_game_and_grid
 from .grid import ConcreteGrid
 from .models import Game, PlayerInGame
@@ -118,7 +118,7 @@ class GameState:
 
     def get_players_context(self) -> list[dict[str, Any]]:
         """Get the context for the players left bar."""
-        players_in_game = self.game.get_players_in_game_for_leader_board(15)
+        players_in_game = self.game.get_players_in_game_for_leader_board(15 if self.game.config.multi_steps else 16)
 
         return [
             {
@@ -182,6 +182,9 @@ class GameState:
             "tile_height": self.grid.tile_height,
             "coordinates_horizontal": list(range(1, self.grid.nb_cols + 1)),
             "coordinates_vertical": ascii_letters[26:][: self.grid.nb_rows],
+            "game": self.game,
+            "turn_step": GameStep(self.game.current_turn_step),
+            "GameStep": GameStep,
         }
 
         html = loader.render_to_string("core/index.html", context)

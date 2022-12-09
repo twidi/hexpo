@@ -1,0 +1,7 @@
+<span id="turn-number">Tour #<span>{{ game.current_turn }}</span></span>
+{% if game.config.multi_steps %}
+<span id="turn-step-name"><span>&lt;&nbsp;</span>{{ turn_step.label }}<span>&nbsp;&gt;</span></span>
+{% if turn_step == GameStep.WAITING_FOR_PLAYERS or turn_step == GameStep.COLLECTING_ACTIONS %}
+    <span id="turn-step-time">{{ time_left }}tic tac</span>
+{% endif %}
+{% endif %}

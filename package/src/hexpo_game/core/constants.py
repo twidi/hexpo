@@ -166,11 +166,11 @@ class RandomEventTurnMoment(models.TextChoices):
 class GameStep(models.TextChoices):
     """Represent the different steps of a game."""
 
-    WAITING_FOR_PLAYERS = "waiting_for_players", "Waiting for players"
-    COLLECTING_ACTIONS = "collecting_actions", "Collecting actions"
-    RANDOM_EVENTS_BEFORE = "random_events_before", "Random events before"
-    EXECUTING_ACTIONS = "executing_actions", "Executing actions"
-    RANDOM_EVENTS_AFTER = "random_events_after", "Random events after"
+    WAITING_FOR_PLAYERS = "waiting_for_players", "Attente de nouveaux joueurs"
+    COLLECTING_ACTIONS = "collecting_actions", "Préparation des actions"
+    RANDOM_EVENTS_BEFORE = "random_events_before", "Évènements aléatoires"
+    EXECUTING_ACTIONS = "executing_actions", "Éxécution des actions"
+    RANDOM_EVENTS_AFTER = "random_events_after", "Évènements aléatoires"
 
     def next(self) -> GameStep:
         """Return the next step."""

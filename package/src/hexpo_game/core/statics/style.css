@@ -68,47 +68,59 @@ body#page-players #main-container {
     border-bottom: solid 2px var(--bright-color);
 }
 #top-bar {
-    padding-left: 20px;
-    padding-right: 20px;
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: stretch;
     grid-area: top-bar;
     background-color: var(--shell-background);
     box-shadow: 0 14px 11px 2px var(--shell-shadow);
     font-size: 32px;
+    gap: 10px;
 }
-#instructions {
-    grid-area: instructions;
+body.multi-steps #top-bar {
+    justify-content: space-between;
+    font-size: 24px;
+}
+#general-instructions {
+    padding-inline: 20px;
+}
+#general-instructions, #step-instructions {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    justify-content: space-evenly;
 }
-
-#main-name {
+body.multi-steps #top-bar #general-instructions {
+    background-color: var(--bright-color);
+    color: var(--shell-background);
+}
+#step-instructions {
+    padding-left: 20px;
+}
+#turn-step {
+    background-color: var(--shell-background);
+    grid-area: top-left-corner;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    padding-right: 10px;
+}
+#turn-step-name {
+    font-size: 28px;
+}
+#turn-step-name span {
     color: var(--bright-color);
     font-weight: bold;
-    font-style: italic;
 }
-#main-name-later {
-  display: inline-block;
-  position: relative;
-}
-#main-name-later:after {
-    content: "";
+#turn-number {
     position: absolute;
-    border: 1px solid var(--text-color);
-    top: 50%;
-    left: -10%;
-    right: -10%;
-    transform: rotate(-9deg)
+    top: 5px;
+    left: 5px;
 }
-
-
-#top-left-corner {
-    grid-area: top-left-corner;
-    background-color: var(--shell-background);
-    z-index: 1;
+#turn-step-time {
+    position: absolute;
+    bottom: 0;
+    right: 10px;
 }
 
 #left-bar {
@@ -122,17 +134,30 @@ body#page-players #main-container {
 
 #actions {
     display: flex;
-    margin: 10px;
-    gap: 10px;
-    visibility: hidden;
-}
-.action-btn {
-    width: 60px;
-    color: #ccc;
     padding: 10px;
-    border: 1px solid red;
+    gap: 10px;
+    width: 100%;
+    justify-content: stretch;
+    align-items: center;
+}
+body:not(.multi-steps) #actions {
+    display: none;
+}
+.action-btn:not(#action-btn-confirm) {
+    color: var(--text-color);
+    padding: 10px 3px;
+    border: 1px solid var(--bright-color);
     text-align: center;
-    background-color: #000;
+    background-color: #11091f;
+}
+.confirm {
+    color: transparent;
+    text-shadow: 0 0 0 #009200;
+}
+#action-btn-confirm {
+    text-align: center;
+    font-size: 24px;
+    flex-grow: 2;
 }
 
 #players {
