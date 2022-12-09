@@ -150,7 +150,7 @@ body:not(.multi-steps) #actions {
     text-align: center;
     background-color: #11091f;
 }
-.confirm {
+.confirm-symbol {
     color: transparent;
     text-shadow: 0 0 0 #009200;
 }
