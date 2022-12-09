@@ -143,6 +143,9 @@ body.multi-steps #top-bar #general-instructions {
 body:not(.multi-steps) #actions {
     display: none;
 }
+body.multi-steps:not(.step_collecting_actions) #actions {
+    visibility: hidden;
+}
 .action-btn:not(#action-btn-confirm) {
     color: var(--text-color);
     padding: 10px 3px;
