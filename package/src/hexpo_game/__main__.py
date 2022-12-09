@@ -8,6 +8,7 @@ from typing import Any
 
 from aiohttp import web
 
+from hexpo_game.core.constants import GameMode
 from hexpo_game.core.types import GameMessagesQueue
 
 from . import django_setup  # noqa: F401  # pylint: disable=unused-import
@@ -37,7 +38,7 @@ def main() -> None:
 
     async def on_web_startup(app: web.Application) -> None:  # pylint: disable=unused-argument
         token, refresh_token = await get_twitch_tokens()
-        twitch_client = get_twitch_client(token, refresh_token)
+        twitch_client = get_twitch_client(token, refresh_token, GameMode(game.mode))
         async_tasks.append(twitch_client.running_task)
         refused_ids = await init_refused_ids()
         async_tasks.append(
