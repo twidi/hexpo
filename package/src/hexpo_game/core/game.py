@@ -271,7 +271,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
         if self.game.config.multi_steps:
             await self.game_messages_queue.put(
                 GameMessage(
-                    text=f"Current step: {step.label}",
+                    text=f"Nouvelle étape: {step.label}",
                     kind=GameMessageKind.GAME_STEP_CHANGED,
                     color=Color(255, 0, 0),
                 )
@@ -299,9 +299,21 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
 
     async def run(self) -> None:
         """Run the game loop."""
+        current_turn = self.game.current_turn
         while not self.end_loop_event.is_set() and not self.game.is_over():
             await self.run_current_step()
             await self.game.anext_step()  # will change the turn if needed
+            if self.game.current_turn != current_turn:
+                current_turn = self.game.current_turn
+                if self.game.config.multi_steps:
+                    await self.game_messages_queue.put(
+                        GameMessage(
+                            text=f"Nouveau tour: {current_turn}",
+                            kind=GameMessageKind.GAME_TURN_CHANGED,
+                            color=Color(255, 0, 0),
+                        )
+                    )
+                    logger.info("New turn: %s", current_turn)
 
     async def end(self) -> None:
         """End the game loop."""
@@ -343,7 +355,7 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
         dead_during_turn.add(player_in_game.id)
         add_message(
             player_in_game,
-            f"{player_in_game.player.name} was fully destroyed by {killer.player.name}",
+            f"{player_in_game.player.name} a disparu de la carte, merci à {killer.player.name}",
             GameMessageKind.DEATH,
             always=True,
         )
@@ -386,7 +398,7 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                 f"{old_banked:.2f}",
                 f"{player_in_game.banked_actions:.2f}",
             )
-            add_message(player_in_game, f"{player_in_game.player.name} banked {banked:.2f}")
+            add_message(player_in_game, f"{player_in_game.player.name} a mis de côté {banked:.2f} actions")
             continue
 
         tile = Tile(action.tile_col, action.tile_row)  # type: ignore[arg-type]  # we know we have a tile
@@ -401,12 +413,17 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
             if occupied_tile is None:
                 logger_play_turn.warning("%s attacked %s but it's not occupied", player.name, tile)
                 action.fail(reason=ActionFailureReason.ATTACK_EMPTY)
-                add_message(player_in_game, f"{player_in_game.player.name} attacked unoccupied {tile.for_human()}")
+                add_message(
+                    player_in_game,
+                    f"{player_in_game.player.name} a attaqué en vain en {tile.for_human()} non occupée",
+                )
                 continue
 
             if occupied_tile.player_in_game_id == player_in_game.id:
                 logger_play_turn.warning("%s attacked %s but it's their own", player.name, tile)
-                add_message(player_in_game, f"{player_in_game.player.name} attacked it's own {tile.for_human()}")
+                add_message(
+                    player_in_game, f"{player_in_game.player.name} a attaqué en vain chez lui en {tile.for_human()}"
+                )
                 action.fail(reason=ActionFailureReason.ATTACK_SELF)
                 continue
 
@@ -418,7 +435,9 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                     occupied_tile.player_in_game.player.name,
                 )
                 action.fail(reason=ActionFailureReason.ATTACK_PROTECTED)
-                add_message(player_in_game, f"{player_in_game.player.name} attacked protected {tile.for_human()}")
+                add_message(
+                    player_in_game, f"{player_in_game.player.name} a attaqué en vain en {tile.for_human()} protégée"
+                )
                 continue
 
             old_level = occupied_tile.level
@@ -447,8 +466,8 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                 )
                 add_message(
                     player_in_game,
-                    f"{player_in_game.player.name} destroyed {tile.for_human()} "
-                    f"from {occupied_tile.player_in_game.player.name}",
+                    f"{player_in_game.player.name} a libéré {tile.for_human()} "
+                    f"des mains de {occupied_tile.player_in_game.player.name}",
                 )
                 if occupied_tile.occupier_nb_tiles <= 1:
                     new_death(occupied_tile.player_in_game, player_in_game)
@@ -466,9 +485,8 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                 )
                 add_message(
                     player_in_game,
-                    f"{player_in_game.player.name} attacked {tile.for_human()} "
-                    f"from {occupied_tile.player_in_game.player.name} "
-                    f"(-{damage:.2f} ➔ {occupied_tile.level:.2f})",
+                    f"{player_in_game.player.name} a attaqué {occupied_tile.player_in_game.player.name} "
+                    f"en {tile.for_human()} (-{damage:.2f} PV ➔ {occupied_tile.level:.2f})",
                 )
 
             action.success()
@@ -477,7 +495,10 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
             if occupied_tile is None:
                 logger_play_turn.warning("%s defended %s but it's not occupied", player.name, tile)
                 action.fail(reason=ActionFailureReason.DEFEND_EMPTY)
-                add_message(player_in_game, f"{player_in_game.player.name} defended unoccupied {tile.for_human()}")
+                add_message(
+                    player_in_game,
+                    f"{player_in_game.player.name} a défendu en vain en {tile.for_human()} non occupée",
+                )
                 continue
 
             if occupied_tile.player_in_game_id != player_in_game.id:
@@ -489,8 +510,8 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                 )
                 add_message(
                     player_in_game,
-                    f"{player_in_game.player.name} defended {tile.for_human()} "
-                    f"from {occupied_tile.player_in_game.player.name}",
+                    f"{player_in_game.player.name} a défendu en vain en {tile.for_human()} "
+                    f"chez {occupied_tile.player_in_game.player.name}",
                 )
                 action.fail(reason=ActionFailureReason.DEFEND_OTHER)
                 continue
@@ -509,8 +530,8 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
             )
             add_message(
                 player_in_game,
-                f"{player_in_game.player.name} defended {tile.for_human()} "
-                f"(+{improvement:.2f} ➔ {occupied_tile.level:.2f})",
+                f"{player_in_game.player.name} a défendu en {tile.for_human()} "
+                f"(+{improvement:.2f} PV ➔ {occupied_tile.level:.2f})",
             )
 
             action.success()
@@ -519,7 +540,9 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
             if occupied_tile is not None and occupied_tile.player_in_game_id == player_in_game.id:
                 logger_play_turn.warning("%s grew on %s but it's already their tile", player.name, tile)
                 action.fail(reason=ActionFailureReason.GROW_SELF)
-                add_message(player_in_game, f"{player_in_game.player.name} grow on it's own {tile.for_human()}")
+                add_message(
+                    player_in_game, f"{player_in_game.player.name} n'a pu s'agrandir chez lui en {tile.for_human()}"
+                )
                 continue
 
             if (
@@ -529,7 +552,7 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
             ):
                 logger_play_turn.warning("%s grew on %s but has no neighbors", player.name, tile)
                 add_message(
-                    player_in_game, f"{player_in_game.player.name} has no neighbors to grow on {tile.for_human()}"
+                    player_in_game, f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()}, trop loin"
                 )
                 action.fail(reason=ActionFailureReason.GROW_NO_NEIGHBOR)
                 continue
@@ -547,9 +570,9 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                     if not player_in_game.nb_tiles:
                         messages.append(
                             GameMessage(
-                                text=f"{player_in_game.player.name} couldn't "
-                                f"{'start' if player_in_game.first_in_game_for_player else 'come back'} "
-                                f"on {tile.for_human()} (occupied)",
+                                text=f"{player_in_game.player.name} n'a pu "
+                                f"{'commencer' if player_in_game.first_in_game_for_player else 'revenir'} "
+                                f"en {tile.for_human()} occupée",
                                 kind=GameMessageKind.SPAWN_FAILED,
                                 color=player_in_game.color_object,
                                 player_id=player.id,
@@ -565,8 +588,8 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                     else:
                         add_message(
                             player_in_game,
-                            f"{player_in_game.player.name} couldn't grow on {tile.for_human()} "
-                            f"from {occupied_tile.player_in_game.player.name}",
+                            f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()} "
+                            f"chez {occupied_tile.player_in_game.player.name}",
                         )
                     continue
 
@@ -582,9 +605,9 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                     if not player_in_game.nb_tiles:
                         messages.append(
                             GameMessage(
-                                text=f"{player_in_game.player.name} couldn't "
-                                f"{'start' if player_in_game.first_in_game_for_player else 'come back'} "
-                                f"on {tile.for_human()} (protected)",
+                                text=f"{player_in_game.player.name} n'a pu "
+                                f"{'commencer' if player_in_game.first_in_game_for_player else 'revenir'} "
+                                f"en {tile.for_human()} protégee",
                                 kind=GameMessageKind.SPAWN_FAILED,
                                 color=player_in_game.color_object,
                                 player_id=player.id,
@@ -600,8 +623,8 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                     else:
                         add_message(
                             player_in_game,
-                            f"{player_in_game.player.name} couldn't grow on protected {tile.for_human()} "
-                            f"from {occupied_tile.player_in_game.player.name}",
+                            f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()} "
+                            f"chez {occupied_tile.player_in_game.player.name}, protégée",
                         )
 
                     continue
@@ -618,8 +641,8 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                 occupied_tile.save()
                 add_message(
                     player_in_game,
-                    f"{player_in_game.player.name} grew on {tile.for_human()} "
-                    f"from {occupied_tile.player_in_game.player.name}",
+                    f"{player_in_game.player.name} s'est agrandi en {tile.for_human()} "
+                    f"chez {occupied_tile.player_in_game.player.name}",
                 )
             else:
                 logger_play_turn.info("%s grew on %s that was not occupied", player.name, tile)
@@ -628,9 +651,12 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                     col=tile.col,
                     row=tile.row,
                     player_in_game=player_in_game,
-                    level=game.config.tile_start_level * action.efficiency,
+                    level=(tile_level := game.config.tile_start_level * action.efficiency),
                 )
-                add_message(player_in_game, f"{player_in_game.player.name} grew on {tile.for_human()}")
+                add_message(
+                    player_in_game,
+                    f"{player_in_game.player.name} s'est agrandi en {tile.for_human()} ({tile_level:.2f} PV)",
+                )
 
             if not player_in_game.nb_tiles:
                 messages = [
@@ -641,8 +667,8 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                 messages.append(
                     GameMessage(
                         text=f"{player_in_game.player.name} "
-                        f"{'starts' if player_in_game.first_in_game_for_player else 'is back'} "
-                        f"on {tile.for_human()}",
+                        f"{'commence' if player_in_game.first_in_game_for_player else 'revient'} "
+                        f"en {tile.for_human()}",
                         kind=GameMessageKind.SPAWN,
                         color=player_in_game.color_object,
                         player_id=player.id,
@@ -651,7 +677,7 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
                         else (
                             f"Bienvenue dans la partie @{player_in_game.player.name} ! "
                             f"Tu commences en {tile.for_human()} ! "
-                            "Tu vas bientôt pouvoir t'aggrandir, te défendre ou attaquer !"
+                            "Tu vas bientôt pouvoir t'agrandir, te défendre ou attaquer !"
                         )
                         if game.config.multi_steps
                         else (

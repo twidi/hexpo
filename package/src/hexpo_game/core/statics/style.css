@@ -346,7 +346,7 @@ body:not(.multi-steps) #actions {
 }
 #messages-queue { display: none; }
 #messages {
-    font-size: 28px;
+    font-size: 24px;
     font-weight: bold;
     width: 100%;
     margin-bottom: 10px;
