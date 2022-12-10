@@ -153,9 +153,13 @@ body.multi-steps:not(.step_collecting_actions) #actions {
     text-align: center;
     background-color: #11091f;
 }
-.confirm-symbol {
+.ok-symbol {
     color: transparent;
     text-shadow: 0 0 0 #009200;
+}
+.ko-symbol {
+    color: transparent;
+    text-shadow: 0 0 0 #480b0a;
 }
 #action-btn-confirm {
     text-align: center;
@@ -242,6 +246,10 @@ body.multi-steps:not(.step_collecting_actions) #actions {
     max-width: 12em;
     overflow: hidden;
 }
+body.multi-steps .player-name {
+    width: 7em;
+    flex-grow: 0;
+}
 .player-nb-tiles {
     width: 2.5em;
     flex-grow: 0;
@@ -252,9 +260,37 @@ body.multi-steps:not(.step_collecting_actions) #actions {
     flex-grow: 0;
     text-align: right;
 }
+.player-level {
+    width: 2.7em;
+    flex-grow: 0;
+    text-align: left;
+}
+.player-actions-left {
+    width: 9em;
+    flex-grow: 0;
+    text-align: right;
+}
 .player-extra {
     grid-area: extra;
     color: #999;
+}
+
+.player-actions {
+    grid-area: extra;
+    position : relative;
+    overflow: hidden;
+    width: calc(100% - 7px);
+    height: 100%;
+}
+.player-actions-inner {
+    display: flex;
+    gap: 5px;
+    position: absolute;
+    min-width: 100%;
+    right: 0;
+}
+.player-actions-inner > span {
+    white-space: nowrap;
 }
 
 .coord-empty, .coord-hor-top {

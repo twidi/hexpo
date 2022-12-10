@@ -19,10 +19,10 @@ from django.template import loader
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES
-from .constants import ClickTarget, GameStep
+from .constants import ActionState, ActionType, ClickTarget, GameStep
 from .game import get_game_and_grid
 from .grid import ConcreteGrid
-from .models import Game, PlayerInGame
+from .models import Action, Game, PlayerInGame
 from .types import Color, GameMessage, GameMessagesQueue, Tile
 
 logger = logging.getLogger(__name__)
@@ -118,23 +118,52 @@ class GameState:
 
     def get_players_context(self) -> list[dict[str, Any]]:
         """Get the context for the players left bar."""
-        players_in_game = self.game.get_players_in_game_for_leader_board(15 if self.game.config.multi_steps else 16)
+        players_in_game = list(
+            self.game.get_players_in_game_for_leader_board(15 if self.game.config.multi_steps else 16)
+        )
+        actions_by_player: dict[int, list[Action]] = {}
+
+        if self.game.config.multi_steps:
+            all_actions = self.game.action_set.filter(
+                player_in_game_id__in=[player_in_game.id for player_in_game in players_in_game],
+                turn=self.game.current_turn,
+                state__in=(ActionState.CREATED, ActionState.CONFIRMED),
+            )
+            for action in all_actions:
+                actions_by_player.setdefault(action.player_in_game_id, []).append(action)
+            for actions in actions_by_player.values():
+                actions.sort(
+                    key=lambda action: (0, action.confirmed_at)
+                    if action.state == ActionState.CONFIRMED
+                    else (1, None)
+                )
 
         return [
             {
                 "name": player_in_game.player.name,
                 "color": player_in_game.color,
                 "rank": index,
-                "nb_tiles": player_in_game.nb_tiles,  # type: ignore[attr-defined]
-                "percent_tiles": f"{player_in_game.nb_tiles / self.grid.nb_tiles * 100:.1f}%"  # type: ignore[attr-defined]  # pylint: disable=line-too-long
-                if player_in_game.nb_tiles  # type: ignore[attr-defined]
-                else "",
-                "nb_actions": player_in_game.nb_actions,  # type: ignore[attr-defined]
-                "nb_games": player_in_game.nb_games,  # type: ignore[attr-defined]
-                "nb_kills": player_in_game.nb_kills,  # type: ignore[attr-defined]
-                "can_play": player_in_game.ended_turn is None or player_in_game.can_respawn(),  # type: ignore
+                "can_play": player_in_game.ended_turn is None or player_in_game.can_respawn(),
                 "is_protected": player_in_game.is_protected(),
             }
+            | (
+                {
+                    "level": player_in_game.level,
+                    "current_turn_actions": (actions := actions_by_player.get(player_in_game.id, [])),
+                    "level_actions_left": max(0, overflow_actions := (player_in_game.level - len(actions))),
+                    "banked_actions_left": f"{player_in_game.banked_actions - max(0, -overflow_actions):.2f}",
+                }
+                if self.game.config.multi_steps
+                else {
+                    "nb_tiles": player_in_game.nb_tiles,  # type: ignore[attr-defined]
+                    "percent_tiles": f"{player_in_game.nb_tiles / self.grid.nb_tiles * 100:.1f}%"  # type: ignore[attr-defined]  # pylint: disable=line-too-long
+                    if player_in_game.nb_tiles  # type: ignore[attr-defined]
+                    else "",
+                    "nb_actions": player_in_game.nb_actions,  # type: ignore[attr-defined]
+                    "nb_games": player_in_game.nb_games,  # type: ignore[attr-defined]
+                    "nb_kills": player_in_game.nb_kills,  # type: ignore[attr-defined]
+                }
+            )
             for index, player_in_game in enumerate(players_in_game, 1)
         ]
 
@@ -147,7 +176,12 @@ class GameState:
 
     async def http_get_players_partial(self, request: web.Request) -> web.Response:
         """Return the players partial html."""
-        context = {"players": await sync_to_async(self.get_players_context)()}
+        context = {
+            "game": self.game,
+            "players": await sync_to_async(self.get_players_context)(),
+            "ActionType": ActionType,
+            "ActionState": ActionState,
+        }
         html = loader.render_to_string("core/include_players.html", context)
         return Response(text=html, content_type="text/html")
 
@@ -185,6 +219,8 @@ class GameState:
             "game": self.game,
             "turn_step": GameStep(self.game.current_turn_step),
             "GameStep": GameStep,
+            "ActionType": ActionType,
+            "ActionState": ActionState,
         }
 
         html = loader.render_to_string("core/index.html", context)

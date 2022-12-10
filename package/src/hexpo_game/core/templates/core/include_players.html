@@ -4,11 +4,39 @@
         <div class="player-rank">{{ player.rank }}</div>
         <div class="player-info">
             <div class="player-name">{{ player.name }}</div>
-            <div class="player-nb-tiles">{{ player.nb_tiles }}</div>
-            <div class="player-percent-tiles">{{ player.percent_tiles }}</div>
+            {% if game.config.multi_steps %}
+                <div class="player-level">Lvl {{ player.level }}</div>
+                <div class="player-actions-left">Actions: {{ player.level_actions_left }}{% if player.banked_actions_left != "0.00" %}+{{ player.banked_actions_left }}{% endif %}</div>
+            {% else %}
+                <div class="player-nb-tiles">{{ player.nb_tiles }}</div>
+                <div class="player-percent-tiles">{{ player.percent_tiles }}</div>
+            {% endif %}
         </div>
-        <div class="player-extra">
-            (total: {{ player.nb_games }} départ{{ player.nb_games|pluralize }},  {{ player.nb_kills }} kill{{ player.nb_kills|pluralize }}, {{ player.nb_actions }} case{{ player.nb_actions|pluralize }})
-        </div>
+        {% if game.config.multi_steps %}
+            <div class="player-actions">
+                <div class="player-actions-inner">
+                {% for action in player.current_turn_actions %}
+                    <span>
+                        <strong>
+                        {{ action.action_type.0|upper }}
+                        {% if action.action_type != ActionType.BANK and action.tile_col is not None %}
+                            {{ action.tile.for_human }}
+                        {% endif %}
+                        </strong>
+                        {% if action.state == ActionState.CONFIRMED %}
+                            ({{ action.efficiency_for_human }})
+                            <span class="ok-symbol">✔️</span>
+                        {% else %}
+                            <span class="ko-symbol">✖️</span>
+                        {% endif %}
+                    </span>
+                {% endfor %}
+                </div>
+            </div>
+        {% else %}
+            <div class="player-extra">
+                (total: {{ player.nb_games }} départ{{ player.nb_games|pluralize }},  {{ player.nb_kills }} kill{{ player.nb_kills|pluralize }}, {{ player.nb_actions }} case{{ player.nb_actions|pluralize }})
+            </div>
+        {% endif %}
     </div>
 {% endfor %}

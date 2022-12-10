@@ -160,9 +160,13 @@ class Game(BaseModel):
 
     def get_players_in_game_for_leader_board(self, limit: Optional[int] = None) -> QuerySet[PlayerInGame]:
         """Get the players in game for the leader board."""
-        queryset = (
-            self.get_all_players_in_games()
-            .annotate(
+        queryset = self.get_all_players_in_games().annotate(nb_tiles=Count("occupiedtile"))
+        if self.config.multi_steps:
+            queryset = queryset.filter(
+                Q(ended_turn__isnull=True) | Q(ended_turn__gte=self.current_turn - self.config.respawn_cooldown_turns)
+            )
+        else:
+            queryset = queryset.annotate(
                 nb_actions=Subquery(
                     Player.objects.filter(id=OuterRef("player_id"))
                     .annotate(
@@ -183,11 +187,8 @@ class Game(BaseModel):
                     .annotate(count=Count("playeringame__kills", filter=Q(playeringame__game_id=self.id)))
                     .values("count")[:1]
                 ),
-                nb_tiles=Count("occupiedtile"),
             )
-            .select_related("player")
-            .order_by("-nb_tiles", "-dead_at")
-        )
+        queryset = queryset.select_related("player").order_by("-nb_tiles", "-dead_at")
         if limit is not None:
             queryset = queryset[:limit]
         return queryset
@@ -328,9 +329,11 @@ class PlayerInGame(BaseModel):
         """Set the player as dead."""
         await sync_to_async(self.die)(turn, killer)
 
-    def get_available_actions(self) -> int:
+    def get_available_actions(self, nb_actions_in_turn: Optional[int] = None) -> int:
         """Return the number of available actions for the player for the current turn."""
-        return floor(self.level + self.banked_actions - self.get_nb_actions_in_turn())
+        if nb_actions_in_turn is None:
+            nb_actions_in_turn = self.get_nb_actions_in_turn()
+        return floor(self.level + self.banked_actions - nb_actions_in_turn)
 
     def can_create_action(self) -> bool:
         """Return whether the player can create an action or not."""
@@ -487,6 +490,16 @@ class Action(BaseModel):
     def is_tile_set(self) -> bool:
         """Check if the tile of the action is set."""
         return self.tile_col is not None and self.tile_row is not None
+
+    @property
+    def efficiency_for_human(self) -> str:
+        """Get the efficiency readable by humans."""
+        efficiency = self.efficiency * 100
+        if int(efficiency) == efficiency:
+            return f"{int(efficiency)}%"
+        if int(efficiency * 10) == efficiency * 10:
+            return f"{efficiency:.1f}%"
+        return f"{efficiency:.2f}%"
 
 
 class RandomEvent(BaseModel):
