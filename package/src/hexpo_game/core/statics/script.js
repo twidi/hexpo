@@ -2,6 +2,7 @@ const show_positioned_sizes = false;
 const do_reload = document.body.getAttribute("data-reload") === "true";
 const refresh_map = do_reload;
 const refresh_players = do_reload;
+const refresh_step = do_reload;
 const refresh_messages = do_reload;
 
 if (show_positioned_sizes) {
@@ -18,6 +19,8 @@ if (show_positioned_sizes) {
 
 let grid = document.querySelector('#grid'),
     players = document.querySelector('#players'),
+    turn_step = document.querySelector('#turn-step'),
+    step_instructions = document.querySelector('#step-instructions'),
     messages_queue = document.querySelector('#messages-queue');
 if (refresh_map && grid) setInterval(async () => {
     const response = await fetch('/grid.raw', {cache: 'no-cache'});
@@ -26,12 +29,29 @@ if (refresh_map && grid) setInterval(async () => {
         grid.setAttribute('src', 'data:image/png;base64,' + data);
     }
 }, 1000);
+
 if (refresh_players && players) setInterval(async () => {
     const response = await fetch('/players.partial', {cache: 'no-cache'});
     if (response.ok) {
         players.innerHTML = await response.text();
     }
 }, 1000);
+
+if (refresh_step && turn_step) {
+    let step_fragment_holder = document.createElement("template");
+    setInterval(async () => {
+        const response = await fetch('/step.partial', {cache: 'no-cache'});
+        if (response.ok) {
+            step_fragment_holder.innerHTML = await response.text();
+            turn_step.innerHTML = step_fragment_holder.content.querySelector('#turn-step-fragment').innerHTML;
+            if (step_instructions) {
+                step_instructions.innerHTML = step_fragment_holder.content.querySelector('#step-instructions-fragment').innerHTML;
+            }
+        }
+    }, 500);
+}
+
+
 if (refresh_messages && messages_queue) {
     setInterval(async () => {
         const response = await fetch('/messages.partial', {cache: 'no-cache'});

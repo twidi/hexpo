@@ -9,7 +9,7 @@ from django.db import models
 
 from .types import Color
 
-RESPAWN_PROTECTED_DURATION = timedelta(seconds=30)
+LATENCY_DELAY = timedelta(seconds=10)
 
 
 class GameMode(models.TextChoices):
@@ -105,7 +105,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         max_players=15,
         neighbors_only=True,
         step_waiting_for_players_duration=timedelta(seconds=20),
-        step_collecting_actions_duration=timedelta(minutes=5),
+        step_collecting_actions_duration=timedelta(minutes=2),
         message_delay=timedelta(seconds=2.5),
         can_end=True,
         multi_steps=True,

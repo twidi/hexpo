@@ -189,6 +189,15 @@ class GameState:
         html = loader.render_to_string("core/include_players.html", context)
         return Response(text=html, content_type="text/html")
 
+    async def http_get_step_partial(self, request: web.Request) -> web.Response:
+        """Return the step partial html."""
+        context = {
+            "game": self.game,
+            "GameStep": GameStep,
+        }
+        html = loader.render_to_string("core/include_step_and_instructions_fragment.html", context)
+        return Response(text=html, content_type="text/html")
+
     async def http_get_players(self, request: web.Request) -> web.Response:
         """Return the players partial html."""
         context = {
@@ -221,7 +230,6 @@ class GameState:
             "coordinates_horizontal": list(range(1, self.grid.nb_cols + 1)),
             "coordinates_vertical": ascii_letters[26:][: self.grid.nb_rows],
             "game": self.game,
-            "turn_step": GameStep(self.game.current_turn_step),
             "GameStep": GameStep,
             "ActionType": ActionType,
             "ActionState": ActionState,
@@ -246,6 +254,7 @@ def prepare_views(router: web.UrlDispatcher) -> GameState:
     router.add_get("/players.partial", game_state.http_get_players_partial)
     router.add_get("/players", game_state.http_get_players)
     router.add_get("/messages.partial", game_state.http_get_messages_partial)
+    router.add_get("/step.partial", game_state.http_get_step_partial)
     router.add_static("/statics", Path(__file__).parent / "statics")
     # router.add_get('/sse', sse)
     return game_state

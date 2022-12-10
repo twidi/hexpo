@@ -33,7 +33,7 @@ async def make_game(mode: GameMode = GameMode.FREE_NEIGHBOR) -> Game:
         grid_nb_cols=nb_cols,
         grid_nb_rows=nb_rows,
         max_players_allowed=20,
-        current_turn_end=timezone.now() + timedelta(minutes=10),
+        current_turn_step_end=timezone.now() + timedelta(minutes=10),
     )
 
 
@@ -935,6 +935,7 @@ async def create_game_loop(
         game_messages_queue,
         waiting_for_players_duration=waiting_for_players_duration,
         collecting_actions_duration=collecting_actions_duration,
+        latency_delay=timedelta(seconds=0),
         go_next_turn_if_no_actions=True,
     )
 

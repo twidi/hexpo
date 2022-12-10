@@ -46,11 +46,11 @@ def recreate_game(game: Game) -> Game:
         now = cast(datetime, action[3])
         if next_turn_min_at is None:
             next_turn_min_at = now + game.config.step_collecting_actions_duration
-            new_game.started_at = new_game.current_turn_started_at = now
+            new_game.started_at = new_game.current_turn_step_started_at = now
         elif now > next_turn_min_at:
             new_game.current_turn += 1
-            new_game.current_turn_started_at = now
-            next_turn_min_at = new_game.current_turn_started_at + game.config.step_collecting_actions_duration
+            new_game.current_turn_step_started_at = now
+            next_turn_min_at = new_game.current_turn_step_started_at + game.config.step_collecting_actions_duration
 
         tile = Tile(cast(int, action[1]), cast(int, action[2]))
 

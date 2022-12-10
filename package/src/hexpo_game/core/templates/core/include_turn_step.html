@@ -1,7 +1,17 @@
+{% with turn_step=game.step %}
 <span id="turn-number">Tour #<span>{{ game.current_turn }}</span></span>
 {% if game.config.multi_steps %}
-<span id="turn-step-name"><span>&lt;&nbsp;</span>{{ turn_step.label }}<span>&nbsp;&gt;</span></span>
-{% if turn_step == GameStep.WAITING_FOR_PLAYERS or turn_step == GameStep.COLLECTING_ACTIONS %}
-    <span id="turn-step-time">{{ time_left }}tic tac</span>
+    <span id="turn-step-name"><span>&lt;&nbsp;</span>{{ turn_step.label }}<span>&nbsp;&gt;</span></span>
+        {% if turn_step == GameStep.WAITING_FOR_PLAYERS or turn_step == GameStep.COLLECTING_ACTIONS %}
+            <span id="turn-step-time">
+                {% with time_left=game.step_time_left_for_human %}
+                    {% if time_left is None %}
+                        Pause pour latence, ne cliquez plus !
+                    {% else %}
+                        Temps restant: {{ time_left }}
+                    {% endif %}
+                {% endwith %}
+            </span>
+        {% endif %}
 {% endif %}
-{% endif %}
+{% endwith %}

@@ -57,8 +57,10 @@ class Game(BaseModel):
     current_turn_step = models.CharField(
         max_length=255, null=False, choices=GameStep.choices, default=GameStep.WAITING_FOR_PLAYERS
     )
-    current_turn_started_at = models.DateTimeField(auto_now_add=True, help_text="When the current turn started.")
-    current_turn_end = models.DateTimeField(help_text="When the current turn ends.")
+    current_turn_step_started_at = models.DateTimeField(
+        auto_now_add=True, help_text="When the current turn step started."
+    )
+    current_turn_step_end = models.DateTimeField(help_text="When the current turn step ends.")
 
     @cached_property
     def config(self) -> GameModeConfig:
@@ -94,14 +96,14 @@ class Game(BaseModel):
                 grid_nb_cols=nb_cols,
                 grid_nb_rows=nb_rows,
                 max_players_allowed=max_players_allowed,
-                current_turn_end=timezone.now() + timedelta(minutes=turn_duration_minutes),
+                current_turn_step_end=timezone.now() + timedelta(minutes=turn_duration_minutes),
             )
         return game
 
     def next_turn(self, started_at: Optional[datetime] = None) -> int:
         """Go to the next turn."""
         self.current_turn += 1
-        self.current_turn_started_at = started_at or timezone.now()
+        self.current_turn_step_started_at = started_at or timezone.now()
         self.save()
         return self.current_turn
 
@@ -121,6 +123,46 @@ class Game(BaseModel):
     async def anext_step(self) -> GameStep:
         """Go to the next step."""
         return cast(GameStep, await sync_to_async(self.next_step)())
+
+    def reset_step_times(self, update_start: bool, duration: timedelta) -> datetime:
+        """Reset the step times."""
+        now = timezone.now()
+        if update_start:
+            self.current_turn_step_started_at = now
+        self.current_turn_step_end = now + duration
+        self.save()
+        return self.current_turn_step_end
+
+    async def areset_step_times(self, update_start: bool, duration: timedelta) -> datetime:
+        """Reset the step times."""
+        return cast(datetime, await sync_to_async(self.reset_step_times)(update_start, duration))
+
+    @property
+    def step_time_left(self) -> timedelta:
+        """Get the time left for the current step."""
+        return self.current_turn_step_end - timezone.now()
+
+    @property
+    def step_time_left_for_human(self) -> Optional[str]:  # pylint: disable=too-many-return-statements
+        """Get the time left for the current step, in a human-readable format."""
+        if (total_seconds := self.step_time_left.total_seconds()) <= 0:
+            return None
+        if total_seconds <= 0.5:
+            return "0s"
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        seconds = min(59, round(total_seconds % 60))
+        if hours:
+            if minutes or seconds:
+                if seconds:
+                    return f"{hours}h {minutes}m {seconds}s"
+                return f"{hours}h {minutes}m"
+            return f"{hours}h"
+        if minutes:
+            if seconds:
+                return f"{minutes}m {seconds}s"
+            return f"{minutes}m"
+        return f"{seconds}s"
 
     def get_last_tile_update_at(self) -> Optional[datetime]:
         """Get the date of the last updated tile of the game."""
@@ -202,6 +244,11 @@ class Game(BaseModel):
     def is_over(self) -> bool:
         """Check if the game is over."""
         return self.ended_at is not None
+
+    @property
+    def step(self) -> GameStep:
+        """Get the current step of the game."""
+        return GameStep(self.current_turn_step)
 
 
 class Player(BaseModel):

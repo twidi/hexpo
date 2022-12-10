@@ -15,6 +15,7 @@ from django.utils import timezone
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES, get_click_target
 from .constants import (
+    LATENCY_DELAY,
     NB_COLORS,
     PALETTE,
     ActionFailureReason,
@@ -53,7 +54,7 @@ class PlayerClick(NamedTuple):
 ClicksQueue: TypeAlias = Queue[PlayerClick]
 
 
-class GameLoop:  # pylint: disable=too-many-instance-attributes
+class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-arguments
     """Loop of the game, step by step, forever."""
 
     def __init__(
@@ -66,6 +67,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
         game_messages_queue: GameMessagesQueue,
         waiting_for_players_duration: Optional[timedelta] = None,
         collecting_actions_duration: Optional[timedelta] = None,
+        latency_delay: timedelta = LATENCY_DELAY,
         go_next_turn_if_no_actions: bool = False,
     ):
         """Initialize the game loop."""
@@ -85,6 +87,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
             if collecting_actions_duration is None
             else collecting_actions_duration
         )
+        self.latency_delay: timedelta = latency_delay
         self.go_next_turn_if_no_actions: bool = go_next_turn_if_no_actions
         self.end_loop_event: asyncio.Event = asyncio.Event()
         self.end_step_event: asyncio.Event = asyncio.Event()
@@ -93,8 +96,10 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
         """Wait for new players to join the game."""
         if not self.game.config.multi_steps or await self.game.occupiedtile_set.acount() == self.grid.nb_tiles:
             return
+        end_step_at = await self.game.areset_step_times(update_start=True, duration=self.waiting_for_players_duration)
+        if self.game.config.multi_steps:
+            end_step_at += self.latency_delay
         self.clicks_allowed_event.set()
-        end_step_at = timezone.now() + self.waiting_for_players_duration
         while True:
             if self.end_step_event.is_set() or self.end_loop_event.is_set():
                 break
@@ -139,14 +144,20 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
     async def step_collecting_actions(self) -> None:  # pylint: disable=too-many-branches
         """Collect actions from players."""
         self.clicks_allowed_event.set()
-        end_step_at = timezone.now() + self.collecting_actions_duration
+        end_step_at = await self.game.areset_step_times(update_start=True, duration=self.collecting_actions_duration)
+        if self.game.config.multi_steps:
+            end_step_at += self.latency_delay
         while True:
             if self.end_step_event.is_set() or self.end_loop_event.is_set():
                 break
-            if timezone.now() >= end_step_at and (
-                self.go_next_turn_if_no_actions or await self.game.confirmed_actions_for_turn().aexists()
-            ):
-                break
+            if timezone.now() >= end_step_at:
+                if self.go_next_turn_if_no_actions or await self.game.confirmed_actions_for_turn().aexists():
+                    break
+                end_step_at = await self.game.areset_step_times(
+                    update_start=False, duration=self.collecting_actions_duration
+                )
+                if self.game.config.multi_steps:
+                    end_step_at += self.latency_delay
             try:
                 player_click = await asyncio.wait_for(
                     self.clicks_queue.get(), timeout=min(1.0, self.collecting_actions_duration.total_seconds())
