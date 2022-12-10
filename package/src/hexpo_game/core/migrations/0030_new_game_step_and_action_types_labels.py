@@ -16,12 +16,21 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 choices=[
                     ("waiting_for_players", "Attente de nouveaux joueurs"),
-                    ("collecting_actions", "Préparation des actions"),
+                    ("collecting_actions", "Collecte des actions"),
                     ("random_events_before", "Évènements aléatoires"),
                     ("executing_actions", "Éxécution des actions"),
                     ("random_events_after", "Évènements aléatoires"),
                 ],
                 default="waiting_for_players",
+                max_length=255,
+            ),
+        ),
+        migrations.AlterField(
+            model_name="action",
+            name="action_type",
+            field=models.CharField(
+                choices=[("attack", "Attaquer"), ("defend", "Défendre"), ("grow", "Conquérir"), ("bank", "Banquer")],
+                help_text="Type of the action.",
                 max_length=255,
             ),
         ),

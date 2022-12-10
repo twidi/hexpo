@@ -23,10 +23,10 @@ class GameMode(models.TextChoices):
 class ActionType(models.TextChoices):
     """Represent the different types of actions."""
 
-    ATTACK = "attack", "Attack"
-    DEFEND = "defend", "Defend"
-    GROW = "grow", "Grow"
-    BANK = "bank", "Bank"
+    ATTACK = "attack", "Attaquer"
+    DEFEND = "defend", "Défendre"
+    GROW = "grow", "Conquérir"
+    BANK = "bank", "Banquer"
 
 
 class GameModeConfig(NamedTuple):
@@ -36,6 +36,7 @@ class GameModeConfig(NamedTuple):
     neighbors_only: bool
     step_waiting_for_players_duration: timedelta
     step_collecting_actions_duration: timedelta
+    message_delay: timedelta
     can_end: bool
     multi_steps: bool
     player_start_level: int
@@ -51,6 +52,11 @@ class GameModeConfig(NamedTuple):
     respawn_protected_max_tiles: int
     respawn_protected_max_duration: timedelta | None
 
+    @property
+    def message_delay_ms(self) -> int:
+        """Return the delay between messages in milliseconds."""
+        return int(self.message_delay.total_seconds() * 1000)
+
 
 GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
     GameMode.FREE_FULL: GameModeConfig(
@@ -58,6 +64,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         neighbors_only=False,
         step_waiting_for_players_duration=timedelta(seconds=0),
         step_collecting_actions_duration=timedelta(seconds=1),
+        message_delay=timedelta(seconds=1.25),
         can_end=False,
         multi_steps=False,
         player_start_level=3,
@@ -78,6 +85,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         neighbors_only=True,
         step_waiting_for_players_duration=timedelta(seconds=0),
         step_collecting_actions_duration=timedelta(seconds=1),
+        message_delay=timedelta(seconds=1.25),
         can_end=False,
         multi_steps=False,
         player_start_level=3,
@@ -98,6 +106,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         neighbors_only=True,
         step_waiting_for_players_duration=timedelta(seconds=20),
         step_collecting_actions_duration=timedelta(minutes=5),
+        message_delay=timedelta(seconds=2.5),
         can_end=True,
         multi_steps=True,
         player_start_level=1,
@@ -167,7 +176,7 @@ class GameStep(models.TextChoices):
     """Represent the different steps of a game."""
 
     WAITING_FOR_PLAYERS = "waiting_for_players", "Attente de nouveaux joueurs"
-    COLLECTING_ACTIONS = "collecting_actions", "Préparation des actions"
+    COLLECTING_ACTIONS = "collecting_actions", "Collecte des actions"
     RANDOM_EVENTS_BEFORE = "random_events_before", "Évènements aléatoires"
     EXECUTING_ACTIONS = "executing_actions", "Éxécution des actions"
     RANDOM_EVENTS_AFTER = "random_events_after", "Évènements aléatoires"

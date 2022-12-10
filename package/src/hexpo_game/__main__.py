@@ -55,7 +55,7 @@ def main() -> None:
             )
         )
         async_tasks.append(ensure_future(twitch_client.send_messages(chat_messages_queue)))
-        async_tasks.append(ensure_future(game_state.update_forever(game_messages_queue, delay=1)))
+        async_tasks.append(ensure_future(game_state.update_forever(game_messages_queue, delay=0.5)))
 
     async def on_web_shutdown(app: web.Application) -> None:  # pylint: disable=unused-argument
         await clicks_queue.join()

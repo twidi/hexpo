@@ -6,7 +6,7 @@ from asyncio import Queue
 from contextlib import suppress
 from datetime import datetime, timedelta
 from queue import Empty
-from typing import NamedTuple, Optional, TypeAlias, cast
+from typing import Any, Callable, Coroutine, NamedTuple, Optional, TypeAlias, cast
 
 from asgiref.sync import sync_to_async
 from django.db.models import Count
@@ -130,7 +130,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
         action = cls.step_collecting_actions_handle_click_single_step(player_click, game)
         if action is None:
             return []
-        messages = play_turn(game, grid)
+        messages = execute_action(action, game, grid, game.current_turn, set())
         action.refresh_from_db()
         if action.state == ActionState.FAILURE:
             player_in_game.die()
@@ -250,8 +250,9 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
 
     async def step_executing_actions(self) -> None:
         """Execute the actions of the current turn."""
-        messages = await aplay_turn(self.game, self.grid)
-        await self.send_messages(messages)
+        if self.game.config.multi_steps:
+            await asyncio.sleep(self.game.config.message_delay.total_seconds())
+        await aplay_turn(self.game, self.grid, send_messages=self.send_messages)
 
     async def step_random_events_after(self) -> None:
         """Generate some random events after executing the actions."""
@@ -271,9 +272,9 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
         if self.game.config.multi_steps:
             await self.game_messages_queue.put(
                 GameMessage(
-                    text=f"Nouvelle étape: {step.label}",
+                    text=f"Nouvelle étape:\n{step.label}",
                     kind=GameMessageKind.GAME_STEP_CHANGED,
-                    color=Color(255, 0, 0),
+                    color=Color(255, 255, 255),
                 )
             )
             logger.info("Current step: %s", step)
@@ -303,6 +304,9 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
         while not self.end_loop_event.is_set() and not self.game.is_over():
             await self.run_current_step()
             await self.game.anext_step()  # will change the turn if needed
+            if self.game.current_turn_step in (GameStep.RANDOM_EVENTS_BEFORE, GameStep.RANDOM_EVENTS_AFTER):
+                # these steps are not yet ready
+                await self.game.anext_step()
             if self.game.current_turn != current_turn:
                 current_turn = self.game.current_turn
                 if self.game.config.multi_steps:
@@ -310,7 +314,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
                         GameMessage(
                             text=f"Nouveau tour: {current_turn}",
                             kind=GameMessageKind.GAME_TURN_CHANGED,
-                            color=Color(255, 0, 0),
+                            color=Color(255, 255, 255),
                         )
                     )
                     logger.info("New turn: %s", current_turn)
@@ -329,15 +333,31 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes
             self.game_messages_queue.task_done()
 
 
-def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-statements
-    game: Game, grid: Grid, turn: Optional[int] = None
+def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
+    action: Action, game: Game, grid: Grid, turn: int, dead_during_turn: set[int]
 ) -> GameMessages:
-    """Play a turn."""
-    turn = game.current_turn if turn is None else turn
-    queryset = game.confirmed_actions_for_turn(turn)
-    logger_play_turn.info("Playing turn %s: %s actions", turn, len(queryset))
+    """Execute the action."""
+    if (action.tile_col is None or action.tile_row is None) and action.action_type != ActionType.BANK:
+        return []
 
-    dead_during_turn: set[int] = set()
+    # as the player can be changed by previous actions, we need to load it from db for each action
+    player_in_game = (
+        PlayerInGame.objects.filter(id=action.player_in_game_id)
+        .select_related("player")
+        .annotate(nb_tiles=Count("occupiedtile"))
+        .get()
+    )
+    player = player_in_game.player
+
+    if player_in_game.id in dead_during_turn:
+        action.fail(reason=ActionFailureReason.DEAD)
+        logger_play_turn.warning("%s IS DEAD (killed in this turn)", player.name)
+        return []
+
+    if not player_in_game.nb_tiles and action.action_type != ActionType.GROW:
+        action.fail(reason=ActionFailureReason.BAD_FIRST)
+        logger_play_turn.warning("%s had no tiles but did a wrong first action: %s", player.name, action.action_type)
+        return []
 
     messages: GameMessages = []
 
@@ -355,353 +375,340 @@ def play_turn(  # pylint:disable=too-many-locals,too-many-branches,too-many-stat
         dead_during_turn.add(player_in_game.id)
         add_message(
             player_in_game,
-            f"{player_in_game.player.name} a disparu de la carte, merci à {killer.player.name}",
+            f"{player_in_game.player.name} a disparu de la carte, bravo {killer.player.name}",
             GameMessageKind.DEATH,
             always=True,
         )
 
-    for action in queryset.order_by("confirmed_at"):
-
-        if (action.tile_col is None or action.tile_row is None) and action.action_type != ActionType.BANK:
-            continue
-
-        # as the player can be changed by previous actions, we need to load it from db for each action
-        player_in_game = (
-            PlayerInGame.objects.filter(id=action.player_in_game_id)
-            .select_related("player")
-            .annotate(nb_tiles=Count("occupiedtile"))
-            .get()
+    if action.action_type == ActionType.BANK:
+        old_banked = player_in_game.banked_actions
+        player_in_game.banked_actions += (banked := game.config.bank_value * action.efficiency)
+        player_in_game.save()
+        action.success()
+        logger_play_turn.info(
+            "%s banked %s (from %s to %s)",
+            player.name,
+            f"{banked:.2f}",
+            f"{old_banked:.2f}",
+            f"{player_in_game.banked_actions:.2f}",
         )
-        player = player_in_game.player
+        add_message(player_in_game, f"{player_in_game.player.name} a mis de côté {banked:.2f} actions")
+        return messages
 
-        if player_in_game.id in dead_during_turn:
-            action.fail(reason=ActionFailureReason.DEAD)
-            logger_play_turn.warning("%s IS DEAD (killed in this turn)", player.name)
-            continue
+    tile = Tile(action.tile_col, action.tile_row)  # type: ignore[arg-type]  # we know we have a tile
+    occupied_tile = (
+        OccupiedTile.objects.filter(game=game, col=tile.col, row=tile.row)
+        .select_related("player_in_game__player")
+        .annotate(occupier_nb_tiles=Count("player_in_game__occupiedtile"))
+        .first()
+    )
 
-        if not player_in_game.nb_tiles and action.action_type != ActionType.GROW:
-            action.fail(reason=ActionFailureReason.BAD_FIRST)
+    if action.action_type == ActionType.ATTACK:
+        if occupied_tile is None:
+            logger_play_turn.warning("%s attacked %s but it's not occupied", player.name, tile)
+            action.fail(reason=ActionFailureReason.ATTACK_EMPTY)
+            add_message(
+                player_in_game,
+                f"{player_in_game.player.name} a attaqué en vain en {tile.for_human()} non occupée",
+            )
+            return messages
+
+        if occupied_tile.player_in_game_id == player_in_game.id:
+            logger_play_turn.warning("%s attacked %s but it's their own", player.name, tile)
+            add_message(
+                player_in_game, f"{player_in_game.player.name} a attaqué en vain chez lui en {tile.for_human()}"
+            )
+            action.fail(reason=ActionFailureReason.ATTACK_SELF)
+            return messages
+
+        if occupied_tile.player_in_game.is_protected(occupied_tile.occupier_nb_tiles):
             logger_play_turn.warning(
-                "%s had no tiles but did a wrong first action: %s", player.name, action.action_type
-            )
-            continue
-
-        if action.action_type == ActionType.BANK:
-            old_banked = player_in_game.banked_actions
-            player_in_game.banked_actions += (banked := game.config.bank_value * action.efficiency)
-            player_in_game.save()
-            action.success()
-            logger_play_turn.info(
-                "%s banked %s (from %s to %s)",
-                player.name,
-                f"{banked:.2f}",
-                f"{old_banked:.2f}",
-                f"{player_in_game.banked_actions:.2f}",
-            )
-            add_message(player_in_game, f"{player_in_game.player.name} a mis de côté {banked:.2f} actions")
-            continue
-
-        tile = Tile(action.tile_col, action.tile_row)  # type: ignore[arg-type]  # we know we have a tile
-        occupied_tile = (
-            OccupiedTile.objects.filter(game=game, col=tile.col, row=tile.row)
-            .select_related("player_in_game__player")
-            .annotate(occupier_nb_tiles=Count("player_in_game__occupiedtile"))
-            .first()
-        )
-
-        if action.action_type == ActionType.ATTACK:
-            if occupied_tile is None:
-                logger_play_turn.warning("%s attacked %s but it's not occupied", player.name, tile)
-                action.fail(reason=ActionFailureReason.ATTACK_EMPTY)
-                add_message(
-                    player_in_game,
-                    f"{player_in_game.player.name} a attaqué en vain en {tile.for_human()} non occupée",
-                )
-                continue
-
-            if occupied_tile.player_in_game_id == player_in_game.id:
-                logger_play_turn.warning("%s attacked %s but it's their own", player.name, tile)
-                add_message(
-                    player_in_game, f"{player_in_game.player.name} a attaqué en vain chez lui en {tile.for_human()}"
-                )
-                action.fail(reason=ActionFailureReason.ATTACK_SELF)
-                continue
-
-            if occupied_tile.player_in_game.is_protected(occupied_tile.occupier_nb_tiles):
-                logger_play_turn.warning(
-                    "%s attacked %s but it's occupied by %s and protected",
-                    player.name,
-                    tile,
-                    occupied_tile.player_in_game.player.name,
-                )
-                action.fail(reason=ActionFailureReason.ATTACK_PROTECTED)
-                add_message(
-                    player_in_game, f"{player_in_game.player.name} a attaqué en vain en {tile.for_human()} protégée"
-                )
-                continue
-
-            old_level = occupied_tile.level
-            distance = max(
-                1,
-                min(
-                    tile.distance(Tile(col, row))
-                    for col, row in player_in_game.occupiedtile_set.values_list("col", "row")
-                ),
-            )
-            distance_efficiency = (
-                (1 - game.config.attack_farthest_efficiency) * distance
-                + game.config.attack_farthest_efficiency
-                - grid.max_distance
-            ) / (1 - grid.max_distance)
-            occupied_tile.level -= (damage := game.config.attack_damage * action.efficiency * distance_efficiency)
-
-            if occupied_tile.level <= 0:
-                logger_play_turn.info(
-                    "%s attacked and destroyed %s that was occupied by %s (damage: %s, from %s)",
-                    player.name,
-                    tile,
-                    occupied_tile.player_in_game.player.name,
-                    f"{damage:.2f}",
-                    f"{old_level:.2f}",
-                )
-                add_message(
-                    player_in_game,
-                    f"{player_in_game.player.name} a libéré {tile.for_human()} "
-                    f"des mains de {occupied_tile.player_in_game.player.name}",
-                )
-                if occupied_tile.occupier_nb_tiles <= 1:
-                    new_death(occupied_tile.player_in_game, player_in_game)
-                occupied_tile.delete()
-            else:
-                occupied_tile.save()
-                logger_play_turn.info(
-                    "%s attacked %s that is occupied by %s (damage: %s, from %s to %s)",
-                    player.name,
-                    tile,
-                    occupied_tile.player_in_game.player.name,
-                    f"{damage:.2f}",
-                    f"{old_level:.2f}",
-                    f"{occupied_tile.level:.2f}",
-                )
-                add_message(
-                    player_in_game,
-                    f"{player_in_game.player.name} a attaqué {occupied_tile.player_in_game.player.name} "
-                    f"en {tile.for_human()} (-{damage:.2f} PV ➔ {occupied_tile.level:.2f})",
-                )
-
-            action.success()
-
-        elif action.action_type == ActionType.DEFEND:
-            if occupied_tile is None:
-                logger_play_turn.warning("%s defended %s but it's not occupied", player.name, tile)
-                action.fail(reason=ActionFailureReason.DEFEND_EMPTY)
-                add_message(
-                    player_in_game,
-                    f"{player_in_game.player.name} a défendu en vain en {tile.for_human()} non occupée",
-                )
-                continue
-
-            if occupied_tile.player_in_game_id != player_in_game.id:
-                logger_play_turn.warning(
-                    "%s defended %s but it's occupied by %s",
-                    player.name,
-                    tile,
-                    occupied_tile.player_in_game.player.name,
-                )
-                add_message(
-                    player_in_game,
-                    f"{player_in_game.player.name} a défendu en vain en {tile.for_human()} "
-                    f"chez {occupied_tile.player_in_game.player.name}",
-                )
-                action.fail(reason=ActionFailureReason.DEFEND_OTHER)
-                continue
-
-            old_level = occupied_tile.level
-            occupied_tile.level += (improvement := game.config.defend_improvement * action.efficiency)
-            occupied_tile.level = min(occupied_tile.level, 100.0)
-            occupied_tile.save()
-            logger_play_turn.info(
-                "%s defended %s (improvement: %s, from %s to %s)",
+                "%s attacked %s but it's occupied by %s and protected",
                 player.name,
                 tile,
-                f"{improvement:.2f}",
+                occupied_tile.player_in_game.player.name,
+            )
+            action.fail(reason=ActionFailureReason.ATTACK_PROTECTED)
+            add_message(
+                player_in_game, f"{player_in_game.player.name} a attaqué en vain en {tile.for_human()} protégée"
+            )
+            return messages
+
+        old_level = occupied_tile.level
+        distance = max(
+            1,
+            min(
+                tile.distance(Tile(col, row))
+                for col, row in player_in_game.occupiedtile_set.values_list("col", "row")
+            ),
+        )
+        distance_efficiency = (
+            (1 - game.config.attack_farthest_efficiency) * distance
+            + game.config.attack_farthest_efficiency
+            - grid.max_distance
+        ) / (1 - grid.max_distance)
+        occupied_tile.level -= (damage := game.config.attack_damage * action.efficiency * distance_efficiency)
+
+        if occupied_tile.level <= 0:
+            logger_play_turn.info(
+                "%s attacked and destroyed %s that was occupied by %s (damage: %s, from %s)",
+                player.name,
+                tile,
+                occupied_tile.player_in_game.player.name,
+                f"{damage:.2f}",
+                f"{old_level:.2f}",
+            )
+            add_message(
+                player_in_game,
+                f"{player_in_game.player.name} a libéré {tile.for_human()} "
+                f"des mains de {occupied_tile.player_in_game.player.name}",
+            )
+            if occupied_tile.occupier_nb_tiles <= 1:
+                new_death(occupied_tile.player_in_game, player_in_game)
+            occupied_tile.delete()
+        else:
+            occupied_tile.save()
+            logger_play_turn.info(
+                "%s attacked %s that is occupied by %s (damage: %s, from %s to %s)",
+                player.name,
+                tile,
+                occupied_tile.player_in_game.player.name,
+                f"{damage:.2f}",
                 f"{old_level:.2f}",
                 f"{occupied_tile.level:.2f}",
             )
             add_message(
                 player_in_game,
-                f"{player_in_game.player.name} a défendu en {tile.for_human()} "
-                f"(+{improvement:.2f} PV ➔ {occupied_tile.level:.2f})",
+                f"{player_in_game.player.name} a attaqué {occupied_tile.player_in_game.player.name} "
+                f"en {tile.for_human()} (-{damage:.2f} PV ➔ {occupied_tile.level:.2f})",
             )
 
-            action.success()
+        action.success()
 
-        elif action.action_type == ActionType.GROW:
-            if occupied_tile is not None and occupied_tile.player_in_game_id == player_in_game.id:
-                logger_play_turn.warning("%s grew on %s but it's already their tile", player.name, tile)
-                action.fail(reason=ActionFailureReason.GROW_SELF)
-                add_message(
-                    player_in_game, f"{player_in_game.player.name} n'a pu s'agrandir chez lui en {tile.for_human()}"
-                )
-                continue
+    elif action.action_type == ActionType.DEFEND:
+        if occupied_tile is None:
+            logger_play_turn.warning("%s defended %s but it's not occupied", player.name, tile)
+            action.fail(reason=ActionFailureReason.DEFEND_EMPTY)
+            add_message(
+                player_in_game,
+                f"{player_in_game.player.name} a défendu en vain en {tile.for_human()} non occupée",
+            )
+            return messages
 
-            if (
-                game.config.neighbors_only
-                and player_in_game.nb_tiles
-                and not OccupiedTile.has_occupied_neighbors(player_in_game.id, tile, grid)
-            ):
-                logger_play_turn.warning("%s grew on %s but has no neighbors", player.name, tile)
-                add_message(
-                    player_in_game, f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()}, trop loin"
-                )
-                action.fail(reason=ActionFailureReason.GROW_NO_NEIGHBOR)
-                continue
+        if occupied_tile.player_in_game_id != player_in_game.id:
+            logger_play_turn.warning(
+                "%s defended %s but it's occupied by %s",
+                player.name,
+                tile,
+                occupied_tile.player_in_game.player.name,
+            )
+            add_message(
+                player_in_game,
+                f"{player_in_game.player.name} a défendu en vain en {tile.for_human()} "
+                f"chez {occupied_tile.player_in_game.player.name}",
+            )
+            action.fail(reason=ActionFailureReason.DEFEND_OTHER)
+            return messages
 
-            if occupied_tile is not None:
-                if not game.config.can_grow_on_occupied:
-                    logger_play_turn.warning(
-                        "%s %s on %s but it's occupied by %s",
-                        player.name,
-                        "grew" if player_in_game.nb_tiles else "started",
-                        tile,
-                        occupied_tile.player_in_game.player.name,
-                    )
-                    action.fail(reason=ActionFailureReason.GROW_OCCUPIED)
-                    if not player_in_game.nb_tiles:
-                        messages.append(
-                            GameMessage(
-                                text=f"{player_in_game.player.name} n'a pu "
-                                f"{'commencer' if player_in_game.first_in_game_for_player else 'revenir'} "
-                                f"en {tile.for_human()} occupée",
-                                kind=GameMessageKind.SPAWN_FAILED,
-                                color=player_in_game.color_object,
-                                player_id=player.id,
-                                chat_text=None
-                                if player.welcome_chat_message_sent_at
-                                else (
-                                    f"Bienvenue dans la partie @{player_in_game.player.name} ! "
-                                    "Mais tu as cliqué sur une case occupée ! "
-                                    "Essaye sur une case libre !"
-                                ),
-                            )
-                        )
-                    else:
-                        add_message(
-                            player_in_game,
-                            f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()} "
-                            f"chez {occupied_tile.player_in_game.player.name}",
-                        )
-                    continue
+        old_level = occupied_tile.level
+        occupied_tile.level += (improvement := game.config.defend_improvement * action.efficiency)
+        occupied_tile.level = min(occupied_tile.level, 100.0)
+        occupied_tile.save()
+        logger_play_turn.info(
+            "%s defended %s (improvement: %s, from %s to %s)",
+            player.name,
+            tile,
+            f"{improvement:.2f}",
+            f"{old_level:.2f}",
+            f"{occupied_tile.level:.2f}",
+        )
+        add_message(
+            player_in_game,
+            f"{player_in_game.player.name} a défendu en {tile.for_human()} "
+            f"(+{improvement:.2f} PV ➔ {occupied_tile.level:.2f})",
+        )
 
-                if occupied_tile.player_in_game.is_protected():
-                    logger_play_turn.warning(
-                        "%s %s on %s but it's occupied by %s and protected",
-                        player.name,
-                        "grew" if player_in_game.nb_tiles else "started",
-                        tile,
-                        occupied_tile.player_in_game.player.name,
-                    )
-                    action.fail(reason=ActionFailureReason.GROW_PROTECTED)
-                    if not player_in_game.nb_tiles:
-                        messages.append(
-                            GameMessage(
-                                text=f"{player_in_game.player.name} n'a pu "
-                                f"{'commencer' if player_in_game.first_in_game_for_player else 'revenir'} "
-                                f"en {tile.for_human()} protégee",
-                                kind=GameMessageKind.SPAWN_FAILED,
-                                color=player_in_game.color_object,
-                                player_id=player.id,
-                                chat_text=None
-                                if player.welcome_chat_message_sent_at
-                                else (
-                                    f"Bienvenue dans la partie @{player_in_game.player.name} ! "
-                                    "Mais tu as cliqué sur une case protégée ! "
-                                    "Essaye sur une case sans rond au milieu !"
-                                ),
-                            )
-                        )
-                    else:
-                        add_message(
-                            player_in_game,
-                            f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()} "
-                            f"chez {occupied_tile.player_in_game.player.name}, protégée",
-                        )
+        action.success()
 
-                    continue
+    elif action.action_type == ActionType.GROW:
+        if occupied_tile is not None and occupied_tile.player_in_game_id == player_in_game.id:
+            logger_play_turn.warning("%s grew on %s but it's already their tile", player.name, tile)
+            action.fail(reason=ActionFailureReason.GROW_SELF)
+            add_message(
+                player_in_game, f"{player_in_game.player.name} n'a pu s'agrandir chez lui en {tile.for_human()}"
+            )
+            return messages
 
-                logger_play_turn.info(
-                    "%s grew on %s that was occupied by %s",
+        if (
+            game.config.neighbors_only
+            and player_in_game.nb_tiles
+            and not OccupiedTile.has_occupied_neighbors(player_in_game.id, tile, grid)
+        ):
+            logger_play_turn.warning("%s grew on %s but has no neighbors", player.name, tile)
+            add_message(
+                player_in_game, f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()}, trop loin"
+            )
+            action.fail(reason=ActionFailureReason.GROW_NO_NEIGHBOR)
+            return messages
+
+        if occupied_tile is not None:
+            if not game.config.can_grow_on_occupied:
+                logger_play_turn.warning(
+                    "%s %s on %s but it's occupied by %s",
                     player.name,
+                    "grew" if player_in_game.nb_tiles else "started",
                     tile,
                     occupied_tile.player_in_game.player.name,
                 )
-                if occupied_tile.occupier_nb_tiles <= 1:
-                    new_death(occupied_tile.player_in_game, player_in_game)
-                occupied_tile.player_in_game = player_in_game
-                occupied_tile.save()
-                add_message(
-                    player_in_game,
-                    f"{player_in_game.player.name} s'est agrandi en {tile.for_human()} "
-                    f"chez {occupied_tile.player_in_game.player.name}",
-                )
-            else:
-                logger_play_turn.info("%s grew on %s that was not occupied", player.name, tile)
-                OccupiedTile.objects.create(
-                    game=game,
-                    col=tile.col,
-                    row=tile.row,
-                    player_in_game=player_in_game,
-                    level=(tile_level := game.config.tile_start_level * action.efficiency),
-                )
-                add_message(
-                    player_in_game,
-                    f"{player_in_game.player.name} s'est agrandi en {tile.for_human()} ({tile_level:.2f} PV)",
-                )
-
-            if not player_in_game.nb_tiles:
-                messages = [
-                    message
-                    for message in messages
-                    if message.player_id != player.id or message.kind != GameMessageKind.SPAWN_FAILED
-                ]
-                messages.append(
-                    GameMessage(
-                        text=f"{player_in_game.player.name} "
-                        f"{'commence' if player_in_game.first_in_game_for_player else 'revient'} "
-                        f"en {tile.for_human()}",
-                        kind=GameMessageKind.SPAWN,
-                        color=player_in_game.color_object,
-                        player_id=player.id,
-                        chat_text=None
-                        if player.welcome_chat_message_sent_at
-                        else (
-                            f"Bienvenue dans la partie @{player_in_game.player.name} ! "
-                            f"Tu commences en {tile.for_human()} ! "
-                            "Tu vas bientôt pouvoir t'agrandir, te défendre ou attaquer !"
+                action.fail(reason=ActionFailureReason.GROW_OCCUPIED)
+                if not player_in_game.nb_tiles:
+                    messages.append(
+                        GameMessage(
+                            text=f"{player_in_game.player.name} n'a pu "
+                            f"{'commencer' if player_in_game.first_in_game_for_player else 'revenir'} "
+                            f"en {tile.for_human()} occupée",
+                            kind=GameMessageKind.SPAWN_FAILED,
+                            color=player_in_game.color_object,
+                            player_id=player.id,
+                            chat_text=None
+                            if player.welcome_chat_message_sent_at
+                            else (
+                                f"Bienvenue dans la partie @{player_in_game.player.name} ! "
+                                "Mais tu as cliqué sur une case occupée ! "
+                                "Essaye sur une case libre !"
+                            ),
                         )
-                        if game.config.multi_steps
-                        else (
-                            f"Bienvenue dans la partie @{player_in_game.player.name} ! "
-                            f"Tu vas apparaître en {tile.for_human()} dans quelques secondes ! "
-                            "Clique sur les cases autour pour t'agrandir (le délai est normal "
-                            "et tu n'es pas obligé·e d'attendre l'affichage d'une case cliquée pour continuer !)"
-                        ),
                     )
+                else:
+                    add_message(
+                        player_in_game,
+                        f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()} "
+                        f"chez {occupied_tile.player_in_game.player.name}",
+                    )
+                return messages
+
+            if occupied_tile.player_in_game.is_protected():
+                logger_play_turn.warning(
+                    "%s %s on %s but it's occupied by %s and protected",
+                    player.name,
+                    "grew" if player_in_game.nb_tiles else "started",
+                    tile,
+                    occupied_tile.player_in_game.player.name,
                 )
-                if not player.welcome_chat_message_sent_at:
-                    player.welcome_chat_message_sent_at = timezone.now()
-                    player.save()
+                action.fail(reason=ActionFailureReason.GROW_PROTECTED)
+                if not player_in_game.nb_tiles:
+                    messages.append(
+                        GameMessage(
+                            text=f"{player_in_game.player.name} n'a pu "
+                            f"{'commencer' if player_in_game.first_in_game_for_player else 'revenir'} "
+                            f"en {tile.for_human()} protégee",
+                            kind=GameMessageKind.SPAWN_FAILED,
+                            color=player_in_game.color_object,
+                            player_id=player.id,
+                            chat_text=None
+                            if player.welcome_chat_message_sent_at
+                            else (
+                                f"Bienvenue dans la partie @{player_in_game.player.name} ! "
+                                "Mais tu as cliqué sur une case protégée ! "
+                                "Essaye sur une case sans rond au milieu !"
+                            ),
+                        )
+                    )
+                else:
+                    add_message(
+                        player_in_game,
+                        f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()} "
+                        f"chez {occupied_tile.player_in_game.player.name}, protégée",
+                    )
 
-            player_in_game.reset_start_tile(tile.col, tile.row)
+                return messages
 
-            action.success()
+            logger_play_turn.info(
+                "%s grew on %s that was occupied by %s",
+                player.name,
+                tile,
+                occupied_tile.player_in_game.player.name,
+            )
+            if occupied_tile.occupier_nb_tiles <= 1:
+                new_death(occupied_tile.player_in_game, player_in_game)
+            occupied_tile.player_in_game = player_in_game
+            occupied_tile.save()
+            add_message(
+                player_in_game,
+                f"{player_in_game.player.name} s'est agrandi en {tile.for_human()} "
+                f"chez {occupied_tile.player_in_game.player.name}",
+            )
+        else:
+            logger_play_turn.info("%s grew on %s that was not occupied", player.name, tile)
+            OccupiedTile.objects.create(
+                game=game,
+                col=tile.col,
+                row=tile.row,
+                player_in_game=player_in_game,
+                level=(tile_level := game.config.tile_start_level * action.efficiency),
+            )
+            add_message(
+                player_in_game,
+                f"{player_in_game.player.name} s'est agrandi en {tile.for_human()} ({tile_level:.2f} PV)",
+            )
+
+        if not player_in_game.nb_tiles:
+            messages.append(
+                GameMessage(
+                    text=f"{player_in_game.player.name} "
+                    f"{'commence' if player_in_game.first_in_game_for_player else 'revient'} "
+                    f"en {tile.for_human()}",
+                    kind=GameMessageKind.SPAWN,
+                    color=player_in_game.color_object,
+                    player_id=player.id,
+                    chat_text=None
+                    if player.welcome_chat_message_sent_at
+                    else (
+                        f"Bienvenue dans la partie @{player_in_game.player.name} ! "
+                        f"Tu commences en {tile.for_human()} ! "
+                        "Tu vas bientôt pouvoir t'agrandir, te défendre ou attaquer !"
+                    )
+                    if game.config.multi_steps
+                    else (
+                        f"Bienvenue dans la partie @{player_in_game.player.name} ! "
+                        f"Tu vas apparaître en {tile.for_human()} dans quelques secondes ! "
+                        "Clique sur les cases autour pour t'agrandir (le délai est normal "
+                        "et tu n'es pas obligé·e d'attendre l'affichage d'une case cliquée pour continuer !)"
+                    ),
+                )
+            )
+            if not player.welcome_chat_message_sent_at:
+                player.welcome_chat_message_sent_at = timezone.now()
+                player.save()
+
+        player_in_game.reset_start_tile(tile.col, tile.row)
+
+        action.success()
 
     return messages
 
 
-async def aplay_turn(game: Game, grid: Grid, turn: Optional[int] = None) -> GameMessages:
-    """Play a turn."""
-    return cast(GameMessages, await sync_to_async(play_turn)(game, grid, turn))
+async def aplay_turn(
+    game: Game,
+    grid: Grid,
+    turn: Optional[int] = None,
+    send_messages: Optional[Callable[[list[GameMessage]], Coroutine[Any, Any, None]]] = None,
+) -> GameMessages:
+    """Play a turn and send message or return them."""
+    turn = game.current_turn if turn is None else turn
+    actions = await sync_to_async(lambda: list(game.confirmed_actions_for_turn(turn).order_by("confirmed_at")))()
+    logger_play_turn.info("Playing turn %s: %s actions", turn, len(actions))
+    dead_during_turn: set[int] = set()
+    all_messages: GameMessages = []
+    for action in actions:
+        if messages := await sync_to_async(execute_action)(action, game, grid, turn, dead_during_turn):
+            if send_messages is not None:
+                await send_messages(messages)
+                if game.config.multi_steps:
+                    await asyncio.sleep(game.config.message_delay.total_seconds() * len(messages))
+            else:
+                all_messages.extend(messages)
+    return all_messages
 
 
 def get_free_color(game: Game, default: Color) -> Color:
@@ -802,8 +809,9 @@ def create_or_update_action(player_in_game: PlayerInGame, game: Game, action_typ
         return None
     action = get_current_action(player_in_game, game)
     if action is not None:
-        action.set_tile(None)
         action.action_type = action_type
+        action.set_tile(None, save=False)
+        action.save()
         logger.info("%s updated its action to a %s action", player_in_game.player.name, action_type.name)
         return action
     logger.info("%s created a %s action", player_in_game.player.name, action_type.name)

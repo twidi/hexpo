@@ -475,7 +475,7 @@ class Action(BaseModel):
             return None
         return Tile(self.tile_col, self.tile_row)
 
-    def set_tile(self, tile: Tile | None) -> None:
+    def set_tile(self, tile: Tile | None, save: bool = True) -> None:
         """Set the tile of the action."""
         if self.tile == tile:
             return
@@ -485,7 +485,8 @@ class Action(BaseModel):
         else:
             self.tile_col = tile.col
             self.tile_row = tile.row
-        self.save()
+        if save:
+            self.save()
 
     def is_tile_set(self) -> bool:
         """Check if the tile of the action is set."""
@@ -494,12 +495,12 @@ class Action(BaseModel):
     @property
     def efficiency_for_human(self) -> str:
         """Get the efficiency readable by humans."""
-        efficiency = self.efficiency * 100
-        if int(efficiency) == efficiency:
-            return f"{int(efficiency)}%"
-        if int(efficiency * 10) == efficiency * 10:
-            return f"{efficiency:.1f}%"
-        return f"{efficiency:.2f}%"
+        return f"{round(self.efficiency * 100)}%"
+
+    @property
+    def type(self) -> ActionType:
+        """Get the type of the action."""
+        return ActionType(self.action_type)
 
 
 class RandomEvent(BaseModel):

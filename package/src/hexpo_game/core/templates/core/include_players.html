@@ -17,14 +17,14 @@
                 <div class="player-actions-inner">
                 {% for action in player.current_turn_actions %}
                     <span>
-                        <strong>
-                        {{ action.action_type.0|upper }}
-                        {% if action.action_type != ActionType.BANK and action.tile_col is not None %}
-                            {{ action.tile.for_human }}
+                        <strong>{{ action.type.label.0|upper }}</strong>
+                        {% if action.tile_col or action.state == ActionState.CONFIRMED %}
+                            ({% comment %}
+                            {% endcomment %}{% if action.tile_col is not None %}{{ action.tile.for_human }}{% endif %}{% comment %}
+                            {% endcomment %}{% if action.state == ActionState.CONFIRMED %}{% if action.tile_col is not None %}, {% endif %}{{ action.efficiency_for_human }}{% endif %}{% comment %}
+                            {% endcomment %})
                         {% endif %}
-                        </strong>
                         {% if action.state == ActionState.CONFIRMED %}
-                            ({{ action.efficiency_for_human }})
                             <span class="ok-symbol">✔️</span>
                         {% else %}
                             <span class="ko-symbol">✖️</span>

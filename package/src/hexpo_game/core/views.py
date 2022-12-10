@@ -86,9 +86,9 @@ class GameState:
         # pylint: disable=duplicate-code
         while True:
             try:
-                message = await asyncio.wait_for(queue.get(), timeout=1)
+                message = await asyncio.wait_for(queue.get(), timeout=0.2)
             except asyncio.TimeoutError:
-                continue
+                break
             else:
                 self.messages.append(message)
                 queue.task_done()
@@ -123,7 +123,11 @@ class GameState:
         )
         actions_by_player: dict[int, list[Action]] = {}
 
-        if self.game.config.multi_steps:
+        if self.game.config.multi_steps and self.game.current_turn_step in (
+            GameStep.COLLECTING_ACTIONS,
+            GameStep.RANDOM_EVENTS_BEFORE,
+            GameStep.EXECUTING_ACTIONS,
+        ):
             all_actions = self.game.action_set.filter(
                 player_in_game_id__in=[player_in_game.id for player_in_game in players_in_game],
                 turn=self.game.current_turn,

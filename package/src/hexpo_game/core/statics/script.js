@@ -41,9 +41,10 @@ if (refresh_messages && messages_queue) {
     }, 1000);
 
     (function () {
+        const unqueue_every = parseInt(document.body.getAttribute("data-message-delay")) / 2;
         const animation_duration = 1000;
-        const message_duration = 10000;
         const max_visible = 4;
+        const message_duration = max_visible * (unqueue_every * 2) - animation_duration;
         const gap = 20;
         const queue = document.querySelector('#messages-queue');
         const container = document.querySelector('#messages');
@@ -55,13 +56,6 @@ if (refresh_messages && messages_queue) {
         container.style.setProperty("--message-width", `${message_width}px`);
         let messages = [];
 
-        function queue_message(text) {
-          const message = document.createElement("div");
-          message.textContent = text;
-          message.classList.add("message");
-          queue.appendChild(message);
-        }
-
         function unqueue_message() {
           if (messages.length >= max_visible) { return; }
           const message = queue.querySelector('.message');
@@ -72,7 +66,7 @@ if (refresh_messages && messages_queue) {
           setTimeout(() => remove_message(message), message_duration + animation_duration);
         }
 
-        setInterval(unqueue_message, animation_duration);
+        setInterval(unqueue_message, unqueue_every);
 
         function update_messages() {
           const nb_messages = messages.length;

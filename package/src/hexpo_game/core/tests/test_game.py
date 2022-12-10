@@ -775,7 +775,7 @@ async def test_welcome_chat_message_if_protected():
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_welcome_chat_message_if_protected_then_free():
-    """Test that a welcome chat message is sent if the first grow is on a protected tile but not the second."""
+    """Test that two (sadly) welcome chat messages are sent if the first grow is on a protected tile but not the 2nd."""
     game, _, _ = await make_game_and_player(Tile(0, 0))
     await aplay_turn(game, get_grid(game))
     await game.anext_turn()
@@ -787,10 +787,13 @@ async def test_welcome_chat_message_if_protected_then_free():
     messages = await aplay_turn(game, get_grid(game))
     await assert_action_state(action1, ActionState.FAILURE, ActionFailureReason.GROW_PROTECTED)
     await assert_action_state(action2, ActionState.SUCCESS)
-    assert len(messages) == 1
+    assert len(messages) == 2
     assert messages[0].player_id == player_in_game2.player_id
-    assert messages[0].kind == GameMessageKind.SPAWN
+    assert messages[0].kind == GameMessageKind.SPAWN_FAILED
     assert messages[0].chat_text is not None
+    assert messages[1].player_id == player_in_game2.player_id
+    assert messages[1].kind == GameMessageKind.SPAWN
+    assert messages[1].chat_text is not None
     await player2.arefresh_from_db()
     assert player2.welcome_chat_message_sent_at is not None
 
