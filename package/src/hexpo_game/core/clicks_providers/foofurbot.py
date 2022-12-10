@@ -56,8 +56,8 @@ def get_data(raw_data: bytes | str) -> tuple[str, str, float, float]:
         event = data["event"]
         user_id = data["data"]["user"].get("id", data["data"]["user"]["opaqueId"])
         # that's a lot of data :D
-        x_relative = data["data"]["data"]["percentX"]
-        y_relative = data["data"]["data"]["percentY"]
+        x_relative = data["data"]["event_data"]["percentX"]
+        y_relative = data["data"]["event_data"]["percentY"]
     except KeyError as exc:
         raise ValueError("Invalid data: %s", data, user_id) from exc
 
@@ -95,7 +95,7 @@ async def on_connection(
                         refused_ids.add(exc.args[2])
                     continue
 
-                if event != "click":
+                if event != "mousedown":
                     continue
 
                 await handle_click(
