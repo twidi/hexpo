@@ -160,13 +160,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
             if self.end_step_event.is_set() or self.end_loop_event.is_set():
                 break
             if timezone.now() >= end_step_at:
-                if self.go_next_turn_if_no_actions or await self.game.confirmed_actions_for_turn().aexists():
-                    break
-                end_step_at = await self.game.areset_step_times(
-                    update_start=False, duration=self.collecting_actions_duration
-                )
-                if self.game.config.multi_steps:
-                    end_step_at += self.latency_delay
+                break
             try:
                 player_click = await asyncio.wait_for(
                     self.clicks_queue.get(), timeout=min(1.0, self.collecting_actions_duration.total_seconds())
@@ -322,7 +316,15 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         current_turn = self.game.current_turn
         while not self.end_loop_event.is_set() and not self.game.is_over():
             await self.run_current_step()
-            await self.game.anext_step()  # will change the turn if needed
+            force_step = None
+            if (
+                self.game.config.multi_steps
+                and self.game.current_turn_step == GameStep.COLLECTING_ACTIONS
+                and not self.go_next_turn_if_no_actions
+                and not await self.game.confirmed_actions_for_turn().aexists()
+            ):
+                force_step = GameStep.WAITING_FOR_PLAYERS
+            await self.game.anext_step(force_step)  # will change the turn if needed
             if self.game.current_turn_step in (GameStep.RANDOM_EVENTS_BEFORE, GameStep.RANDOM_EVENTS_AFTER):
                 # these steps are not yet ready
                 await self.game.anext_step()

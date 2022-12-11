@@ -90,18 +90,22 @@ class Game(BaseModel):
         """Go to the next turn."""
         return cast(int, await sync_to_async(self.next_turn)(started_at))
 
-    def next_step(self) -> GameStep:
+    def next_step(self, forced_step: Optional[GameStep] = None) -> GameStep:
         """Go to the next step."""
-        self.current_turn_step = GameStep(self.current_turn_step).next()
-        if self.current_turn_step.is_first():
-            self.next_turn()
-        else:
+        if forced_step is not None:
+            self.current_turn_step = forced_step
             self.save(update_fields=["current_turn_step"])
+        else:
+            self.current_turn_step = GameStep(self.current_turn_step).next()
+            if self.current_turn_step.is_first():
+                self.next_turn()
+            else:
+                self.save(update_fields=["current_turn_step"])
         return self.current_turn_step
 
-    async def anext_step(self) -> GameStep:
+    async def anext_step(self, forced_step: Optional[GameStep] = None) -> GameStep:
         """Go to the next step."""
-        return cast(GameStep, await sync_to_async(self.next_step)())
+        return cast(GameStep, await sync_to_async(self.next_step)(forced_step))
 
     def reset_step_times(self, update_start: bool, duration: timedelta) -> datetime:
         """Reset the step times."""
