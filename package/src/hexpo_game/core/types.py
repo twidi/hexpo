@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+import math
 from asyncio import Queue
 from random import randint
 from string import ascii_letters
@@ -80,6 +81,7 @@ class Color(NamedTuple):
 
 
 TileDistanceCache: dict[tuple[Tile, Tile], int] = {}
+TileCenterDistanceCache: dict[tuple[Tile, Tile], float] = {}
 
 
 class Tile(NamedTuple):
@@ -102,6 +104,22 @@ class Tile(NamedTuple):
     def for_human(self) -> str:
         """Return the tile as a human-readable string."""
         return f"{ascii_letters[26:][self.row]}‑{self.col + 1}"
+
+    def compute_tile_center(self) -> Point:
+        """Compute the center of a tile assuming the tile size is 1."""
+        return Point(
+            3 / 2 * self.col,
+            math.sqrt(3) * (self.row + 0.5 * (self.col % 2)),
+        )
+
+    def center_distance(self, other: Tile) -> float:
+        """Return the distance between the center of two tiles."""
+        ordered_tiles = cast(tuple[Tile, Tile], tuple(sorted((self, other))))
+        if ordered_tiles not in TileCenterDistanceCache:
+            TileCenterDistanceCache[ordered_tiles] = math.dist(
+                self.compute_tile_center(), other.compute_tile_center()
+            )
+        return TileCenterDistanceCache[ordered_tiles]
 
 
 class AxialCoordinate(NamedTuple):

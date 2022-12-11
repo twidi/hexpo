@@ -66,7 +66,7 @@ Neighbors: TypeAlias = tuple[MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTi
 
 
 @dataclass
-class Grid:
+class Grid:  # pylint: disable=too-many-instance-attributes
     """Represent a grid of tiles for the game."""
 
     nb_cols: int
@@ -81,7 +81,10 @@ class Grid:
         self.tiles = tuple(tuple(Tile(col, row) for col in range(self.nb_cols)) for row in range(self.nb_rows))
         self.tiles_set = set(chain(*self.tiles))
         self.neighbors = {tile: self.compute_neighbors(tile) for tile in self}
-        self.max_distance = self.tiles[0][0].distance(self.tiles[-1][-1])
+        self.first_tile = self.tiles[0][0]
+        self.last_tile = self.tiles[-1][-1]
+        self.max_distance = self.first_tile.distance(self.last_tile)
+        self.max_center_distance = self.first_tile.center_distance(self.last_tile)
 
     def __iter__(self) -> Iterator[Tile]:
         """Iterate over the tiles."""
@@ -181,6 +184,10 @@ class Grid:
         nb_rows = (-val_b + sqrt(delta)) / (2 * val_a)
         nb_cols = nb_tiles / nb_rows
         return floor(nb_cols), floor(nb_rows)
+
+    def tile_distance_from_origin_compensation(self, tile: Tile) -> float:
+        """Compute the compensation of a tile depending of its distance from the origin."""
+        return tile.center_distance(self.first_tile) / self.max_center_distance * 0.05
 
 
 TilePoints: TypeAlias = tuple[Point, Point, Point, Point, Point, Point]

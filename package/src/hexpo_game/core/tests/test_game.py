@@ -595,9 +595,10 @@ async def test_turn_mode_can_attack():
     assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.ATTACK, 0.6)) is not None
     await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.SUCCESS)
+    tile_dist_compensation = grid.tile_distance_from_origin_compensation(Tile(0, 1))
     assert (
         await game.occupiedtile_set.aget(col=0, row=1)
-    ).level == game.config.tile_start_level - game.config.attack_damage * 0.6
+    ).level == game.config.tile_start_level - (game.config.attack_damage * 0.6 + tile_dist_compensation)
     await assert_has_tiles(player_in_game2, [Tile(0, 1)])
     await assert_death(player_in_game2, False)
 
@@ -626,9 +627,10 @@ async def test_turn_mode_farther_attack_is_less_efficient():
     assert (action := await asave_action(player_in_game.player, game, far_tile, ActionType.ATTACK, 0.6)) is not None
     await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.SUCCESS)
+    tile_dist_compensation = grid.tile_distance_from_origin_compensation(far_tile)
     assert (
         await game.occupiedtile_set.aget(col=far_tile.col, row=far_tile.row)
-    ).level == game.config.tile_start_level - game.config.attack_damage * 0.6 * 0.2
+    ).level == game.config.tile_start_level - (game.config.attack_damage * 0.6 * 0.2 + tile_dist_compensation)
 
 
 @pytest.mark.asyncio
@@ -704,7 +706,10 @@ async def test_turn_mode_can_grow_empty():
     assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.GROW, 0.6)) is not None
     await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.SUCCESS)
-    assert (await game.occupiedtile_set.aget(col=0, row=1)).level == game.config.tile_start_level * 0.6
+    tile_dist_compensation = grid.tile_distance_from_origin_compensation(Tile(0, 1))
+    assert (
+        await game.occupiedtile_set.aget(col=0, row=1)
+    ).level == game.config.tile_start_level * 0.6 + tile_dist_compensation
 
 
 @pytest.mark.asyncio

@@ -219,6 +219,11 @@ class Game(BaseModel):
         """Get the current step of the game."""
         return GameStep(self.current_turn_step)
 
+    @cached_property
+    def grid(self) -> Grid:
+        """Get the grid."""
+        return Grid(self.grid_nb_cols, self.grid_nb_rows)
+
 
 class Player(BaseModel):
     """Represent a player that played at least one game."""
