@@ -104,8 +104,8 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
     GameMode.TURN_BY_TURN: GameModeConfig(
         max_players=15,
         neighbors_only=True,
-        step_waiting_for_players_duration=timedelta(seconds=20),
-        step_collecting_actions_duration=timedelta(minutes=1),
+        step_waiting_for_players_duration=timedelta(seconds=10),
+        step_collecting_actions_duration=timedelta(seconds=30),
         message_delay=timedelta(seconds=2.5),
         can_end=True,
         multi_steps=True,
