@@ -393,7 +393,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
     def add_message(
         player_in_game: PlayerInGame, text: str, kind: GameMessageKind = GameMessageKind.ACTION, always: bool = False
     ) -> None:
-        if always or game.config.multi_steps:
+        if always or (game.config.multi_steps and game.current_turn_step != GameStep.WAITING_FOR_PLAYERS):
             messages.append(
                 GameMessage(text, kind=kind, color=player_in_game.color_object, player_id=player_in_game.player_id)
             )
