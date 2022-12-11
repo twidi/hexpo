@@ -119,7 +119,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         defend_improvement=20.0,
         bank_value=0.8,
         can_grow_on_occupied=False,
-        respawn_cooldown_turns=5,
+        respawn_cooldown_turns=2,
         respawn_cooldown_max_duration=None,
         respawn_protected_max_turns=10,
         respawn_protected_max_tiles=10,
@@ -159,14 +159,31 @@ class RandomEventType(models.TextChoices):
 
     LIGHTNING = "lightning", "Lightning"
     EARTHQUAKE = "earthquake", "Earthquake"
-    DROP_COINS = "drop_coins", "Drop coins"
+    DROP_ACTIONS = "drop_actions", "Drop actions"
 
 
-LIGHTNING_DAMAGES_RANGE = (10, 50)  # Damage to the hit tile
-EARTHQUAKE_RADIUS_RANGE = (3, 10)  # Radius of the earthquake
-EARTHQUAKE_DAMAGES_RANGE = (10, 50)  # Damage to all tile in the earthquake radius
-DROP_COINS_RANGE = (100, 1000)  # Number of coins in the drop
-MIN_START_DISTANCE_FROM_DROPS = 3  # Minimum distance between the start tile and the drops
+NO_EVENT_MESSAGES = [
+    "Pas de changement notable",
+    "Rien de spécial ne s'est produit",
+    "Pas d'évènement à signaler",
+    "Aucune surprise en vue",
+    "La vie poursuit son cours sans heurts",
+    "Rien de nouveau sous le soleil",
+    "R.A.S., tout va bien",
+    "C'est trop calme. j'aime pas trop beaucoup ça",
+    "J'préfère quand c'est un peu trop plus moins calme",
+]
+
+LIGHTNING_DAMAGES_RANGE = (10, 80)  # Damage to the hit tile
+EARTHQUAKE_RADIUS_RANGE = (4, 9)  # Radius of the earthquake
+EARTHQUAKE_DAMAGES_RANGE = (40, 80)  # Damage to all tile in the earthquake radius
+EARTHQUAKE_MIN_DAMAGES = 10  # Damage for tiles the farthest from earthquake center
+DROP_ACTIONS_RANGE = (1, 30)  # Number of actions in the drop
+RANDOM_EVENTS_PROBABILITIES = {
+    RandomEventType.LIGHTNING: (0, 0.05),
+    RandomEventType.EARTHQUAKE: (0.05, 0.07),
+    RandomEventType.DROP_ACTIONS: (0.07, 0.1),
+}
 
 
 class RandomEventTurnMoment(models.TextChoices):
