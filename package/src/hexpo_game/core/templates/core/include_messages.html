@@ -1,5 +1,5 @@
 {% for message in messages %}
-    <div class="message message-type-{{ message.type.value }}"{% if message.color %} style="--message-color: {{ message.color.as_hex }}"{% endif %}>
+    <div class="message message-type-{{ message.kind.value }}"{% if message.color %} style="--message-color: {{ message.color.as_hex }}"{% endif %}>
         {{ message.text|linebreaksbr }}
     </div>
 {% endfor %}

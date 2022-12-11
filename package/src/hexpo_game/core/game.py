@@ -292,9 +292,8 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         if self.game.config.multi_steps:
             await self.game_messages_queue.put(
                 GameMessage(
-                    text=f"Nouvelle étape:\n{step.label}",
+                    text=step.label,
                     kind=GameMessageKind.GAME_STEP_CHANGED,
-                    color=Color(255, 255, 255),
                 )
             )
             logger.info("Current step: %s", step)
@@ -332,9 +331,8 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
                 if self.game.config.multi_steps:
                     await self.game_messages_queue.put(
                         GameMessage(
-                            text=f"Nouveau tour: {current_turn}",
+                            text=f"Tour {current_turn}",
                             kind=GameMessageKind.GAME_TURN_CHANGED,
-                            color=Color(255, 255, 255),
                         )
                     )
                     logger.info("New turn: %s", current_turn)

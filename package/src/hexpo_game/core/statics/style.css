@@ -411,6 +411,11 @@ body.multi-steps .player-name {
     transform: translateX(calc( var(--messages-gap, 0) + var(--messages-width, 500%)));
     transition: transform ease-out var(--animation-duration, 1000ms), opacity ease-out var(--animation-duration, 1000ms);
 }
+.message.message-type-game_step_changed, .message.message-type-game_turn_changed {
+    --message-color: var(--text-color);
+    background: var(--text-color);
+    color: var(--shell-background);
+}
 .message-removed {
   transform: translateX(-150%) !important;
   opacity: 0 !important;
