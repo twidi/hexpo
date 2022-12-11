@@ -106,7 +106,14 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
             if self.end_step_event.is_set() or self.end_loop_event.is_set():
                 break
             if timezone.now() >= end_step_at:
-                break
+                # we need at least two players to continue the game
+                if await self.game.get_current_players_in_game().acount() >= 2:
+                    break
+                end_step_at = await self.game.areset_step_times(
+                    update_start=False, duration=self.waiting_for_players_duration
+                )
+                if self.game.config.multi_steps:
+                    end_step_at += self.latency_delay
             try:
                 player_click = await asyncio.wait_for(
                     self.clicks_queue.get(), timeout=min(1.0, self.waiting_for_players_duration.total_seconds())
