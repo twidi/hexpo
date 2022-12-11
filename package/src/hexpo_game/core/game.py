@@ -438,7 +438,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
 
     if action.action_type == ActionType.ATTACK:
         if occupied_tile is None:
-            logger_play_turn.warning("%s attacked %s but it's not occupied", player.name, tile)
+            logger_play_turn.warning("%s attacked %s but it's not occupied", player.name, tile.for_human())
             action.fail(reason=ActionFailureReason.ATTACK_EMPTY)
             add_message(
                 player_in_game,
@@ -447,7 +447,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             return messages
 
         if occupied_tile.player_in_game_id == player_in_game.id:
-            logger_play_turn.warning("%s attacked %s but it's their own", player.name, tile)
+            logger_play_turn.warning("%s attacked %s but it's their own", player.name, tile.for_human())
             add_message(
                 player_in_game, f"{player_in_game.player.name} a attaqué en vain chez lui en {tile.for_human()}"
             )
@@ -458,7 +458,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             logger_play_turn.warning(
                 "%s attacked %s but it's occupied by %s and protected",
                 player.name,
-                tile,
+                tile.for_human(),
                 occupied_tile.player_in_game.player.name,
             )
             action.fail(reason=ActionFailureReason.ATTACK_PROTECTED)
@@ -486,7 +486,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             logger_play_turn.info(
                 "%s attacked and destroyed %s that was occupied by %s (damage: %s, from %s)",
                 player.name,
-                tile,
+                tile.for_human(),
                 occupied_tile.player_in_game.player.name,
                 f"{damage:.2f}",
                 f"{old_level:.2f}",
@@ -504,7 +504,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             logger_play_turn.info(
                 "%s attacked %s that is occupied by %s (damage: %s, from %s to %s)",
                 player.name,
-                tile,
+                tile.for_human(),
                 occupied_tile.player_in_game.player.name,
                 f"{damage:.2f}",
                 f"{old_level:.2f}",
@@ -521,7 +521,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
 
     elif action.action_type == ActionType.DEFEND:
         if occupied_tile is None:
-            logger_play_turn.warning("%s defended %s but it's not occupied", player.name, tile)
+            logger_play_turn.warning("%s defended %s but it's not occupied", player.name, tile.for_human())
             action.fail(reason=ActionFailureReason.DEFEND_EMPTY)
             add_message(
                 player_in_game,
@@ -533,7 +533,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             logger_play_turn.warning(
                 "%s defended %s but it's occupied by %s",
                 player.name,
-                tile,
+                tile.for_human(),
                 occupied_tile.player_in_game.player.name,
             )
             add_message(
@@ -551,7 +551,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
         logger_play_turn.info(
             "%s defended %s (improvement: %s, from %s to %s)",
             player.name,
-            tile,
+            tile.for_human(),
             f"{improvement:.2f}",
             f"{old_level:.2f}",
             f"{occupied_tile.level:.2f}",
@@ -567,7 +567,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
 
     elif action.action_type == ActionType.GROW:
         if occupied_tile is not None and occupied_tile.player_in_game_id == player_in_game.id:
-            logger_play_turn.warning("%s grew on %s but it's already their tile", player.name, tile)
+            logger_play_turn.warning("%s grew on %s but it's already their tile", player.name, tile.for_human())
             action.fail(reason=ActionFailureReason.GROW_SELF)
             add_message(
                 player_in_game, f"{player_in_game.player.name} n'a pu s'agrandir chez lui en {tile.for_human()}"
@@ -579,7 +579,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             and player_in_game.nb_tiles
             and not OccupiedTile.has_occupied_neighbors(player_in_game.id, tile, grid)
         ):
-            logger_play_turn.warning("%s grew on %s but has no neighbors", player.name, tile)
+            logger_play_turn.warning("%s grew on %s but has no neighbors", player.name, tile.for_human())
             add_message(
                 player_in_game, f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()}, trop loin"
             )
@@ -592,7 +592,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                     "%s %s on %s but it's occupied by %s",
                     player.name,
                     "grew" if player_in_game.nb_tiles else "started",
-                    tile,
+                    tile.for_human(),
                     occupied_tile.player_in_game.player.name,
                 )
                 action.fail(reason=ActionFailureReason.GROW_OCCUPIED)
@@ -627,7 +627,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                     "%s %s on %s but it's occupied by %s and protected",
                     player.name,
                     "grew" if player_in_game.nb_tiles else "started",
-                    tile,
+                    tile.for_human(),
                     occupied_tile.player_in_game.player.name,
                 )
                 action.fail(reason=ActionFailureReason.GROW_PROTECTED)
@@ -661,7 +661,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             logger_play_turn.info(
                 "%s grew on %s that was occupied by %s",
                 player.name,
-                tile,
+                tile.for_human(),
                 occupied_tile.player_in_game.player.name,
             )
             if occupied_tile.occupier_nb_tiles <= 1:
@@ -674,7 +674,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                 f"chez {occupied_tile.player_in_game.player.name}",
             )
         else:
-            logger_play_turn.info("%s grew on %s that was not occupied", player.name, tile)
+            logger_play_turn.info("%s grew on %s that was not occupied", player.name, tile.for_human())
             OccupiedTile.objects.create(
                 game=game,
                 col=tile.col,
@@ -835,7 +835,12 @@ def set_action_tile(
         )
         return None
     action.set_tile(tile)
-    logger.info("%s set tile %s for action %s", player_in_game.player.name, tile, ActionType(action.action_type).name)
+    logger.info(
+        "%s set tile %s for action %s",
+        player_in_game.player.name,
+        tile.for_human(),
+        ActionType(action.action_type).name,
+    )
     return action
 
 
@@ -890,7 +895,7 @@ def confirm_action(
             "%s confirmed its %s action on %s",
             player_in_game.player.name,
             ActionType(action.action_type).name,
-            action.tile,
+            action_tile.for_human() if (action_tile := action.tile) is not None else None,
         )
     return action
 
