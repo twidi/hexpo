@@ -791,6 +791,8 @@ def get_or_create_player_in_game(
         or (player_in_game.first_in_game_for_player and player_in_game.start_tile_col is None),
         started_turn=game.current_turn,
         level=game.config.player_start_level,
+        # in multi steps mode, an action is created on user arrival, we need to let the user play in the actions step
+        banked_actions=1 if game.config.multi_steps else 0,
     )
 
 
