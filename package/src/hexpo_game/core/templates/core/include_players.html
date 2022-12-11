@@ -5,8 +5,10 @@
         <div class="player-info">
             <div class="player-name">{{ player.name }}</div>
             {% if game.config.multi_steps %}
-                <div class="player-level">Lvl {{ player.level }}</div>
-                <div class="player-actions-left">Actions: {{ player.level_actions_left }}{% if player.banked_actions_left != "0.00" %}+{{ player.banked_actions_left }}{% endif %}</div>
+                {% if player.can_play %}
+                    <div class="player-level">Lvl {{ player.level }}</div>
+                    <div class="player-actions-left">Actions: {{ player.level_actions_left }}{% if player.banked_actions_left != "0.00" %}+{{ player.banked_actions_left }}{% endif %}</div>
+                {% endif %}
             {% else %}
                 <div class="player-nb-tiles">{{ player.nb_tiles }}</div>
                 <div class="player-percent-tiles">{{ player.percent_tiles }}</div>
