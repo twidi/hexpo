@@ -54,7 +54,7 @@ class GameState:
     def __post_init__(self) -> None:
         """Get the last players and prepare the list of messages."""
         self.messages: list[GameMessage] = []
-        self.grid_state: dict[Tile, datetime] = {}
+        self.grid_state: dict[Tile, tuple[int, datetime]] = {}
 
     async def update_forever(self, game_messages_queue: GameMessagesQueue, delay: float) -> None:
         """Update the game state forever."""
@@ -92,11 +92,13 @@ class GameState:
                 self.messages.append(message)
                 queue.task_done()
 
-    def get_grid_state(self) -> dict[Tile, datetime]:
+    def get_grid_state(self) -> dict[Tile, tuple[int, datetime]]:
         """Return the grid state."""
         return {
-            Tile(occupied_tile.col, occupied_tile.row): occupied_tile.updated_at
-            for occupied_tile in self.game.occupiedtile_set.all()
+            Tile(col, row): (player_in_game_id, updated_at)
+            for col, row, player_in_game_id, updated_at in self.game.occupiedtile_set.values_list(
+                "col", "row", "player_in_game_id", "updated_at"
+            )
         }
 
     async def draw_grid(self) -> bool:
@@ -104,19 +106,30 @@ class GameState:
         new_grid_state = await sync_to_async(self.get_grid_state)()
         if new_grid_state == self.grid_state:
             return False
+
         self.grid_state = new_grid_state
 
         self.grid.reset_map()
-        self.grid.draw_map_contour(Color(0, 0, 0))
-
-        for player_in_game in await sync_to_async(self.game.get_current_players_in_game_with_occupied_tiles)():
+        if self.game.config.multi_steps:
             self.grid.draw_areas(
-                (
-                    Tile(occupied_tile.col, occupied_tile.row)
-                    for occupied_tile in player_in_game.occupiedtile_set.all()
-                ),
+                set(self.grid.grid) - set(self.grid_state),
+                Color(0, 0, 0),
+            )
+        else:
+            self.grid.draw_map_contour(Color(0, 0, 0))
+
+        tiles_per_player_id: dict[int, list[Tile]] = {}
+        for tile, (player_in_game_id, _) in self.grid_state.items():
+            tiles_per_player_id.setdefault(player_in_game_id, []).append(tile)
+
+        players_in_game = await self.game.playeringame_set.ain_bulk(tiles_per_player_id.keys())
+
+        for player_in_game_id, tiles in tiles_per_player_id.items():
+            player_in_game = players_in_game[player_in_game_id]
+            self.grid.draw_areas(
+                tiles,
                 player_in_game.color_object.as_bgr(),
-                mark=player_in_game.is_protected(),
+                mark=player_in_game.is_protected(len(tiles)),
             )
 
         return True
