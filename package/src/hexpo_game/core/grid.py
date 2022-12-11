@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import math
 from dataclasses import dataclass, field
+from itertools import chain
 from math import ceil, floor, sqrt
 from typing import Iterable, Iterator, NamedTuple, Optional, TypeAlias
 
@@ -78,13 +79,13 @@ class Grid:
     def __post_init__(self) -> None:
         """Create the grid."""
         self.tiles = tuple(tuple(Tile(col, row) for col in range(self.nb_cols)) for row in range(self.nb_rows))
+        self.tiles_set = set(chain(*self.tiles))
         self.neighbors = {tile: self.compute_neighbors(tile) for tile in self}
         self.max_distance = self.tiles[0][0].distance(self.tiles[-1][-1])
 
     def __iter__(self) -> Iterator[Tile]:
         """Iterate over the tiles."""
-        for row in self.tiles:
-            yield from row
+        yield from self.tiles_set
 
     @property
     def nb_tiles(self) -> int:

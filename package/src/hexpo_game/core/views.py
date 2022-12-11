@@ -112,7 +112,7 @@ class GameState:
         self.grid.reset_map()
         if self.game.config.multi_steps:
             self.grid.draw_areas(
-                set(self.grid.grid) - set(self.grid_state),
+                self.grid.grid.tiles_set - set(self.grid_state),
                 Color(0, 0, 0),
             )
         else:
