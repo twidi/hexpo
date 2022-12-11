@@ -105,7 +105,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         max_players=15,
         neighbors_only=True,
         step_waiting_for_players_duration=timedelta(seconds=20),
-        step_collecting_actions_duration=timedelta(minutes=2),
+        step_collecting_actions_duration=timedelta(minutes=1),
         message_delay=timedelta(seconds=2.5),
         can_end=True,
         multi_steps=True,
