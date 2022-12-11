@@ -90,6 +90,7 @@ class TwitchClient(Bot):
                 f"Ensuite attend l'étape (en haut à gauche) '{GameStep.WAITING_FOR_PLAYERS.label}' pour commencer. "
                 "Tu pourras alors cliquer sur le stream pour commencer ton territoire."
             )
+            await asyncio.sleep(1)
             await ctx.send(
                 "[2/4] "
                 "C'est un jeu de stratégie en tour par tour. À chaque tour tu as une ou plusieurs actions "
@@ -97,11 +98,13 @@ class TwitchClient(Bot):
                 f"Tu peux aussi banquer {GAME_MODE_CONFIGS[GameMode.TURN_BY_TURN].bank_value * 100:.0f}% "
                 f"d'une action pour l'utiliser plus tard."
             )
+            await asyncio.sleep(1)
             await ctx.send(
                 "[3/4] "
                 "Une case démarre à max 20 PV (sur un total max de 100) et chaque action en ajoute/retire max 20, "
                 "mais ce nombre n'est affiché nul part, sauf quand une action est exécutée: il faut avoir l'oeil. "
             )
+            await asyncio.sleep(1)
             await ctx.send(
                 "[4/4] "
                 "Note que ce '20' est un max car ça dépend de l'efficacité de ton action ! Plus elle sera confirmée "
@@ -114,12 +117,14 @@ class TwitchClient(Bot):
                 "Clique sur l'extension à droite du stream, puis sur 'Gérez vos accès' et partage ton identifiant ! "
                 "Ensuite clique sur le stream et crée ton territoire en cliquant a côté d'une de tes précédentes cases."
             )
+            await asyncio.sleep(1)
             await ctx.send(
                 "[2/3] "
                 "La latence du stream fait qu'il y a un délai entre le clic et l'affichage, c'est normal. "
                 "Pendant tes 30 premières secondes (ou max 10 cases), tu as un rond au centre de tes cases, "
                 "ça sert à te repérer, et en plus tu es invincible!."
             )
+            await asyncio.sleep(1)
             await ctx.send(
                 "[3/3] "
                 "Ensuite, si ta dernière case est prise, tu devras attendre 10 secondes avant de respawn "
