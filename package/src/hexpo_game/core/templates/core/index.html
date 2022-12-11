@@ -4,7 +4,7 @@
         <link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet'>
         <link rel="stylesheet" type="text/css" href="/statics/style.css?ts={{ timestamp }}">
     </head>
-    <body data-reload="{% if reload %}true{% else %}false{% endif %}" data-message-delay="{{ game.config.message_delay_ms }}" id="page-index" style="--map-width: {{ map_width }}px; --map-height: {{ map_height }}px; --tile-width: {{ tile_width }}px; --tile-height: {{ tile_height }}px; --map-margin-right: {{ map_margin_right }}px; --map-margin-bottom: {{ map_margin_bottom }}px;" class="{% if game.config.multi_steps %}multi-steps{% endif %} step_{{ game.current_turn_step }}">
+    <body data-reload="{% if reload %}true{% else %}false{% endif %}" data-message-delay="{{ game.config.message_delay_ms }}" id="page-index" style="--map-width: {{ map_width }}px; --map-height: {{ map_height }}px; --tile-width: {{ tile_width }}px; --tile-height: {{ tile_height }}px; --map-margin-right: {{ map_margin_right }}px; --map-margin-bottom: {{ map_margin_bottom }}px;" class="{% if game.config.multi_steps %}multi-steps{% endif %}" data-game-step="{{ game.current_turn_step }}">
         <div id="main-container">
             <div id="empty-top"></div>
             <div id="turn-step">

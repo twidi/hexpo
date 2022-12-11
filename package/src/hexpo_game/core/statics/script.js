@@ -43,10 +43,12 @@ if (refresh_step && turn_step) {
         const response = await fetch('/step.partial', {cache: 'no-cache'});
         if (response.ok) {
             step_fragment_holder.innerHTML = await response.text();
-            turn_step.innerHTML = step_fragment_holder.content.querySelector('#turn-step-fragment').innerHTML;
+            const step_fragment = step_fragment_holder.content.querySelector('#turn-step-fragment');
+            turn_step.innerHTML = step_fragment.innerHTML;
             if (step_instructions) {
                 step_instructions.innerHTML = step_fragment_holder.content.querySelector('#step-instructions-fragment').innerHTML;
             }
+            document.body.setAttribute('data-game-step', step_fragment.getAttribute('data-game-step'));
         }
     }, 500);
 }
