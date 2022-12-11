@@ -506,10 +506,11 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                 f"{old_level:.2f}",
                 f"{occupied_tile.level:.2f}",
             )
+            # noinspection InvisibleCharacter
             add_message(
                 player_in_game,
                 f"{player_in_game.player.name} a attaqué {occupied_tile.player_in_game.player.name} "
-                f"en {tile.for_human()} (-{damage:.2f} PV ➔ {occupied_tile.level:.2f})",
+                f"en {tile.for_human()} (-{damage:.2f} PV ➔ {occupied_tile.level:.2f})",
             )
 
         action.success()
@@ -551,10 +552,11 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             f"{old_level:.2f}",
             f"{occupied_tile.level:.2f}",
         )
+        # noinspection InvisibleCharacter
         add_message(
             player_in_game,
             f"{player_in_game.player.name} a défendu en {tile.for_human()} "
-            f"(+{improvement:.2f} PV ➔ {occupied_tile.level:.2f})",
+            f"(+{improvement:.2f} PV ➔ {occupied_tile.level:.2f})",
         )
 
         action.success()
@@ -676,9 +678,10 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                 player_in_game=player_in_game,
                 level=(tile_level := game.config.tile_start_level * action.efficiency),
             )
+            # noinspection InvisibleCharacter
             add_message(
                 player_in_game,
-                f"{player_in_game.player.name} s'est agrandi en {tile.for_human()} ({tile_level:.2f} PV)",
+                f"{player_in_game.player.name} s'est agrandi en {tile.for_human()} ({tile_level:.2f} PV)",
             )
 
         if not player_in_game.nb_tiles:
