@@ -53,58 +53,74 @@ if (refresh_step && turn_step) {
 
 
 if (refresh_messages && messages_queue) {
-    setInterval(async () => {
-        const response = await fetch('/messages.partial', {cache: 'no-cache'});
-        if (response.ok) {
-            messages_queue.insertAdjacentHTML('beforeend', await response.text());
-        }
-    }, 1000);
-
     (function () {
-        const unqueue_every = parseInt(document.body.getAttribute("data-message-delay")) / 2;
+        const message_delay = parseInt(document.body.getAttribute("data-message-delay"));
         const animation_duration = 1000;
         const max_visible = 4;
-        const message_duration = max_visible * (unqueue_every * 2) - animation_duration;
+        const message_duration = max_visible * message_delay;
         const gap = 20;
-        const queue = document.querySelector('#messages-queue');
         const container = document.querySelector('#messages');
         const total_width = container.clientWidth;
         const message_width = (total_width - gap * (max_visible - 1)) / max_visible;
         const one_offset = message_width + gap;
         container.style.setProperty("--animation-duration", `${animation_duration}ms`);
+        container.style.setProperty("--messages-gap", `${gap}px`);
         container.style.setProperty("--messages-width", `${total_width}px`);
         container.style.setProperty("--message-width", `${message_width}px`);
+        let last_displayed_at = null;
         let messages = [];
+        let nb_displayed = 0;
 
-        function unqueue_message() {
-          if (messages.length >= max_visible) { return; }
-          const message = queue.querySelector('.message');
-          if (!message) { return; }
-          container.appendChild(message);
-          messages.push(message);
-          setTimeout(update_messages, 100);
-          setTimeout(() => remove_message(message), message_duration + animation_duration);
+        async function fetch_messages() {
+            const response = await fetch('/messages.partial', {cache: 'no-cache'});
+            if (response.ok) {
+                messages_queue.insertAdjacentHTML('beforeend', await response.text());
+            }
+            messages_queue.querySelectorAll('.message').forEach((el) => {
+                container.appendChild(el);
+                messages.push({element: el, position: null, displayed_at: null});
+            });
         }
-
-        setInterval(unqueue_message, unqueue_every);
+        setInterval(fetch_messages, 500);
 
         function update_messages() {
-          const nb_messages = messages.length;
-          const used_width = nb_messages * message_width + (nb_messages - 1) * gap;
-          const start = Math.max(0, (total_width - used_width) / 2);
-          for (let index = 0; index < nb_messages; index++) {
-            const message = messages[index];
-            message.style.transform = `translateX(${start + index * one_offset}px)`;
-            message.style.opacity = 1;
-          }
+            let messages_to_delete = [];
+            const now = Date.now();
+            for (let message of messages) {
+                if (message.displayed_at !== null && (now - message.displayed_at) > message_duration) {
+                    messages_to_delete.push(message);
+                }
+            }
+            for (let message of messages_to_delete) {
+                messages = messages.filter(n => n !== message);
+                message.element.classList.add("message-removed");
+                setTimeout(() => container.removeChild(message.element), animation_duration);
+                nb_displayed--;
+            }
+            const used_width = nb_displayed * message_width + (nb_displayed - 1) * gap;
+            const start = Math.max(0, (total_width - used_width) / 2);
+            for (let message of messages) {
+                if (message.displayed_at === null) {
+                    if (last_displayed_at !== null && (now - last_displayed_at) < message_delay) {
+                        break
+                    }
+                    message.element.style.opacity = '1';
+                    message.displayed_at = now;
+                    last_displayed_at = now;
+                    nb_displayed++;
+                }
+            }
+            for (let index = 0; index < messages.length; index++) {
+                const message = messages[index];
+                if (message.displayed_at === null) { break }
+                const position = start + index * one_offset;
+                if (message.position !== position) {
+                    message.position = position;
+                    message.element.style.transform = `translateX(${position}px)`;
+                }
+            }
         }
-
-        function remove_message(message) {
-          messages = messages.filter(n => n !== message);
-          message.classList.add("message-removed");
-          setTimeout(() => container.removeChild(message), animation_duration);
-          update_messages();
-        }
+        setInterval(update_messages, 100);
     })();
 
 }

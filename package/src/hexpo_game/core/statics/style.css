@@ -408,7 +408,7 @@ body.multi-steps .player-name {
     top: 0;
     left: 0;
     opacity: 0;
-    transform: translateX(calc( 1px + var(--messages-width, 500%)));
+    transform: translateX(calc( var(--messages-gap, 0) + var(--messages-width, 500%)));
     transition: transform ease-out var(--animation-duration, 1000ms), opacity ease-out var(--animation-duration, 1000ms);
 }
 .message-removed {
