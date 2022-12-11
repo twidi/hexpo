@@ -170,9 +170,11 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
             else:
                 try:
                     if self.game.config.multi_steps:
-                        await sync_to_async(self.step_collecting_actions_handle_click_multi_steps)(
+                        action = await sync_to_async(self.step_collecting_actions_handle_click_multi_steps)(
                             player_click, self.game
                         )
+                        if action is not None and action.confirmed_at is not None:
+                            await sync_to_async(self.step_collecting_actions_compute_efficiency)(self.game)
                     else:
                         await sync_to_async(self.step_collecting_actions_handle_click_single_step)(
                             player_click, self.game
