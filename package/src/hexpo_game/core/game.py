@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from asyncio import Queue
+from collections import defaultdict
 from contextlib import suppress
 from datetime import datetime, timedelta
 from queue import Empty
@@ -135,7 +136,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         action = cls.step_collecting_actions_handle_click_single_step(player_click, game)
         if action is None:
             return []
-        messages = execute_action(action, game, grid, game.current_turn, set())
+        messages = execute_action(action, game, grid, game.current_turn, defaultdict(int), set())
         action.refresh_from_db()
         if action.state == ActionState.FAILURE:
             player_in_game.die()
@@ -345,12 +346,9 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
 
 
 def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
-    action: Action, game: Game, grid: Grid, turn: int, dead_during_turn: set[int]
+    action: Action, game: Game, grid: Grid, turn: int, nb_actions: dict[int, int], dead_during_turn: set[int]
 ) -> GameMessages:
     """Execute the action."""
-    if (action.tile_col is None or action.tile_row is None) and action.action_type != ActionType.BANK:
-        return []
-
     # as the player can be changed by previous actions, we need to load it from db for each action
     player_in_game = (
         PlayerInGame.objects.filter(id=action.player_in_game_id)
@@ -363,6 +361,20 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
     if player_in_game.id in dead_during_turn:
         action.fail(reason=ActionFailureReason.DEAD)
         logger_play_turn.warning("%s IS DEAD (killed in this turn)", player.name)
+        return []
+
+    nb_actions[player_in_game.id] += 1
+    if nb_actions[player_in_game.id] > player_in_game.level + player_in_game.banked_actions:
+        logger_play_turn.warning(
+            "%s USED TOO MANY ACTIONS (%s used, level %s, banked %s)",
+            player.name,
+            nb_actions[player_in_game.id],
+            player_in_game.level,
+            player_in_game.banked_actions,
+        )
+        return []
+
+    if (action.tile_col is None or action.tile_row is None) and action.action_type != ActionType.BANK:
         return []
 
     if not player_in_game.nb_tiles and action.action_type != ActionType.GROW:
@@ -710,15 +722,19 @@ async def aplay_turn(
     actions = await sync_to_async(lambda: list(game.confirmed_actions_for_turn(turn).order_by("confirmed_at")))()
     logger_play_turn.info("Playing turn %s: %s actions", turn, len(actions))
     dead_during_turn: set[int] = set()
+    nb_actions: dict[int, int] = defaultdict(int)
     all_messages: GameMessages = []
     for action in actions:
-        if messages := await sync_to_async(execute_action)(action, game, grid, turn, dead_during_turn):
+        if messages := await sync_to_async(execute_action)(action, game, grid, turn, nb_actions, dead_during_turn):
             if send_messages is not None:
                 await send_messages(messages)
                 if game.config.multi_steps:
                     await asyncio.sleep(game.config.message_delay.total_seconds() * len(messages))
             else:
                 all_messages.extend(messages)
+
+    await PlayerInGame.aupdate_all_banked_actions(nb_actions)
+
     return all_messages
 
 

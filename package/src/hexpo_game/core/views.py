@@ -131,15 +131,16 @@ class GameState:
             all_actions = self.game.action_set.filter(
                 player_in_game_id__in=[player_in_game.id for player_in_game in players_in_game],
                 turn=self.game.current_turn,
-                state__in=(ActionState.CREATED, ActionState.CONFIRMED),
             )
+            if self.game.current_turn_step != GameStep.COLLECTING_ACTIONS:
+                all_actions = all_actions.exclude(state=ActionState.CREATED)
             for action in all_actions:
                 actions_by_player.setdefault(action.player_in_game_id, []).append(action)
             for actions in actions_by_player.values():
                 actions.sort(
-                    key=lambda action: (0, action.confirmed_at)
-                    if action.state == ActionState.CONFIRMED
-                    else (1, None)
+                    key=lambda action: (1, None)
+                    if action.state == ActionState.CREATED
+                    else (0, action.confirmed_at)
                 )
 
         return [

@@ -396,6 +396,23 @@ class PlayerInGame(BaseModel):
         self.start_tile_row = row
         self.save()
 
+    @classmethod
+    def update_all_banked_actions(cls, used_actions_per_player: dict[int, int]) -> None:
+        """Update the banked actions of the player."""
+        players_in_game = PlayerInGame.objects.in_bulk(used_actions_per_player.keys())
+        for player_in_game_id, used_actions in used_actions_per_player.items():
+            player_in_game = players_in_game[player_in_game_id]
+            if used_actions <= player_in_game.level:
+                return
+            player_in_game.banked_actions -= used_actions - player_in_game.level
+            player_in_game.banked_actions = max(player_in_game.banked_actions, 0)
+            player_in_game.save()
+
+    @classmethod
+    async def aupdate_all_banked_actions(cls, used_actions_per_player: dict[int, int]) -> None:
+        """Update the banked actions of the player."""
+        await sync_to_async(cls.update_all_banked_actions)(used_actions_per_player)
+
 
 class OccupiedTile(BaseModel):
     """Represent a tile that is occupied by a player."""

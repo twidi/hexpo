@@ -16,6 +16,7 @@
             <div class="player-actions">
                 <div class="player-actions-inner">
                 {% for action in player.current_turn_actions %}
+                    {% if action.state == ActionState.CREATED or action.state == ActionState.CONFIRMED %}
                     <span>
                         <strong>{{ action.type.label.0|upper }}</strong>
                         {% if action.tile_col or action.state == ActionState.CONFIRMED %}
@@ -30,6 +31,7 @@
                             <span class="ko-symbol">✖️</span>
                         {% endif %}
                     </span>
+                    {% endif %}
                 {% endfor %}
                 </div>
             </div>
