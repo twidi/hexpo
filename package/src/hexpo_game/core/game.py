@@ -10,7 +10,7 @@ from queue import Empty
 from typing import Any, Callable, Coroutine, NamedTuple, Optional, TypeAlias, cast
 
 from asgiref.sync import sync_to_async
-from django.db.models import Count
+from django.db.models import Avg, Count
 from django.utils import timezone
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
@@ -726,6 +726,20 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
     return messages
 
 
+def compute_start_banked_actions(game: Game, mininum: float) -> float:
+    """Compute the number of banked actions for a player entering the game."""
+    return max(
+        mininum,
+        (
+            game.get_all_players_in_games()
+            .annotate(nb_tiles=Count("occupiedtile"))
+            .filter(nb_tiles__gt=0)
+            .aggregate(Avg("nb_tiles"))["nb_tiles__avg"]
+            or 0
+        ),
+    )
+
+
 async def aplay_turn(
     game: Game,
     grid: Grid,
@@ -812,7 +826,7 @@ def get_or_create_player_in_game(
         started_turn=game.current_turn,
         level=game.config.player_start_level,
         # in multi steps mode, an action is created on user arrival, we need to let the user play in the actions step
-        banked_actions=1 if game.config.multi_steps else 0,
+        banked_actions=compute_start_banked_actions(game, 1) if game.config.multi_steps else 0,
     )
 
 
