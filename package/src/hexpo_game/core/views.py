@@ -38,6 +38,11 @@ logger = logging.getLogger(__name__)
 #
 
 
+def int_or_float_as_str(value: float) -> str:
+    """Return the string representation of a float or an int."""
+    return str(int(value)) if value.is_integer() else f"{value:.2f}"
+
+
 @dataclass
 class GameState:
     """The state of the current running game."""
@@ -147,7 +152,9 @@ class GameState:
                     "level": player_in_game.level,
                     "current_turn_actions": (actions := actions_by_player.get(player_in_game.id, [])),
                     "level_actions_left": max(0, overflow_actions := (player_in_game.level - len(actions))),
-                    "banked_actions_left": f"{player_in_game.banked_actions - max(0, -overflow_actions):.2f}",
+                    "banked_actions_left": int_or_float_as_str(
+                        player_in_game.banked_actions - max(0, -overflow_actions)
+                    ),
                 }
                 if self.game.config.multi_steps
                 else {
