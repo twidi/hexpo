@@ -144,17 +144,6 @@ class Game(BaseModel):
             return f"{minutes}m"
         return f"{seconds}s"
 
-    def get_last_tile_update_at(self) -> Optional[datetime]:
-        """Get the date of the last updated tile of the game."""
-        return cast(
-            Optional[datetime],
-            (
-                OccupiedTile.objects.filter(game=self)
-                .exclude(updated_at__isnull=True)
-                .aggregate(max_last_updated=Max("updated_at"))["max_last_updated"]
-            ),
-        )
-
     def get_all_players_in_games(self) -> QuerySet[PlayerInGame]:
         """Get the players in the game, dead or alive."""
         return self.playeringame_set.alias(

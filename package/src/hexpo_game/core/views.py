@@ -54,6 +54,7 @@ class GameState:
     def __post_init__(self) -> None:
         """Get the last players and prepare the list of messages."""
         self.messages: list[GameMessage] = []
+        self.grid_state: dict[Tile, datetime] = {}
 
     async def update_forever(self, game_messages_queue: GameMessagesQueue, delay: float) -> None:
         """Update the game state forever."""
@@ -91,13 +92,19 @@ class GameState:
                 self.messages.append(message)
                 queue.task_done()
 
+    def get_grid_state(self) -> dict[Tile, datetime]:
+        """Return the grid state."""
+        return {
+            Tile(occupied_tile.col, occupied_tile.row): occupied_tile.updated_at
+            for occupied_tile in self.game.occupiedtile_set.all()
+        }
+
     async def draw_grid(self) -> bool:
         """Redraw the grid."""
-        max_last_updated = await sync_to_async(self.game.get_last_tile_update_at)()
-        if max_last_updated is not None and max_last_updated > self.last_updated:
-            self.last_updated = max_last_updated
-        else:
+        new_grid_state = await sync_to_async(self.get_grid_state)()
+        if new_grid_state == self.grid_state:
             return False
+        self.grid_state = new_grid_state
 
         self.grid.reset_map()
         self.grid.draw_map_contour(Color(0, 0, 0))
