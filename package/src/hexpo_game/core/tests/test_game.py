@@ -1153,3 +1153,17 @@ async def test_actions_efficiency_during_a_turn():
     assert actions[2].efficiency == 0.85
     assert actions[3].efficiency == 0.7
     assert actions[4].efficiency == 0.5
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_compute_player_level():
+    """Test that player level is computed correctly."""
+    game = await make_turn_game()
+    player_in_game = await make_player_in_game(
+        game, await make_player(), [Tile(0, 1), Tile(1, 0), Tile(1, 1), Tile(1, 2), Tile(2, 1)], 1
+    )
+    assert await player_in_game.compute_level(1, {}) == 1
+    assert await player_in_game.compute_level(2, {}) == 2
+    assert await player_in_game.compute_level(1, {2: 2, 4: 3, 8: 4}) == 3
+    assert await player_in_game.compute_level(2, {20: 5, 40: 10, 50: 100}) == 2

@@ -382,6 +382,35 @@ class PlayerInGame(BaseModel):
         """Update the banked actions of the player."""
         await sync_to_async(cls.update_all_banked_actions)(used_actions_per_player)
 
+    async def compute_level(self, start_level: int, levels: dict[int, int]) -> int:
+        """Compute the level of a player in game depending of the number of tiles he has."""
+        if not levels:
+            return start_level
+        player_nb_tiles = getattr(self, "nb_tiles", None)
+        if player_nb_tiles is None:
+            player_nb_tiles = await self.occupiedtile_set.acount()
+        player_level = start_level
+        for nb_tiles, level in levels.items():
+            if player_nb_tiles >= nb_tiles:
+                player_level = level
+            else:
+                break
+        return player_level
+
+    @classmethod
+    async def aupdate_all_levels(cls, game: Game) -> None:
+        """Update the level of all players in game."""
+        if not game.config.player_levels:
+            return
+        players_in_game = await sync_to_async(
+            lambda: list(game.get_current_players_in_game().annotate(nb_tiles=Count("occupiedtile")))
+        )()
+        for player_in_game in players_in_game:
+            new_level = await player_in_game.compute_level(game.config.player_start_level, game.config.player_levels)
+            if new_level != player_in_game.level:
+                player_in_game.level = new_level
+                await player_in_game.asave()
+
 
 class OccupiedTile(BaseModel):
     """Represent a tile that is occupied by a player."""

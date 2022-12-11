@@ -51,6 +51,7 @@ class GameModeConfig(NamedTuple):
     respawn_protected_max_turns: int
     respawn_protected_max_tiles: int
     respawn_protected_max_duration: timedelta | None
+    player_levels: dict[int, int]
 
     @property
     def message_delay_ms(self) -> int:
@@ -79,6 +80,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         respawn_protected_max_turns=30,
         respawn_protected_max_tiles=10,
         respawn_protected_max_duration=timedelta(seconds=30),
+        player_levels={},
     ),
     GameMode.FREE_NEIGHBOR: GameModeConfig(
         max_players=50,
@@ -100,6 +102,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         respawn_protected_max_turns=30,
         respawn_protected_max_tiles=10,
         respawn_protected_max_duration=timedelta(seconds=30),
+        player_levels={},
     ),
     GameMode.TURN_BY_TURN: GameModeConfig(
         max_players=15,
@@ -121,6 +124,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         respawn_protected_max_turns=10,
         respawn_protected_max_tiles=10,
         respawn_protected_max_duration=None,
+        player_levels={20: 2, 50: 3, 100: 4, 200: 5, 300: 6, 400: 7},
     ),
 }
 

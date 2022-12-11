@@ -746,7 +746,9 @@ async def aplay_turn(
             else:
                 all_messages.extend(messages)
 
-    await PlayerInGame.aupdate_all_banked_actions(nb_actions)
+    if game.config.multi_steps:
+        await PlayerInGame.aupdate_all_banked_actions(nb_actions)
+        await PlayerInGame.aupdate_all_levels(game)
 
     return all_messages
 
