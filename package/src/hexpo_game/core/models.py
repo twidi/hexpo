@@ -372,7 +372,7 @@ class PlayerInGame(BaseModel):
         for player_in_game_id, used_actions in used_actions_per_player.items():
             player_in_game = players_in_game[player_in_game_id]
             if used_actions <= player_in_game.level:
-                return
+                continue
             player_in_game.banked_actions -= used_actions - player_in_game.level
             player_in_game.banked_actions = max(player_in_game.banked_actions, 0)
             player_in_game.save()
