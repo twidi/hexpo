@@ -172,6 +172,7 @@ class GameMessageKind(enum.Enum):
     GAME_STEP_CHANGED = "game_step_changed"
     GAME_TURN_CHANGED = "game_turn_changed"
     ACTION = "action"
+    LEVEL_UPDATED = "level_updated"
     OTHER = "other"
 
 

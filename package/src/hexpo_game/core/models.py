@@ -398,18 +398,23 @@ class PlayerInGame(BaseModel):
         return player_level
 
     @classmethod
-    async def aupdate_all_levels(cls, game: Game) -> None:
+    async def aupdate_all_levels(cls, game: Game) -> dict[PlayerInGame, tuple[int, int]]:
         """Update the level of all players in game."""
         if not game.config.player_levels:
-            return
+            return {}
         players_in_game = await sync_to_async(
-            lambda: list(game.get_current_players_in_game().annotate(nb_tiles=Count("occupiedtile")))
+            lambda: list(
+                game.get_current_players_in_game().select_related("player").annotate(nb_tiles=Count("occupiedtile"))
+            )
         )()
+        updated: dict[PlayerInGame, tuple[int, int]] = {}
         for player_in_game in players_in_game:
             new_level = await player_in_game.compute_level(game.config.player_start_level, game.config.player_levels)
             if new_level != player_in_game.level:
+                updated[player_in_game] = (player_in_game.level, new_level)
                 player_in_game.level = new_level
                 await player_in_game.asave()
+        return updated
 
 
 class OccupiedTile(BaseModel):

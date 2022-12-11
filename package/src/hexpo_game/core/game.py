@@ -268,7 +268,9 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         """Execute the actions of the current turn."""
         if self.game.config.multi_steps:
             await asyncio.sleep(self.game.config.message_delay.total_seconds())
-        await aplay_turn(self.game, self.grid, send_messages=self.send_messages)
+        messages = await aplay_turn(self.game, self.grid, send_messages=self.send_messages)
+        if messages:
+            await self.send_messages(messages)
 
     async def step_random_events_after(self) -> None:
         """Generate some random events after executing the actions."""
@@ -748,7 +750,19 @@ async def aplay_turn(
 
     if game.config.multi_steps:
         await PlayerInGame.aupdate_all_banked_actions(nb_actions)
-        await PlayerInGame.aupdate_all_levels(game)
+
+        updated_levels = await PlayerInGame.aupdate_all_levels(game)
+        for player_in_game, (old_level, new_level) in updated_levels.items():
+            all_messages.append(
+                GameMessage(
+                    text=f"{player_in_game.player.name} avance level {new_level}"
+                    if new_level > old_level
+                    else f"{player_in_game.player.name} rétrograde level {new_level}",
+                    kind=GameMessageKind.LEVEL_UPDATED,
+                    color=player_in_game.color_object,
+                    player_id=player_in_game.player_id,
+                )
+            )
 
     return all_messages
 
