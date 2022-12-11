@@ -32,7 +32,6 @@ async def make_game(mode: GameMode = GameMode.FREE_NEIGHBOR) -> Game:
         mode=mode,
         grid_nb_cols=nb_cols,
         grid_nb_rows=nb_rows,
-        max_players_allowed=20,
         current_turn_step_end=timezone.now() + timedelta(minutes=10),
     )
 

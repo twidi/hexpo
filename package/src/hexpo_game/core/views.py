@@ -20,7 +20,6 @@ from django.template import loader
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES
 from .constants import ActionState, ActionType, ClickTarget, GameStep
-from .game import get_game_and_grid
 from .grid import ConcreteGrid
 from .models import Action, Game, PlayerInGame
 from .types import Color, GameMessage, GameMessagesQueue, Tile
@@ -50,12 +49,6 @@ class GameState:
     def __post_init__(self) -> None:
         """Get the last players and prepare the list of messages."""
         self.messages: list[GameMessage] = []
-
-    @classmethod
-    def load_from_db(cls) -> GameState:
-        """Load the game state from the database."""
-        game, grid = get_game_and_grid()
-        return cls(game=game, grid=grid, last_updated=game.started_at)
 
     async def update_forever(self, game_messages_queue: GameMessagesQueue, delay: float) -> None:
         """Update the game state forever."""
@@ -138,9 +131,7 @@ class GameState:
                 actions_by_player.setdefault(action.player_in_game_id, []).append(action)
             for actions in actions_by_player.values():
                 actions.sort(
-                    key=lambda action: (1, None)
-                    if action.state == ActionState.CREATED
-                    else (0, action.confirmed_at)
+                    key=lambda action: (1, None) if action.state == ActionState.CREATED else (0, action.confirmed_at)
                 )
 
         return [
@@ -247,9 +238,9 @@ class GameState:
         return Response(status=304)
 
 
-def prepare_views(router: web.UrlDispatcher) -> GameState:
+def prepare_views(game: Game, grid: ConcreteGrid, router: web.UrlDispatcher) -> GameState:
     """Prepare the game state and add the views to the router."""
-    game_state = GameState.load_from_db()
+    game_state = GameState(game, grid, game.started_at)
     router.add_get("/", game_state.http_get_index)
     router.add_get("/grid.raw", game_state.http_get_grid_base64)
     router.add_get("/players.partial", game_state.http_get_players_partial)

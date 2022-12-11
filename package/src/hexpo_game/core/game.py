@@ -24,6 +24,7 @@ from .constants import (
     ActionType,
     ButtonToAction,
     ClickTarget,
+    GameMode,
     GameStep,
 )
 from .grid import ConcreteGrid, Grid
@@ -901,12 +902,11 @@ async def on_click(  # pylint: disable=unused-argument
         await clicks_queue.put(PlayerClick(player, target, None))
 
 
-def get_game_and_grid() -> tuple[Game, ConcreteGrid]:
+def get_game_and_grid(game_mode: GameMode) -> tuple[Game, ConcreteGrid]:
     """Get the current game."""
     area = COORDINATES[ClickTarget.MAP]
     width = area[1][0] - area[0][0]
     height = area[1][1] - area[0][1]
-    nb_cols, nb_rows, tile_size = ConcreteGrid.compute_grid_size(500, width, height)
-    game = Game.get_current(nb_cols=nb_cols, nb_rows=nb_rows)
-    grid = ConcreteGrid(Grid(nb_cols, nb_rows), tile_size)
+    game, tile_size = Game.get_current(game_mode, 500, width, height)
+    grid = ConcreteGrid(Grid(game.grid_nb_cols, game.grid_nb_rows), tile_size)
     return game, grid

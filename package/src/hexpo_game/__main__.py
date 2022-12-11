@@ -1,6 +1,7 @@
 """Main entry point for the game."""
 import asyncio
 import logging
+import sys
 from asyncio import Task, ensure_future
 from contextlib import suppress
 from functools import partial
@@ -22,11 +23,11 @@ from .core.views import prepare_views
 logger = logging.getLogger("hexpo_game")
 
 
-def main() -> None:
+def main(game_mode: str) -> None:
     """Run the game global event loop."""
     async_tasks: list[Task[Any]] = []
 
-    game, grid = get_game_and_grid()
+    game, grid = get_game_and_grid(GameMode(game_mode))
 
     clicks_queue: ClicksQueue = asyncio.Queue()
     chat_messages_queue: ChatMessagesQueue = asyncio.Queue()
@@ -65,11 +66,11 @@ def main() -> None:
                 task.cancel()
 
     app = web.Application()
-    game_state = prepare_views(app.router)
+    game_state = prepare_views(game, grid, app.router)
     app.on_startup.append(on_web_startup)
     app.on_shutdown.append(on_web_shutdown)
     web.run_app(app, host="127.0.0.1", port=8000)
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1])

@@ -14,7 +14,6 @@ from django.utils import timezone
 
 from .constants import (
     GAME_MODE_CONFIGS,
-    NB_COLORS,
     ActionFailureReason,
     ActionState,
     ActionType,
@@ -23,7 +22,7 @@ from .constants import (
     GameStep,
     RandomEventTurnMoment,
 )
-from .grid import Grid
+from .grid import ConcreteGrid, Grid
 from .types import Color, Tile
 
 
@@ -52,15 +51,12 @@ class Game(BaseModel):
     ended_at = models.DateTimeField(null=True, blank=True, help_text="When the game ended.")
     grid_nb_cols = models.PositiveIntegerField(help_text="Number of columns in the grid.")
     grid_nb_rows = models.PositiveIntegerField(help_text="Number of rows in the grid.")
-    max_players_allowed = models.PositiveIntegerField(help_text="Maximum number of players allowed.")
     current_turn = models.PositiveIntegerField(default=0, help_text="Current turn number.")
     current_turn_step = models.CharField(
         max_length=255, null=False, choices=GameStep.choices, default=GameStep.WAITING_FOR_PLAYERS
     )
-    current_turn_step_started_at = models.DateTimeField(
-        auto_now_add=True, help_text="When the current turn step started."
-    )
-    current_turn_step_end = models.DateTimeField(help_text="When the current turn step ends.")
+    current_turn_step_started_at = models.DateTimeField(null=True, help_text="When the current turn step started.")
+    current_turn_step_end = models.DateTimeField(null=True, help_text="When the current turn step ends.")
 
     @cached_property
     def config(self) -> GameModeConfig:
@@ -73,32 +69,15 @@ class Game(BaseModel):
         self.save(update_fields=["ended_at"])
 
     @classmethod
-    def get_current(
-        cls, nb_cols: int, nb_rows: int, max_players_allowed: int = NB_COLORS, turn_duration_minutes: int = 5
-    ) -> Game:
-        """Get the current game (or create one if no current one).
-
-        Parameters
-        ----------
-        nb_cols : int
-            Number of columns in the grid. Only used if no current game.
-        nb_rows : int
-            Number of rows in the grid. Only used if no current game.
-        max_players_allowed : int, optional
-            Maximum number of players allowed, by default 20. Only used if no current game.
-        turn_duration_minutes : int, optional
-            Duration of a turn, in minutes, by default 5. Only used if no current game.
-
-        """
-        game = cls.objects.filter(ended_at=None).order_by("-started_at").first()
+    def get_current(cls, game_mode: GameMode, nb_tiles: int, width: int, height: int) -> tuple[Game, float]:
+        """Get the current game (or create one if no current one)."""
+        game = cls.objects.filter(mode=game_mode, ended_at=None).order_by("-started_at").first()
         if game is None:
-            game = Game.objects.create(
-                grid_nb_cols=nb_cols,
-                grid_nb_rows=nb_rows,
-                max_players_allowed=max_players_allowed,
-                current_turn_step_end=timezone.now() + timedelta(minutes=turn_duration_minutes),
-            )
-        return game
+            nb_cols, nb_rows, tile_size = ConcreteGrid.compute_grid_size(nb_tiles, width, height)
+            game = Game.objects.create(mode=game_mode, grid_nb_cols=nb_cols, grid_nb_rows=nb_rows)
+        else:
+            tile_size = ConcreteGrid.compute_tile_size(game.grid_nb_cols, game.grid_nb_rows, width, height)
+        return game, tile_size
 
     def next_turn(self, started_at: Optional[datetime] = None) -> int:
         """Go to the next turn."""
@@ -138,14 +117,11 @@ class Game(BaseModel):
         return cast(datetime, await sync_to_async(self.reset_step_times)(update_start, duration))
 
     @property
-    def step_time_left(self) -> timedelta:
-        """Get the time left for the current step."""
-        return self.current_turn_step_end - timezone.now()
-
-    @property
     def step_time_left_for_human(self) -> Optional[str]:  # pylint: disable=too-many-return-statements
         """Get the time left for the current step, in a human-readable format."""
-        if (total_seconds := self.step_time_left.total_seconds()) <= 0:
+        if self.current_turn_step_end is None:
+            return None
+        if (total_seconds := (self.current_turn_step_end - timezone.now()).total_seconds()) <= 0:
             return None
         if total_seconds <= 0.5:
             return "0s"
