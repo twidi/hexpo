@@ -316,7 +316,12 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
             self.drawing_map[:] = fill
 
     def draw_areas(
-        self, tiles: Iterable[Tile], color: Color, mark: bool = False, use_transparency: bool = True
+        self,
+        tiles: Iterable[Tile],
+        color: Color,
+        mark: bool = False,
+        use_transparency: bool = True,
+        thickness: int = THICKNESS,
     ) -> None:
         """Draw the (perimeters of the) areas of the given tiles.
 
@@ -330,6 +335,8 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
             Whether to mark the tiles, by default False.
         use_transparency : bool, optional
             Whether to use transparency, by default True.
+        thickness : int, optional
+            The thickness of the lines, by default THICKNESS.
 
         """
         if not tiles:
@@ -353,7 +360,7 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
                     round(concrete_tile.center),  # type: ignore[call-overload]
                     SEGMENTS_OFFSET,
                     drawing_color,
-                    THICKNESS,
+                    thickness,
                     cv2.LINE_AA,  # pylint: disable=no-member
                 )
             for direction, neighbor in enumerate(self.grid.neighbors[tile]):
@@ -365,7 +372,7 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
                     round(offsets[0] + concrete_tile.points[(direction - 1) % 6]),  # type: ignore[call-overload]
                     round(offsets[1] + concrete_tile.points[direction]),  # type: ignore[call-overload]
                     drawing_color,
-                    THICKNESS,
+                    thickness,
                     cv2.LINE_AA,  # pylint: disable=no-member
                 )
 

@@ -113,7 +113,8 @@ class GameState:
         if self.game.config.multi_steps:
             self.grid.draw_areas(
                 self.grid.grid.tiles_set - set(self.grid_state),
-                Color(0, 0, 0),
+                Color(255, 255, 255),
+                thickness=1,
             )
         else:
             self.grid.draw_map_contour(Color(0, 0, 0))
