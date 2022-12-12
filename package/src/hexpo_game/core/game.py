@@ -46,9 +46,10 @@ from .types import (
 )
 
 logger = logging.getLogger("hexpo_game.game")
-logger_save_action = logging.getLogger("hexpo_game.game.save_action")
+logger_new_players = logging.getLogger("hexpo_game.game.players")
+logger_collect = logging.getLogger("hexpo_game.game.collect")
 logger_events = logging.getLogger("hexpo_game.game.events")
-logger_play_turn = logging.getLogger("hexpo_game.game.play_turn")
+logger_execute = logging.getLogger("hexpo_game.game.execute")
 
 
 class PlayerClick(NamedTuple):
@@ -380,7 +381,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
                         f"{nb_destroyed_tiles} case détruite{'s' if nb_destroyed_tiles > 1 else ''}",
                     )
                 if not player_in_game.count_tiles():
-                    logger_play_turn.warning("%s IS NOW DEAD", player_in_game.player.name)
+                    logger_events.warning("%s IS NOW DEAD", player_in_game.player.name)
                     player_in_game.die(turn=game.current_turn)
                     add_message(
                         player_in_game,
@@ -508,6 +509,10 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
     action: Action, game: Game, grid: Grid, turn: int, nb_actions: dict[int, int], dead_during_turn: set[int]
 ) -> GameMessages:
     """Execute the action."""
+    # pycharm: disable = redefine-outer-name
+    logger = (  # pylint:disable=redefined-outer-name
+        logger_new_players if game.current_turn_step == GameStep.WAITING_FOR_PLAYERS else logger_execute
+    )
     # as the player can be changed by previous actions, we need to load it from db for each action
     player_in_game = (
         PlayerInGame.objects.filter(id=action.player_in_game_id)
@@ -519,12 +524,12 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
 
     if player_in_game.id in dead_during_turn:
         action.fail(reason=ActionFailureReason.DEAD)
-        logger_play_turn.warning("%s IS DEAD (killed in this turn)", player.name)
+        logger.warning("%s IS DEAD (killed in this turn)", player.name)
         return []
 
     nb_actions[player_in_game.id] += 1
     if nb_actions[player_in_game.id] > player_in_game.level + player_in_game.banked_actions:
-        logger_play_turn.warning(
+        logger.warning(
             "%s USED TOO MANY ACTIONS (%s used, level %s, banked %s)",
             player.name,
             nb_actions[player_in_game.id],
@@ -538,7 +543,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
 
     if not player_in_game.nb_tiles and action.action_type != ActionType.GROW:
         action.fail(reason=ActionFailureReason.BAD_FIRST)
-        logger_play_turn.warning("%s had no tiles but did a wrong first action: %s", player.name, action.action_type)
+        logger.warning("%s had no tiles but did a wrong first action: %s", player.name, action.action_type)
         return []
 
     messages: GameMessages = []
@@ -552,7 +557,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             )
 
     def new_death(player_in_game: PlayerInGame, killer: PlayerInGame) -> None:
-        logger_play_turn.warning("%s IS NOW DEAD", player_in_game.player.name)
+        logger.warning("%s IS NOW DEAD", player_in_game.player.name)
         player_in_game.die(turn=turn, killer=killer)
         dead_during_turn.add(player_in_game.id)
         add_message(
@@ -567,7 +572,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
         player_in_game.banked_actions += (banked := game.config.bank_value * action.efficiency)
         player_in_game.save()
         action.success()
-        logger_play_turn.info(
+        logger.info(
             "%s banked %s (from %s to %s)",
             player.name,
             f"{banked:.2f}",
@@ -588,7 +593,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
 
     if action.action_type == ActionType.ATTACK:
         if occupied_tile is None:
-            logger_play_turn.warning("%s attacked %s but it's not occupied", player.name, tile.for_human())
+            logger.warning("%s attacked %s but it's not occupied", player.name, tile.for_human())
             action.fail(reason=ActionFailureReason.ATTACK_EMPTY)
             add_message(
                 player_in_game,
@@ -597,7 +602,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             return messages
 
         if occupied_tile.player_in_game_id == player_in_game.id:
-            logger_play_turn.warning("%s attacked %s but it's their own", player.name, tile.for_human())
+            logger.warning("%s attacked %s but it's their own", player.name, tile.for_human())
             add_message(
                 player_in_game, f"{player_in_game.player.name} a attaqué en vain chez lui en {tile.for_human()}"
             )
@@ -605,7 +610,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             return messages
 
         if occupied_tile.player_in_game.is_protected(occupied_tile.occupier_nb_tiles):
-            logger_play_turn.warning(
+            logger.warning(
                 "%s attacked %s but it's occupied by %s and protected",
                 player.name,
                 tile.for_human(),
@@ -635,7 +640,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
         )
 
         if occupied_tile.level <= 0:
-            logger_play_turn.info(
+            logger.info(
                 "%s attacked and destroyed %s that was occupied by %s (damage: %s, from %s)",
                 player.name,
                 tile.for_human(),
@@ -653,7 +658,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             occupied_tile.delete()
         else:
             occupied_tile.save()
-            logger_play_turn.info(
+            logger.info(
                 "%s attacked %s that is occupied by %s (damage: %s, from %s to %s)",
                 player.name,
                 tile.for_human(),
@@ -673,7 +678,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
 
     elif action.action_type == ActionType.DEFEND:
         if occupied_tile is None:
-            logger_play_turn.warning("%s defended %s but it's not occupied", player.name, tile.for_human())
+            logger.warning("%s defended %s but it's not occupied", player.name, tile.for_human())
             action.fail(reason=ActionFailureReason.DEFEND_EMPTY)
             add_message(
                 player_in_game,
@@ -682,7 +687,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             return messages
 
         if occupied_tile.player_in_game_id != player_in_game.id:
-            logger_play_turn.warning(
+            logger.warning(
                 "%s defended %s but it's occupied by %s",
                 player.name,
                 tile.for_human(),
@@ -702,7 +707,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
         )
         occupied_tile.level = min(occupied_tile.level, 100.0)
         occupied_tile.save()
-        logger_play_turn.info(
+        logger.info(
             "%s defended %s (improvement: %s, from %s to %s)",
             player.name,
             tile.for_human(),
@@ -721,7 +726,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
 
     elif action.action_type == ActionType.GROW:
         if occupied_tile is not None and occupied_tile.player_in_game_id == player_in_game.id:
-            logger_play_turn.warning("%s grew on %s but it's already their tile", player.name, tile.for_human())
+            logger.warning("%s grew on %s but it's already their tile", player.name, tile.for_human())
             action.fail(reason=ActionFailureReason.GROW_SELF)
             add_message(
                 player_in_game, f"{player_in_game.player.name} n'a pu s'agrandir chez lui en {tile.for_human()}"
@@ -733,7 +738,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             and player_in_game.nb_tiles
             and not OccupiedTile.has_occupied_neighbors(player_in_game.id, tile, grid)
         ):
-            logger_play_turn.warning("%s grew on %s but has no neighbors", player.name, tile.for_human())
+            logger.warning("%s grew on %s but has no neighbors", player.name, tile.for_human())
             add_message(
                 player_in_game, f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()}, trop loin"
             )
@@ -742,7 +747,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
 
         if occupied_tile is not None:
             if not game.config.can_grow_on_occupied:
-                logger_play_turn.warning(
+                logger.warning(
                     "%s %s on %s but it's occupied by %s",
                     player.name,
                     "grew" if player_in_game.nb_tiles else "started",
@@ -777,7 +782,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                 return messages
 
             if occupied_tile.player_in_game.is_protected():
-                logger_play_turn.warning(
+                logger.warning(
                     "%s %s on %s but it's occupied by %s and protected",
                     player.name,
                     "grew" if player_in_game.nb_tiles else "started",
@@ -812,7 +817,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
 
                 return messages
 
-            logger_play_turn.info(
+            logger.info(
                 "%s grew on %s that was occupied by %s",
                 player.name,
                 tile.for_human(),
@@ -828,7 +833,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                 f"chez {occupied_tile.player_in_game.player.name}",
             )
         else:
-            logger_play_turn.info("%s grew on %s that was not occupied", player.name, tile.for_human())
+            logger.info("%s grew on %s that was not occupied", player.name, tile.for_human())
             new_occupied_tile = OccupiedTile.objects.create(
                 game=game,
                 col=tile.col,
@@ -848,9 +853,9 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                 tile_row=tile.row,
             ):
                 if drop_event.apply_drop(new_occupied_tile) is None:
-                    logger_events.warning("Drop couldn't be picked up by %s on %s", player.name, tile.for_human())
+                    logger.warning("Drop couldn't be picked up by %s on %s", player.name, tile.for_human())
                 else:
-                    logger_events.info(
+                    logger.info(
                         "%s picked up drop of %s on %s",
                         player_in_game.player.name,
                         drop_event.drop_actions_amount,
@@ -921,7 +926,7 @@ async def aplay_turn(
     """Play a turn and send message or return them."""
     turn = game.current_turn if turn is None else turn
     actions = await sync_to_async(lambda: list(game.confirmed_actions_for_turn(turn).order_by("confirmed_at")))()
-    logger_play_turn.info("Playing turn %s: %s actions", turn, len(actions))
+    logger_execute.info("Playing turn %s: %s actions", turn, len(actions))
     dead_during_turn: set[int] = set()
     if game.config.multi_steps:
         dead_during_turn = await sync_to_async(
@@ -985,14 +990,14 @@ def get_or_create_player_in_game(
         return None
 
     if game.get_current_players_in_game().count() >= game.config.max_players:
-        logger.warning("%s tried to join but the game is full", player.name)
+        logger_new_players.warning("%s tried to join but the game is full", player.name)
         return None
 
     if player_in_game is not None and not player_in_game.can_respawn():
-        logger_save_action.warning("%s is still dead", player.name)
+        logger_new_players.warning("%s is still dead", player.name)
         return None
 
-    logger.warning("%s is a %s player", player.name, "NEW" if player_in_game is None else "returning")
+    logger_new_players.warning("%s is a %s player", player.name, "NEW" if player_in_game is None else "returning")
     return PlayerInGame.objects.create(
         player=player,
         game=game,
@@ -1009,7 +1014,7 @@ def get_or_create_player_in_game(
 def can_create_action(player_in_game: PlayerInGame) -> bool:
     """Check if the player can create an action."""
     if not player_in_game.can_create_action():
-        logger_save_action.warning("%s has no action left", player_in_game.player.name)
+        logger_collect.warning("%s has no action left", player_in_game.player.name)
         return False
     return True
 
@@ -1033,15 +1038,15 @@ def set_action_tile(
     if action is None:
         action = get_current_action(player_in_game, game)
     if action is None:
-        logger.warning("%s has no current action", player_in_game.player.name)
+        logger_collect.warning("%s has no current action", player_in_game.player.name)
         return None
     if action.action_type == ActionType.BANK:
-        logger.warning(
+        logger_collect.warning(
             "%s has a %s action so cannot set a tile", player_in_game.player.name, ActionType(action.action_type).name
         )
         return None
     action.set_tile(tile)
-    logger.info(
+    logger_collect.info(
         "%s set tile %s for action %s",
         player_in_game.player.name,
         tile.for_human(),
@@ -1053,7 +1058,7 @@ def set_action_tile(
 def create_or_update_action(player_in_game: PlayerInGame, game: Game, action_type: ActionType) -> Optional[Action]:
     """Create or update an action for a player in game."""
     if player_in_game.start_tile_col is None and action_type != ActionType.GROW:
-        logger_save_action.warning(
+        logger_collect.warning(
             "%s cannot %s as a %s player",
             player_in_game.player.name,
             ActionType(action_type).name,
@@ -1065,9 +1070,9 @@ def create_or_update_action(player_in_game: PlayerInGame, game: Game, action_typ
         action.action_type = action_type
         action.set_tile(None, save=False)
         action.save()
-        logger.info("%s updated its action to a %s action", player_in_game.player.name, action_type.name)
+        logger_collect.info("%s updated its action to a %s action", player_in_game.player.name, action_type.name)
         return action
-    logger.info("%s created a %s action", player_in_game.player.name, action_type.name)
+    logger_collect.info("%s created a %s action", player_in_game.player.name, action_type.name)
     return Action.objects.create(
         player_in_game=player_in_game,
         game=game,
@@ -1084,10 +1089,10 @@ def confirm_action(
     if action is None:
         action = get_current_action(player_in_game, game)
     if action is None:
-        logger.warning("%s has no current action", player_in_game.player.name)
+        logger_collect.warning("%s has no current action", player_in_game.player.name)
         return None
     if action.action_type != ActionType.BANK and not action.is_tile_set():
-        logger.warning(
+        logger_collect.warning(
             "%s has no tile set for its current %s action",
             player_in_game.player.name,
             ActionType(action.action_type).name,
@@ -1095,9 +1100,11 @@ def confirm_action(
         return None
     action.confirm(efficiency)
     if action.action_type == ActionType.BANK:
-        logger.info("%s confirmed its %s action", player_in_game.player.name, ActionType(action.action_type).name)
+        logger_collect.info(
+            "%s confirmed its %s action", player_in_game.player.name, ActionType(action.action_type).name
+        )
     else:
-        logger.info(
+        logger_collect.info(
             "%s confirmed its %s action on %s",
             player_in_game.player.name,
             ActionType(action.action_type).name,
