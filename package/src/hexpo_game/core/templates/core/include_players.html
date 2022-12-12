@@ -7,7 +7,7 @@
             {% if game.config.multi_steps %}
                 {% if player.can_play %}
                     <div class="player-level">Lvl {{ player.level }}</div>
-                    <div class="player-actions-left">Actions: {{ player.level_actions_left }}{% if player.banked_actions_left != "0" %}+{{ player.banked_actions_left }}{% endif %}</div>
+                    <div class="player-actions-left">PA: {{ player.level_actions_left }}{% if player.banked_actions_left != "0" %}+{{ player.banked_actions_left }}{% endif %}</div>
                 {% endif %}
             {% else %}
                 <div class="player-nb-tiles">{{ player.nb_tiles }}</div>

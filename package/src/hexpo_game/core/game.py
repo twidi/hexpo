@@ -578,7 +578,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             f"{old_banked:.2f}",
             f"{player_in_game.banked_actions:.2f}",
         )
-        add_message(player_in_game, f"{player_in_game.player.name} a mis de côté {banked:.2f} actions")
+        add_message(player_in_game, f"{player_in_game.player.name} a mis de côté {banked:.2f} points d'actions")
         return messages
 
     tile = Tile(action.tile_col, action.tile_row)  # type: ignore[arg-type]  # we know we have a tile
