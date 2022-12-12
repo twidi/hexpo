@@ -261,12 +261,12 @@ body.multi-steps .player-name {
     text-align: right;
 }
 .player-level {
-    width: 2.7em;
+    width: 5.5em;
     flex-grow: 0;
     text-align: left;
 }
 .player-actions-left {
-    width: 9em;
+    width: 6.5em;
     flex-grow: 0;
     text-align: right;
 }

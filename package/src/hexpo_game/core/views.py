@@ -167,6 +167,7 @@ class GameState:
                 "rank": index,
                 "can_play": player_in_game.ended_turn is None or player_in_game.can_respawn(),
                 "is_protected": player_in_game.is_protected(),
+                "nb_tiles": player_in_game.nb_tiles,  # type: ignore[attr-defined]
             }
             | (
                 {
@@ -179,7 +180,6 @@ class GameState:
                 }
                 if self.game.config.multi_steps
                 else {
-                    "nb_tiles": player_in_game.nb_tiles,  # type: ignore[attr-defined]
                     "percent_tiles": f"{player_in_game.nb_tiles / self.grid.nb_tiles * 100:.1f}%"  # type: ignore[attr-defined]  # pylint: disable=line-too-long
                     if player_in_game.nb_tiles  # type: ignore[attr-defined]
                     else "",
@@ -221,8 +221,11 @@ class GameState:
     async def http_get_players(self, request: web.Request) -> web.Response:
         """Return the players partial html."""
         context = {
+            "game": self.game,
             "players": await sync_to_async(self.get_players_context)(),
             "timestamp": time(),
+            "ActionType": ActionType,
+            "ActionState": ActionState,
             "reload": request.rel_url.query.get("reload", "true") != "false",
         }
         html = loader.render_to_string("core/players.html", context)
