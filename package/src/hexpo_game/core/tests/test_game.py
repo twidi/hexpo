@@ -10,6 +10,7 @@ from asgiref.sync import sync_to_async
 from django.utils import timezone
 
 from hexpo_game.core.constants import (
+    GAME_MODE_CONFIGS,
     ActionFailureReason,
     ActionState,
     ActionType,
@@ -17,28 +18,40 @@ from hexpo_game.core.constants import (
     ClickTarget,
     GameMode,
     GameStep,
+    RandomEventTurnMoment,
 )
 from hexpo_game.core.game import ClicksQueue, GameLoop, PlayerClick, aplay_turn
 from hexpo_game.core.grid import Grid
-from hexpo_game.core.models import Action, Game, OccupiedTile, Player, PlayerInGame
+from hexpo_game.core.models import (
+    Action,
+    Game,
+    OccupiedTile,
+    Player,
+    PlayerInGame,
+    RandomEvent,
+)
 from hexpo_game.core.twitch import ChatMessagesQueue
 from hexpo_game.core.types import Color, GameMessageKind, GameMessagesQueue, Tile
 
+TurnByTurnTestConfig = GAME_MODE_CONFIGS[GameMode.TURN_BY_TURN]._replace(message_delay=timedelta(seconds=0))
 
-async def make_game(mode: GameMode = GameMode.FREE_NEIGHBOR) -> Game:
+
+async def make_game(mode: GameMode = GameMode.FREE_NEIGHBOR, nb_tiles: int = 20) -> Game:
     """Create a game in the given mode."""
-    nb_cols, nb_rows = Grid.compute_grid_size(20, 1 / 2)
-    return await Game.objects.acreate(
+    nb_cols, nb_rows = Grid.compute_grid_size(nb_tiles, 1)
+    game = await Game.objects.acreate(
         mode=mode,
         grid_nb_cols=nb_cols,
         grid_nb_rows=nb_rows,
-        current_turn_step_end=timezone.now() + timedelta(minutes=10),
     )
+    if mode == GameMode.TURN_BY_TURN:
+        game.force_config = TurnByTurnTestConfig
+    return game
 
 
-async def make_turn_game() -> Game:
+async def make_turn_game(nb_tiles: int = 20) -> Game:
     """Create a turn game."""
-    return await make_game(mode=GameMode.TURN_BY_TURN)
+    return await make_game(mode=GameMode.TURN_BY_TURN, nb_tiles=nb_tiles)
 
 
 async def make_player(external_id: int = 1) -> Player:
@@ -596,9 +609,9 @@ async def test_turn_mode_can_attack():
     await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.SUCCESS)
     tile_dist_compensation = grid.tile_distance_from_origin_compensation(Tile(0, 1))
-    assert (
-        await game.occupiedtile_set.aget(col=0, row=1)
-    ).level == game.config.tile_start_level - (game.config.attack_damage * 0.6 + tile_dist_compensation)
+    assert (await game.occupiedtile_set.aget(col=0, row=1)).level == game.config.tile_start_level - (
+        game.config.attack_damage * 0.6 + tile_dist_compensation
+    )
     await assert_has_tiles(player_in_game2, [Tile(0, 1)])
     await assert_death(player_in_game2, False)
 
@@ -1172,3 +1185,202 @@ async def test_compute_player_level():
     assert await player_in_game.compute_level(2, {}) == 2
     assert await player_in_game.compute_level(1, {2: 2, 4: 3, 8: 4}) == 3
     assert await player_in_game.compute_level(2, {20: 5, 40: 10, 50: 100}) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_lightning_on_empty_tile():
+    """Test a lightning event on an empty tile."""
+    game = await make_turn_game()
+    event = await sync_to_async(RandomEvent.create_lightning_event)(game, RandomEventTurnMoment.BEFORE)
+    dead_players, messages = await sync_to_async(GameLoop.step_random_event)(
+        game, get_grid(game), RandomEventTurnMoment.BEFORE, event
+    )
+    assert len(dead_players) == 0
+    assert len(messages) == 1
+    assert messages[0].player_id is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_lightning_on_only_occupied_tile_no_kill():
+    """Test a small lightning event on the only tile of a player."""
+    game = await make_turn_game()
+    player_in_game = await make_player_in_game(game, await make_player(), [tile := Tile(0, 0)])
+    event = await sync_to_async(RandomEvent.create_lightning_event)(game, RandomEventTurnMoment.BEFORE, tile, 5)
+    dead_players, messages = await sync_to_async(GameLoop.step_random_event)(
+        game, get_grid(game), RandomEventTurnMoment.BEFORE, event
+    )
+    assert len(dead_players) == 0
+    assert len(messages) == 1
+    assert messages[0].player_id == player_in_game.player_id
+    occupied_tile = await game.occupiedtile_set.aget(col=tile.col, row=tile.row)
+    assert occupied_tile.level == 15
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_lightning_on_only_occupied_tile_with_kill():
+    """Test a strong lightning event on the only tile of a player."""
+    game = await make_turn_game()
+    player_in_game = await make_player_in_game(game, await make_player(), [tile := Tile(0, 0)])
+    event = await sync_to_async(RandomEvent.create_lightning_event)(game, RandomEventTurnMoment.BEFORE, tile, 50)
+    dead_players, messages = await sync_to_async(GameLoop.step_random_event)(
+        game, get_grid(game), RandomEventTurnMoment.BEFORE, event
+    )
+    assert len(dead_players) == 1
+    assert len(messages) == 2
+    assert messages[0].player_id == player_in_game.player_id
+    assert messages[0].kind == GameMessageKind.RANDOM_EVENT
+    assert messages[1].player_id == player_in_game.player_id
+    assert messages[1].kind == GameMessageKind.DEATH
+    assert await game.occupiedtile_set.filter(col=tile.col, row=tile.row).aexists() is False
+    await assert_death(player_in_game, True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_lightning_on_not_only_occupied_tile_with_kill():
+    """Test a strong lightning event on one of the tiles of a player."""
+    game = await make_turn_game()
+    player_in_game = await make_player_in_game(game, await make_player(), [tile := Tile(0, 0), Tile(1, 0)])
+    event = await sync_to_async(RandomEvent.create_lightning_event)(game, RandomEventTurnMoment.BEFORE, tile, 50)
+    dead_players, messages = await sync_to_async(GameLoop.step_random_event)(
+        game, get_grid(game), RandomEventTurnMoment.BEFORE, event
+    )
+    assert len(dead_players) == 0
+    assert len(messages) == 1
+    assert messages[0].player_id == player_in_game.player_id
+    assert messages[0].kind == GameMessageKind.RANDOM_EVENT
+    assert await game.occupiedtile_set.filter(col=tile.col, row=tile.row).aexists() is False
+    await assert_death(player_in_game, False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_earthquake_on_free_tiles():
+    """Test an earthquake event on free tiles."""
+    game = await make_turn_game()
+    event = await sync_to_async(RandomEvent.create_earthquake_event)(game, RandomEventTurnMoment.BEFORE)
+    dead_players, messages = await sync_to_async(GameLoop.step_random_event)(
+        game, get_grid(game), RandomEventTurnMoment.BEFORE, event
+    )
+    assert len(dead_players) == 0
+    assert len(messages) == 1
+    assert messages[0].player_id is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_earthquake_on_occupied_tiles():
+    """Test an earthquake event on occupied tiles."""
+    game = await make_turn_game(nb_tiles=200)
+    player_in_game1 = await make_player_in_game(game, await make_player(1), [Tile(7, 5)])
+    player_in_game2 = await make_player_in_game(game, await make_player(2), [Tile(7, 6), Tile(0, 0)])
+    player_in_game3 = await make_player_in_game(game, await make_player(3), [Tile(7, 7)])
+
+    event = await sync_to_async(RandomEvent.create_earthquake_event)(
+        game, RandomEventTurnMoment.BEFORE, Tile(7, 5), 80, 3
+    )
+    dead_players, messages = await sync_to_async(GameLoop.step_random_event)(
+        game, get_grid(game), RandomEventTurnMoment.BEFORE, event
+    )
+    assert len(dead_players) == 1
+    assert len(messages) == 5
+    assert messages[0].player_id is None
+    messages_info = {(message.player_id, message.kind) for message in messages[1:]}
+    assert messages_info == {
+        (player_in_game1.player_id, GameMessageKind.RANDOM_EVENT),
+        (player_in_game1.player_id, GameMessageKind.DEATH),
+        (player_in_game2.player_id, GameMessageKind.RANDOM_EVENT),
+        (player_in_game3.player_id, GameMessageKind.RANDOM_EVENT),
+    }
+    await assert_death(player_in_game1, True)
+    await assert_death(player_in_game2, False)
+    await assert_death(player_in_game3, False)
+    assert await game.occupiedtile_set.filter(col=7, row=5).aexists() is False
+    assert await game.occupiedtile_set.filter(col=7, row=6).aexists() is False
+    assert await game.occupiedtile_set.filter(col=7, row=7).aexists() is True
+    occupied_tile = await game.occupiedtile_set.aget(col=7, row=7)
+    assert occupied_tile.level == 10
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_drop_on_free_tile():
+    """Test a drop event on a free tile."""
+    game = await make_turn_game()
+    event = await sync_to_async(RandomEvent.create_drop_event)(game, RandomEventTurnMoment.BEFORE, Tile(0, 0))
+    dead_players, messages = await sync_to_async(GameLoop.step_random_event)(
+        game, get_grid(game), RandomEventTurnMoment.BEFORE, event
+    )
+    assert len(dead_players) == 0
+    assert len(messages) == 1
+    assert messages[0].player_id is None
+    await event.arefresh_from_db()
+    assert event.drop_picked_up is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_drop_on_occupied_tile():
+    """Test a drop event on an occupied tile."""
+    game = await make_turn_game()
+    player_in_game = await make_player_in_game(game, await make_player(), [Tile(0, 0)])
+    event = await sync_to_async(RandomEvent.create_drop_event)(game, RandomEventTurnMoment.BEFORE, Tile(0, 0), 12)
+    dead_players, messages = await sync_to_async(GameLoop.step_random_event)(
+        game, get_grid(game), RandomEventTurnMoment.BEFORE, event
+    )
+    assert len(dead_players) == 0
+    assert len(messages) == 1
+    assert messages[0].player_id == player_in_game.player_id
+    await event.arefresh_from_db()
+    assert event.drop_picked_up is True
+    await player_in_game.arefresh_from_db()
+    assert player_in_game.banked_actions == 12
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_actions_ignored_if_killed_by_event():
+    """Test that actions are ignored if a player is killed by an event."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    await aplay_turn(game, grid := get_grid(game))
+    await game.anext_turn()
+
+    assert (action := await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.GROW, 0.6)) is not None
+
+    event = await sync_to_async(RandomEvent.create_lightning_event)(
+        game, RandomEventTurnMoment.BEFORE, Tile(0, 0), 50
+    )
+    dead_players, _ = await sync_to_async(GameLoop.step_random_event)(
+        game, get_grid(game), RandomEventTurnMoment.BEFORE, event
+    )
+    assert len(dead_players) == 1
+
+    await aplay_turn(game, grid)
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.DEAD)
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_drop_are_picked_up_on_grow():
+    """Test that drops are picked up when a player grows."""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    await aplay_turn(game, grid := get_grid(game))
+    await game.anext_turn()
+
+    assert await asave_action(player_in_game.player, game, Tile(0, 1), ActionType.GROW, 0.6) is not None
+
+    event1 = await sync_to_async(RandomEvent.create_drop_event)(game, RandomEventTurnMoment.BEFORE, Tile(0, 1), 12)
+    event2 = await sync_to_async(RandomEvent.create_drop_event)(game, RandomEventTurnMoment.BEFORE, Tile(0, 1), 5)
+
+    await aplay_turn(game, grid)
+
+    await event1.arefresh_from_db()
+    assert event1.drop_picked_up is True
+    await event2.arefresh_from_db()
+    assert event2.drop_picked_up is True
+
+    await player_in_game.arefresh_from_db()
+    assert player_in_game.banked_actions == 17

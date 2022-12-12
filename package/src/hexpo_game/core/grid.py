@@ -189,6 +189,17 @@ class Grid:  # pylint: disable=too-many-instance-attributes
         """Compute the compensation of a tile depending of its distance from the origin."""
         return tile.center_distance(self.first_tile) / self.max_center_distance * 0.05
 
+    def get_tiles_in_radius(self, center: Tile, radius: int) -> list[Tile]:
+        """Get all the tiles in a given radius around a center tile (center is considered part of the radius)."""
+        radius -= 1
+        result: list[Tile] = []
+        axial_center = center.to_axial()
+        # pylint: disable=invalid-name
+        for q in range(-radius, radius + 1):
+            for r in range(max(-radius, -q - radius), min(radius, -q + radius) + 1):
+                result.append((axial_center + AxialCoordinate(q, r)).to_tile())
+        return result
+
 
 TilePoints: TypeAlias = tuple[Point, Point, Point, Point, Point, Point]
 

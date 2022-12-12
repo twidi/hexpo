@@ -165,7 +165,6 @@ class RandomEventType(models.TextChoices):
 NO_EVENT_MESSAGES = [
     "Pas de changement notable",
     "Rien de spécial ne s'est produit",
-    "Pas d'évènement à signaler",
     "Aucune surprise en vue",
     "La vie poursuit son cours sans heurts",
     "Rien de nouveau sous le soleil",
@@ -176,13 +175,13 @@ NO_EVENT_MESSAGES = [
 
 LIGHTNING_DAMAGES_RANGE = (10, 80)  # Damage to the hit tile
 EARTHQUAKE_RADIUS_RANGE = (4, 9)  # Radius of the earthquake
-EARTHQUAKE_DAMAGES_RANGE = (40, 80)  # Damage to all tile in the earthquake radius
+EARTHQUAKE_DAMAGES_RANGE = (30, 60)  # Damage to all tile in the earthquake radius
 EARTHQUAKE_MIN_DAMAGES = 10  # Damage for tiles the farthest from earthquake center
 DROP_ACTIONS_RANGE = (1, 30)  # Number of actions in the drop
 RANDOM_EVENTS_PROBABILITIES = {
-    RandomEventType.LIGHTNING: (0, 0.05),
-    RandomEventType.EARTHQUAKE: (0.05, 0.07),
-    RandomEventType.DROP_ACTIONS: (0.07, 0.1),
+    RandomEventType.LIGHTNING: (0, 0.1),
+    RandomEventType.EARTHQUAKE: (0.1, 0.14),
+    RandomEventType.DROP_ACTIONS: (0.14, 0.2),
 }
 
 

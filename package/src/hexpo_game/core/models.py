@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
 from functools import cached_property
 from math import floor
+from random import randint, random
 from typing import Any, Optional, cast
 
 from asgiref.sync import sync_to_async
@@ -13,7 +15,13 @@ from django.db.models import Count, F, Max, OuterRef, Q, QuerySet, Subquery
 from django.utils import timezone
 
 from .constants import (
+    DROP_ACTIONS_RANGE,
+    EARTHQUAKE_DAMAGES_RANGE,
+    EARTHQUAKE_MIN_DAMAGES,
+    EARTHQUAKE_RADIUS_RANGE,
     GAME_MODE_CONFIGS,
+    LIGHTNING_DAMAGES_RANGE,
+    RANDOM_EVENTS_PROBABILITIES,
     ActionFailureReason,
     ActionState,
     ActionType,
@@ -21,6 +29,7 @@ from .constants import (
     GameModeConfig,
     GameStep,
     RandomEventTurnMoment,
+    RandomEventType,
 )
 from .grid import ConcreteGrid, Grid
 from .types import Color, Tile
@@ -58,9 +67,13 @@ class Game(BaseModel):
     current_turn_step_started_at = models.DateTimeField(null=True, help_text="When the current turn step started.")
     current_turn_step_end = models.DateTimeField(null=True, help_text="When the current turn step ends.")
 
+    force_config: Optional[GameModeConfig] = None
+
     @cached_property
     def config(self) -> GameModeConfig:
         """Get the game config."""
+        if self.force_config is not None:
+            return self.force_config
         return GAME_MODE_CONFIGS[GameMode(self.mode)]
 
     def end_game(self) -> None:
@@ -454,15 +467,6 @@ class OccupiedTile(BaseModel):
         return Tile(self.col, self.row)
 
 
-class Drop(BaseModel):
-    """Represent a drop not yet picked up by a player."""
-
-    game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the drop is in.")
-    tile_col = models.IntegerField(help_text="The grid column of the drop in the offset `odd-q` coordinate system.")
-    tile_row = models.IntegerField(help_text="The grid row of the drop in the offset `odd-q` coordinate system.")
-    nb_actions = models.FloatField(help_text="Number of action points in the drop.")
-
-
 class Action(BaseModel):
     """Represent an action done by a player."""
 
@@ -583,14 +587,187 @@ class RandomEvent(BaseModel):
     turn_moment = models.CharField(
         max_length=255, help_text="Moment of the turn when the event happened.", choices=RandomEventTurnMoment.choices
     )
-    event_type = models.CharField(max_length=255, help_text="Type of the event.")
-    tile_col = models.IntegerField(
-        help_text="The grid column of the event in the offset `odd-q` coordinate system.", null=True
-    )
-    tile_row = models.IntegerField(
-        help_text="The grid row of the event in the offset `odd-q` coordinate system.", null=True
-    )
-    lightning_damage = models.PositiveIntegerField(help_text="Damage of the lightning.", null=True)
-    earthquake_damage = models.PositiveIntegerField(help_text="Damage of the earthquake.", null=True)
-    earthquake_radius = models.PositiveIntegerField(help_text="Radius of the earthquake.", null=True)
-    drop_actions_amount = models.FloatField(help_text="Amount of actions points in the drop.", null=True)
+    event_type = models.CharField(max_length=255, help_text="Type of the event.", choices=RandomEventType.choices)
+    tile_col = models.IntegerField(help_text="The grid column of the event in the offset `odd-q` coordinate system.")
+    tile_row = models.IntegerField(help_text="The grid row of the event in the offset `odd-q` coordinate system.")
+    lightning_damage = models.PositiveIntegerField(help_text="Damage of the lightning.", default=0)
+    earthquake_damage = models.PositiveIntegerField(help_text="Damage of the earthquake.", default=0)
+    earthquake_radius = models.PositiveIntegerField(help_text="Radius of the earthquake.", default=0)
+    drop_actions_amount = models.FloatField(help_text="Amount of actions points in the drop.", default=0)
+    drop_picked_up = models.BooleanField(help_text="Whether the drop was picked up.", default=False)
+
+    class Meta:
+        """Meta class for RandomEvent."""
+
+        indexes = [
+            models.Index(
+                fields=["game", "tile_col", "tile_row"],
+                condition=Q(event_type=RandomEventType.DROP_ACTIONS, drop_picked_up=False),
+                name="drop_not_picked_up",
+            ),
+        ]
+
+    @cached_property
+    def tile(self) -> Tile:
+        """Get the tile object."""
+        return Tile(self.tile_col, self.tile_row)
+
+    @classmethod
+    def generate_event(cls, game: Game, turn_moment: RandomEventTurnMoment) -> Optional[RandomEvent]:
+        """Generate a random event."""
+        threshold = random()
+        for kind, (low, high) in RANDOM_EVENTS_PROBABILITIES.items():
+            if low <= threshold < high:
+                if kind == RandomEventType.DROP_ACTIONS:
+                    return cls.create_drop_event(game, turn_moment)
+                if kind == RandomEventType.LIGHTNING:
+                    return cls.create_lightning_event(game, turn_moment)
+                if kind == RandomEventType.EARTHQUAKE:
+                    return cls.create_earthquake_event(game, turn_moment)
+                break
+        return None
+
+    @staticmethod
+    def generate_random_value(low: int, high: int) -> int:
+        """Generate a random value between `low` and `high`."""
+        power_low = round(math.sqrt(low * 100))
+        power_high = round(math.sqrt(high * 100))
+        return (randint(power_low, power_high) * randint(power_low, power_high)) // 100
+
+    @classmethod
+    def get_random_tile(cls, game: Game) -> Tile:
+        """Get a random tile in the game."""
+        return Tile(randint(0, game.grid_nb_cols - 1), randint(0, game.grid_nb_rows - 1))
+
+    @classmethod
+    def create_lightning_event(
+        cls, game: Game, turn_moment: RandomEventTurnMoment, tile: Optional[Tile] = None, damage: Optional[int] = None
+    ) -> RandomEvent:
+        """Create a lightning event."""
+        if tile is None:
+            tile = cls.get_random_tile(game)
+        return cls.objects.create(
+            game=game,
+            turn=game.current_turn,
+            turn_moment=turn_moment,
+            event_type=RandomEventType.LIGHTNING,
+            tile_col=tile.col,
+            tile_row=tile.row,
+            lightning_damage=cls.generate_random_value(*LIGHTNING_DAMAGES_RANGE) if damage is None else damage,
+        )
+
+    @classmethod
+    def create_earthquake_event(
+        cls,
+        game: Game,
+        turn_moment: RandomEventTurnMoment,
+        tile: Optional[Tile] = None,
+        damage: Optional[int] = None,
+        radius: Optional[int] = None,
+    ) -> RandomEvent:
+        """Create an earthquake event."""
+        if tile is None:
+            tile = cls.get_random_tile(game)
+        return cls.objects.create(
+            game=game,
+            turn=game.current_turn,
+            turn_moment=turn_moment,
+            event_type=RandomEventType.EARTHQUAKE,
+            tile_col=tile.col,
+            tile_row=tile.row,
+            earthquake_damage=cls.generate_random_value(*EARTHQUAKE_DAMAGES_RANGE) if damage is None else damage,
+            earthquake_radius=cls.generate_random_value(*EARTHQUAKE_RADIUS_RANGE) if radius is None else radius,
+        )
+
+    @classmethod
+    def create_drop_event(
+        cls, game: Game, turn_moment: RandomEventTurnMoment, tile: Optional[Tile] = None, amount: Optional[int] = None
+    ) -> RandomEvent:
+        """Create a drop event."""
+        if tile is None:
+            tile = cls.get_random_tile(game)
+        return cls.objects.create(
+            game=game,
+            turn=game.current_turn,
+            turn_moment=turn_moment,
+            event_type=RandomEventType.DROP_ACTIONS,
+            tile_col=tile.col,
+            tile_row=tile.row,
+            drop_actions_amount=cls.generate_random_value(*DROP_ACTIONS_RANGE) if amount is None else amount,
+        )
+
+    @classmethod
+    def apply_damage_to_tile(cls, occupied_tile: OccupiedTile, damage: float) -> bool:
+        """Apply damage to a tile."""
+        occupied_tile.level -= damage
+        if occupied_tile.level <= 0:
+            occupied_tile.delete()
+            return True
+        occupied_tile.save()
+        return False
+
+    def apply_lightning(self) -> tuple[None, None] | tuple[PlayerInGame, bool]:
+        """Apply the lightning to the grid."""
+        if self.event_type != RandomEventType.LIGHTNING:
+            return None, None
+        occupied_tile = (
+            self.game.occupiedtile_set.filter(col=self.tile_col, row=self.tile_row)
+            .select_related("player_in_game__player")
+            .first()
+        )
+        if occupied_tile is None:
+            return None, None
+        return (
+            occupied_tile.player_in_game,
+            self.apply_damage_to_tile(occupied_tile, self.lightning_damage),
+        )
+
+    def apply_earthquake(self, grid: Grid) -> dict[PlayerInGame, tuple[int, int]]:
+        """Apply the earthquake to the grid."""
+        if self.event_type != RandomEventType.EARTHQUAKE:
+            return {}
+        tiles = grid.get_tiles_in_radius(center := self.tile, self.earthquake_radius)
+        tiles_filter = Q(col=tiles[0].col, row=tiles[0].row)
+        for neighbor in tiles[1:]:
+            tiles_filter |= Q(col=neighbor.col, row=neighbor.row)
+        occupied_tiles = list(
+            self.game.occupiedtile_set.filter(tiles_filter).select_related("player_in_game__player")
+        )
+        if not occupied_tiles:
+            return {}
+        damages = {
+            distance: (EARTHQUAKE_MIN_DAMAGES - self.earthquake_damage) * distance / (self.earthquake_radius - 1)
+            + self.earthquake_damage
+            for distance in range(self.earthquake_radius)
+        }
+        touched_players_in_game: dict[PlayerInGame, tuple[int, int]] = {}
+        for occupied_tile in occupied_tiles:
+            if occupied_tile.player_in_game not in touched_players_in_game:
+                touched_players_in_game[occupied_tile.player_in_game] = (0, 0)
+            touched_players_in_game[occupied_tile.player_in_game] = (
+                touched_players_in_game[occupied_tile.player_in_game][0] + 1,
+                touched_players_in_game[occupied_tile.player_in_game][1]
+                + self.apply_damage_to_tile(occupied_tile, damages[center.distance(occupied_tile.tile)]),
+            )
+        return touched_players_in_game
+
+    def apply_drop(self, occupied_tile: Optional[OccupiedTile] = None) -> Optional[PlayerInGame]:
+        """Apply the drop to the grid."""
+        if self.event_type != RandomEventType.DROP_ACTIONS:
+            return None
+        if occupied_tile is None:
+            occupied_tile = (
+                self.game.occupiedtile_set.filter(col=self.tile_col, row=self.tile_row)
+                .select_related("player_in_game__player")
+                .first()
+            )
+        elif occupied_tile.col != self.tile_col or occupied_tile.row != self.tile_row:
+            return None
+        if occupied_tile is None:
+            return None
+        self.drop_picked_up = True
+        self.save()
+        player_in_game = occupied_tile.player_in_game
+        player_in_game.banked_actions += self.drop_actions_amount
+        player_in_game.save()
+        return player_in_game

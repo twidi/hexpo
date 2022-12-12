@@ -1,4 +1,5 @@
 """Main game loop and functions."""
+# pylint: disable=too-many-lines
 
 import asyncio
 import logging
@@ -7,6 +8,7 @@ from collections import defaultdict
 from contextlib import suppress
 from datetime import datetime, timedelta
 from queue import Empty
+from random import choice
 from typing import Any, Callable, Coroutine, NamedTuple, Optional, TypeAlias, cast
 
 from asgiref.sync import sync_to_async
@@ -18,6 +20,7 @@ from .click_handler import COORDINATES, get_click_target
 from .constants import (
     LATENCY_DELAY,
     NB_COLORS,
+    NO_EVENT_MESSAGES,
     PALETTE,
     ActionFailureReason,
     ActionState,
@@ -26,9 +29,11 @@ from .constants import (
     ClickTarget,
     GameMode,
     GameStep,
+    RandomEventTurnMoment,
+    RandomEventType,
 )
 from .grid import ConcreteGrid, Grid
-from .models import Action, Game, OccupiedTile, Player, PlayerInGame
+from .models import Action, Game, OccupiedTile, Player, PlayerInGame, RandomEvent
 from .twitch import ChatMessagesQueue
 from .types import (
     Color,
@@ -42,6 +47,7 @@ from .types import (
 
 logger = logging.getLogger("hexpo_game.game")
 logger_save_action = logging.getLogger("hexpo_game.game.save_action")
+logger_events = logging.getLogger("hexpo_game.game.events")
 logger_play_turn = logging.getLogger("hexpo_game.game.play_turn")
 
 
@@ -261,8 +267,155 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
                 )
             action.save()
 
-    async def step_random_events_before(self) -> None:
+    @classmethod
+    def step_random_event(  # pylint: disable=too-many-branches, too-many-statements
+        cls, game: Game, grid: Grid, turn_moment: RandomEventTurnMoment, random_event: Optional[RandomEvent] = None
+    ) -> tuple[list[PlayerInGame], GameMessages]:
+        """Create a random event."""
+        if not game.config.multi_steps:
+            return [], []
+
+        messages: GameMessages = []
+        dead_players: list[PlayerInGame] = []
+
+        def add_anonymous_message(text: str) -> None:
+            messages.append(GameMessage(text, kind=GameMessageKind.RANDOM_EVENT, color=Color(255, 255, 255)))
+
+        if random_event is None and (random_event := RandomEvent.generate_event(game, turn_moment)) is None:
+            add_anonymous_message(choice(NO_EVENT_MESSAGES))
+            return dead_players, messages
+
+        def add_message(
+            player_in_game: PlayerInGame,
+            text: str,
+            kind: GameMessageKind = GameMessageKind.RANDOM_EVENT,
+        ) -> None:
+            messages.append(
+                GameMessage(text, kind=kind, color=player_in_game.color_object, player_id=player_in_game.player_id)
+            )
+
+        if random_event.event_type == RandomEventType.LIGHTNING:
+            logger_events.info(
+                "Random event: lightning in %s, damage: %s",
+                random_event.tile.for_human(),
+                random_event.lightning_damage,
+            )
+            player_in_game, tile_destroyed = random_event.apply_lightning()
+            if player_in_game is None:
+                logger_events.info("Lightning with no effect")
+                add_anonymous_message(
+                    f"Un éclair de force {random_event.lightning_damage} "
+                    f"a frappé en {random_event.tile.for_human()} sans faire de dégats.",
+                )
+            else:
+                if tile_destroyed:
+                    logger_events.info("Lightning destroyed %s tile", player_in_game.player.name)
+                    add_message(
+                        player_in_game,
+                        f"{player_in_game.player.name} a perdu {random_event.tile.for_human()} "
+                        f"suite à un éclair de force {random_event.lightning_damage}",
+                    )
+                    if not player_in_game.count_tiles():
+                        logger_events.warning("%s IS NOW DEAD", player_in_game.player.name)
+                        player_in_game.die(turn=game.current_turn)
+                        add_message(
+                            player_in_game,
+                            f"{player_in_game.player.name} a disparu de la carte, terrassé par cet éclair",
+                            GameMessageKind.DEATH,
+                        )
+                        dead_players.append(player_in_game)
+                else:
+                    logger_events.info("Lightning touched %s tile", player_in_game.player.name)
+                    add_message(
+                        player_in_game,
+                        f"{player_in_game.player.name} a reçu un éclair de force {random_event.lightning_damage} "
+                        f"en {random_event.tile.for_human()}",
+                    )
+
+        elif random_event.event_type == RandomEventType.EARTHQUAKE:
+            logger_events.info(
+                "Random event: earthquake in %s, damage: %s, radius: %s",
+                random_event.tile.for_human(),
+                random_event.earthquake_damage,
+                random_event.earthquake_radius,
+            )
+            touched_players_in_game = random_event.apply_earthquake(grid)
+            if touched_players_in_game:
+                add_anonymous_message(
+                    f"Un tremblement de terre de force {random_event.earthquake_damage} "
+                    f"et rayon {random_event.earthquake_radius} a frappé en {random_event.tile.for_human()}",
+                )
+            else:
+                logger_events.info("Earthquake with no effect")
+                add_anonymous_message(
+                    f"Un tremblement de terre de force {random_event.earthquake_damage} "
+                    f"et rayon {random_event.earthquake_radius} a frappé en {random_event.tile.for_human()} "
+                    f"sans faire de dégats.",
+                )
+            for player_in_game, (nb_tiles, nb_destroyed_tiles) in touched_players_in_game.items():
+                nb_touched_tiles = nb_tiles - nb_destroyed_tiles
+                logger_events.info(
+                    "Earthquake on %s: %s touched, %s destroyed",
+                    player_in_game.player.name,
+                    nb_touched_tiles,
+                    nb_destroyed_tiles,
+                )
+                if nb_touched_tiles and nb_destroyed_tiles:
+                    add_message(
+                        player_in_game,
+                        f"{player_in_game.player.name} a eu "
+                        f"{nb_touched_tiles} cases touchée{'s' if nb_touched_tiles > 1 else ''}"
+                        f" et {nb_destroyed_tiles} détruite{'s' if nb_destroyed_tiles > 1 else ''}",
+                    )
+                elif nb_touched_tiles:
+                    add_message(
+                        player_in_game,
+                        f"{player_in_game.player.name} a eu "
+                        f"{nb_touched_tiles} cases touchée{'s' if nb_touched_tiles > 1 else ''}",
+                    )
+                else:
+                    add_message(
+                        player_in_game,
+                        f"{player_in_game.player.name} a eu "
+                        f"{nb_destroyed_tiles} case détruite{'s' if nb_destroyed_tiles > 1 else ''}",
+                    )
+                if not player_in_game.count_tiles():
+                    logger_play_turn.warning("%s IS NOW DEAD", player_in_game.player.name)
+                    player_in_game.die(turn=game.current_turn)
+                    add_message(
+                        player_in_game,
+                        f"{player_in_game.player.name} a disparu de la carte, terrassé par ce tremblement de terre",
+                        GameMessageKind.DEATH,
+                    )
+                    dead_players.append(player_in_game)
+
+        elif random_event.event_type == RandomEventType.DROP_ACTIONS:
+            logger_events.info(
+                "Random event: drop in %s, amount: %s",
+                random_event.tile.for_human(),
+                random_event.drop_actions_amount,
+            )
+            if (player_in_game := random_event.apply_drop()) is None:
+                logger_events.info("Drop with no effect")
+                add_anonymous_message(f"Un drop de points d'actions a eu lieu en {random_event.tile.for_human()}.")
+            else:
+                logger_events.info("Drop on %s tile", player_in_game.player.name)
+                add_message(
+                    player_in_game,
+                    f"{player_in_game.player.name} a récupéré {random_event.drop_actions_amount} points d'actions "
+                    f"suite a un drop en {random_event.tile.for_human()}",
+                )
+
+        return dead_players, messages
+
+    async def step_random_events(self, turn_moment: RandomEventTurnMoment) -> None:
         """Generate some random events after collecting the actions and before executing them."""
+        _, messages = await sync_to_async(self.step_random_event)(self.game, self.grid, turn_moment)
+        if messages:
+            await self.send_messages(messages)
+        if self.game.config.multi_steps:
+            print("MESSAGE DELAY", self.game.config.message_delay)
+            await asyncio.sleep(self.game.config.message_delay.total_seconds() * (len(messages) + 3))
 
     async def step_executing_actions(self) -> None:
         """Execute the actions of the current turn."""
@@ -271,9 +424,6 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         messages = await aplay_turn(self.game, self.grid, send_messages=self.send_messages)
         if messages:
             await self.send_messages(messages)
-
-    async def step_random_events_after(self) -> None:
-        """Generate some random events after executing the actions."""
 
     async def send_messages(self, messages: GameMessages) -> None:
         """Send the messages to the game messages queue."""
@@ -301,11 +451,11 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         elif step == GameStep.COLLECTING_ACTIONS:
             await self.step_collecting_actions()
         elif step == GameStep.RANDOM_EVENTS_BEFORE:
-            await self.step_random_events_before()
+            await self.step_random_events(RandomEventTurnMoment.BEFORE)
         elif step == GameStep.EXECUTING_ACTIONS:
             await self.step_executing_actions()
         elif step == GameStep.RANDOM_EVENTS_AFTER:
-            await self.step_random_events_after()
+            await self.step_random_events(RandomEventTurnMoment.AFTER)
         else:
             raise ValueError(f"Unknown step {step}")
 
@@ -329,9 +479,6 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
             ):
                 force_step = GameStep.WAITING_FOR_PLAYERS
             await self.game.anext_step(force_step)  # will change the turn if needed
-            if self.game.current_turn_step in (GameStep.RANDOM_EVENTS_BEFORE, GameStep.RANDOM_EVENTS_AFTER):
-                # these steps are not yet ready
-                await self.game.anext_step()
             if self.game.current_turn != current_turn:
                 current_turn = self.game.current_turn
                 if self.game.config.multi_steps:
@@ -682,7 +829,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             )
         else:
             logger_play_turn.info("%s grew on %s that was not occupied", player.name, tile.for_human())
-            OccupiedTile.objects.create(
+            new_occupied_tile = OccupiedTile.objects.create(
                 game=game,
                 col=tile.col,
                 row=tile.row,
@@ -694,6 +841,26 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                 player_in_game,
                 f"{player_in_game.player.name} s'est agrandi en {tile.for_human()} ({tile_level:.2f} PV)",
             )
+            for drop_event in game.randomevent_set.filter(
+                event_type=RandomEventType.DROP_ACTIONS,
+                drop_picked_up=False,
+                tile_col=tile.col,
+                tile_row=tile.row,
+            ):
+                if drop_event.apply_drop(new_occupied_tile) is None:
+                    logger_events.warning("Drop couldn't be picked up by %s on %s", player.name, tile.for_human())
+                else:
+                    logger_events.info(
+                        "%s picked up drop of %s on %s",
+                        player_in_game.player.name,
+                        drop_event.drop_actions_amount,
+                        tile.for_human(),
+                    )
+                    add_message(
+                        player_in_game,
+                        f"{player_in_game.player.name} a récupéré {drop_event.drop_actions_amount} points d'actions "
+                        f"en {tile.for_human()} suite a un ancien drop",
+                    )
 
         if not player_in_game.nb_tiles:
             messages.append(
@@ -756,6 +923,10 @@ async def aplay_turn(
     actions = await sync_to_async(lambda: list(game.confirmed_actions_for_turn(turn).order_by("confirmed_at")))()
     logger_play_turn.info("Playing turn %s: %s actions", turn, len(actions))
     dead_during_turn: set[int] = set()
+    if game.config.multi_steps:
+        dead_during_turn = await sync_to_async(
+            lambda: set(game.playeringame_set.filter(ended_turn=turn).values_list("id", flat=True))
+        )()
     nb_actions: dict[int, int] = defaultdict(int)
     all_messages: GameMessages = []
     for action in actions:

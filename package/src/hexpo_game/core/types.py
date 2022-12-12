@@ -146,6 +146,12 @@ class AxialCoordinate(NamedTuple):
             return AxialCoordinate(self.q - other.q, self.r - other.r)
         return NotImplemented  # type: ignore[unreachable]
 
+    def __add__(self, other: Any) -> AxialCoordinate:
+        """Add two axial coordinates."""
+        if isinstance(other, AxialCoordinate):
+            return AxialCoordinate(self.q + other.q, self.r + other.r)
+        return NotImplemented  # type: ignore[unreachable]
+
     def distance(self, other: AxialCoordinate) -> int:
         """Return the distance between two axial coordinates."""
         diff = self - other
@@ -191,6 +197,7 @@ class GameMessageKind(enum.Enum):
     GAME_TURN_CHANGED = "game_turn_changed"
     ACTION = "action"
     LEVEL_UPDATED = "level_updated"
+    RANDOM_EVENT = "random_event"
     OTHER = "other"
 
 
