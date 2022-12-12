@@ -124,5 +124,5 @@ async def catch_clicks(
         "127.0.0.1",
         8765,
     )
-    logger.debug("Websocket listening")
+    # logger.debug("Websocket listening")
     await server.serve_forever()

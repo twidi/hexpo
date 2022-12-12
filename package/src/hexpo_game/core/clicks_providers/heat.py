@@ -29,6 +29,10 @@ valid_number_re = re.compile(r"^((1(\.0)?)|(0(\.\d+)?))$")
 logger = logging.getLogger("hexpo_game.click_provider.heat")
 
 
+class IgnoreError(Exception):
+    pass
+
+
 def get_data(raw_data: bytes | str) -> tuple[str, float, float]:
     """Get the data from a raw WS message.
 
@@ -49,6 +53,8 @@ def get_data(raw_data: bytes | str) -> tuple[str, float, float]:
         - The error message (with ``%s`` placeholder for the specific data that caused the error (see below))
         - The specific data that caused the error to be raised.
         - The user id found inn the message if any (for example to store it to ignore its next messages)
+    IgnoreError
+        If the data is invalid but should be ignored.
     """
     # pylint warns us that we have an unused `%s` in the error message, but it's to let the called handled the message +
     # value like it wants (using `%` or not, for example with logging)
@@ -58,6 +64,9 @@ def get_data(raw_data: bytes | str) -> tuple[str, float, float]:
         data = json.loads(raw_data)
     except json.JSONDecodeError as exc:
         raise ValueError("Invalid JSON: %s", raw_data) from exc
+
+    if data.get('type') == 'system' and data.get('message') == 'Connected to Heat API server.':
+        raise IgnoreError("Connected to Heat API server")
 
     data.pop("modifier", None)
     data.pop("modifiers", None)
@@ -121,12 +130,21 @@ async def catch_clicks(
     """
     # pylint: disable=duplicate-code
     while True:
-        async with connect(WS_URL) as websocket:
+        try:
+            connection = connect(WS_URL)
+            websocket = await asyncio.wait_for(connection.__aenter__(), MAX_WAIT_DELAY)
+        except asyncio.TimeoutError:
+            logger.error("Timeout while connecting")
+            continue
+        except Exception:
+            logger.exception("Error while connecting")
+            continue
+        try:
             while True:
                 try:
                     raw_data = await asyncio.wait_for(websocket.recv(), MAX_WAIT_DELAY)
                 except asyncio.TimeoutError:
-                    logger.error("Timeout while waiting for a message")
+                    # logger.error("Timeout while waiting for a message")
                     break
                 except ConnectionClosed:
                     logger.exception("WebSocket connection closed")
@@ -135,6 +153,8 @@ async def catch_clicks(
                 try:
                     try:
                         user_id, x_relative, y_relative = get_data(raw_data)
+                    except IgnoreError:
+                        continue
                     except ValueError as exc:
                         logger.error(str(exc.args[0]), *exc.args[1:])
                         if len(exc.args) > 2:
@@ -146,4 +166,9 @@ async def catch_clicks(
                     )
 
                 except Exception:  # pylint: disable=broad-except
-                    logger.exception("Unhandled exception while trying to process WS message: %s", raw_data)
+                    logger.exception("Error while trying to process WS message: %s", raw_data)
+        finally:
+            try:
+                await connection.__aexit__(None, None, None)
+            except Exception:  # pylint: disable=broad-except
+                logger.exception("Error while trying to close WS connection")
