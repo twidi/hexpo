@@ -22,7 +22,7 @@ from .click_handler import COORDINATES
 from .constants import ActionState, ActionType, ClickTarget, GameStep
 from .grid import ConcreteGrid
 from .models import Action, Game, PlayerInGame
-from .types import Color, GameMessage, GameMessagesQueue, Tile
+from .types import Color, DrawTileMode, GameMessage, GameMessagesQueue, Tile
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ class GameState:
             self.grid.draw_areas(
                 self.grid.grid.tiles_set - set(self.grid_state),
                 Color(255, 255, 255),
-                thickness=1,
+                mode=DrawTileMode.FILL,
             )
         else:
             self.grid.draw_map_contour(Color(0, 0, 0))

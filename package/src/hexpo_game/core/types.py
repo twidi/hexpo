@@ -213,3 +213,10 @@ class GameMessage(NamedTuple):
 
 GameMessages: TypeAlias = list[GameMessage]
 GameMessagesQueue: TypeAlias = Queue[GameMessage]
+
+
+class DrawTileMode(enum.Enum):
+    """Mode for drawing tiles."""
+
+    CONTOUR = "contour"
+    FILL = "fill"

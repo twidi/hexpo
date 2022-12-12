@@ -30,7 +30,7 @@ logger = logging.getLogger("hexpo_game.click_provider.heat")
 
 
 class IgnoreError(Exception):
-    pass
+    """Error to raise when it should be ignored."""
 
 
 def get_data(raw_data: bytes | str) -> tuple[str, float, float]:
@@ -65,7 +65,7 @@ def get_data(raw_data: bytes | str) -> tuple[str, float, float]:
     except json.JSONDecodeError as exc:
         raise ValueError("Invalid JSON: %s", raw_data) from exc
 
-    if data.get('type') == 'system' and data.get('message') == 'Connected to Heat API server.':
+    if data.get("type") == "system" and data.get("message") == "Connected to Heat API server.":
         raise IgnoreError("Connected to Heat API server")
 
     data.pop("modifier", None)
@@ -102,7 +102,7 @@ def get_data(raw_data: bytes | str) -> tuple[str, float, float]:
     return user_id, x_relative, y_relative
 
 
-async def catch_clicks(
+async def catch_clicks(  # pylint: disable=too-many-branches
     twitch_client: TwitchClient,
     chat_messages_queue: ChatMessagesQueue,
     refused_ids: set[str],
@@ -132,11 +132,12 @@ async def catch_clicks(
     while True:
         try:
             connection = connect(WS_URL)
+            # pylint: disable=unnecessary-dunder-call
             websocket = await asyncio.wait_for(connection.__aenter__(), MAX_WAIT_DELAY)
         except asyncio.TimeoutError:
             logger.error("Timeout while connecting")
             continue
-        except Exception:
+        except Exception:  # pylint:disable=broad-except
             logger.exception("Error while connecting")
             continue
         try:
@@ -169,6 +170,6 @@ async def catch_clicks(
                     logger.exception("Error while trying to process WS message: %s", raw_data)
         finally:
             try:
-                await connection.__aexit__(None, None, None)
+                await connection.__aexit__(None, None, None)  # pylint: disable=unnecessary-dunder-call
             except Exception:  # pylint: disable=broad-except
                 logger.exception("Error while trying to close WS connection")

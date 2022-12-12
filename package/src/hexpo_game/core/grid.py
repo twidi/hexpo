@@ -20,7 +20,7 @@ import numpy as np
 import numpy.typing as npt
 
 from .constants import PALETTE_BGR
-from .types import AxialCoordinate, Color, Point, Tile
+from .types import AxialCoordinate, Color, DrawTileMode, Point, Tile
 
 SQRT3 = sqrt(3)
 HEX_WIDTH_TO_HEIGHT_RATIO = SQRT3 / 2  # height = width * HEX_WIDTH_TO_HEIGHT_RATIO
@@ -332,7 +332,7 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
         color: Color,
         mark: bool = False,
         use_transparency: bool = True,
-        thickness: int = THICKNESS,
+        mode: DrawTileMode = DrawTileMode.CONTOUR,
     ) -> None:
         """Draw the (perimeters of the) areas of the given tiles.
 
@@ -342,13 +342,12 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
             The tiles to draw.
         color : Color
             The color to use.
-        mark : bool, optional
+        mark : bool
             Whether to mark the tiles, by default False.
-        use_transparency : bool, optional
+        use_transparency : bool
             Whether to use transparency, by default True.
-        thickness : int, optional
-            The thickness of the lines, by default THICKNESS.
-
+        mode : DrawTileMode
+            The mode to use, by default DrawTileMode.CONTOUR.
         """
         if not tiles:
             return
@@ -357,7 +356,7 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
         if use_transparency:
             self.drawing_map.fill(0)
             drawing_map = self.drawing_map
-            drawing_color = (0, 0, 0, 255)
+            drawing_color = (0, 0, 0, 255) if mode == DrawTileMode.CONTOUR else (0, 0, 0, 50)
         else:
             drawing_map = self.map
             drawing_color = color
@@ -365,27 +364,38 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
         tiles_set = set(tiles)
         for tile in tiles_set:
             concrete_tile = self.tiles[tile.row][tile.col]
-            if mark:
-                cv2.circle(  # pylint: disable=no-member
+            if mode == DrawTileMode.FILL:
+                cv2.fillConvexPoly(  # pylint: disable=no-member
                     drawing_map,
-                    round(concrete_tile.center),  # type: ignore[call-overload]
-                    SEGMENTS_OFFSET,
+                    np.array(
+                        [round(point) for point in concrete_tile.points],  # type: ignore[call-overload]
+                        dtype=np.int32,
+                    ),
                     drawing_color,
-                    thickness,
                     cv2.LINE_AA,  # pylint: disable=no-member
                 )
-            for direction, neighbor in enumerate(self.grid.neighbors[tile]):
-                if neighbor and neighbor in tiles_set:
-                    continue
-                offsets = SEGMENTS_OFFSETS[direction]
-                cv2.line(  # pylint: disable=no-member
-                    drawing_map,
-                    round(offsets[0] + concrete_tile.points[(direction - 1) % 6]),  # type: ignore[call-overload]
-                    round(offsets[1] + concrete_tile.points[direction]),  # type: ignore[call-overload]
-                    drawing_color,
-                    thickness,
-                    cv2.LINE_AA,  # pylint: disable=no-member
-                )
+            else:
+                if mark:
+                    cv2.circle(  # pylint: disable=no-member
+                        drawing_map,
+                        round(concrete_tile.center),  # type: ignore[call-overload]
+                        SEGMENTS_OFFSET,
+                        drawing_color,
+                        THICKNESS,
+                        cv2.LINE_AA,  # pylint: disable=no-member
+                    )
+                for direction, neighbor in enumerate(self.grid.neighbors[tile]):
+                    if neighbor and neighbor in tiles_set:
+                        continue
+                    offsets = SEGMENTS_OFFSETS[direction]
+                    cv2.line(  # pylint: disable=no-member
+                        drawing_map,
+                        round(offsets[0] + concrete_tile.points[(direction - 1) % 6]),  # type: ignore[call-overload]
+                        round(offsets[1] + concrete_tile.points[direction]),  # type: ignore[call-overload]
+                        drawing_color,
+                        THICKNESS,
+                        cv2.LINE_AA,  # pylint: disable=no-member
+                    )
 
         if use_transparency:
             # we set the same color
