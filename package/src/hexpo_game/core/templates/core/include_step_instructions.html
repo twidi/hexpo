@@ -1,7 +1,7 @@
 {% with turn_step=game.step %}
     {% if turn_step == GameStep.WAITING_FOR_PLAYERS %}
         <p>Si tu as suivi les instructions à droite, il est temps de rejoindre la partie.</p>
-        <p>Clique sur une case libre, puis attend la prochaine étape pour faire tes actions.</p>
+        <p>Clique sur une case libre (liseré blanc), puis attend la prochaine étape pour faire tes actions.</p>
     {% elif turn_step == GameStep.COLLECTING_ACTIONS %}
         <p>Clique sur une action puis une case (sauf pour "Banquer"). 100% modifiable avant confirmation.</p>
         <p>Pour confirmer l'action (obligatoire), clique sur <span class='ok-symbol'>✔️</span>. Plus c'est fait tôt, plus l'action sera efficace.</p>
