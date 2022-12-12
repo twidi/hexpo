@@ -415,7 +415,6 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         if messages:
             await self.send_messages(messages)
         if self.game.config.multi_steps:
-            print("MESSAGE DELAY", self.game.config.message_delay)
             await asyncio.sleep(self.game.config.message_delay.total_seconds() * (len(messages) + 3))
 
     async def step_executing_actions(self) -> None:
