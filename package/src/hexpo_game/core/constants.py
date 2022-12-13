@@ -174,8 +174,8 @@ NO_EVENT_MESSAGES = [
 ]
 
 LIGHTNING_DAMAGES_RANGE = (10, 80)  # Damage to the hit tile
-EARTHQUAKE_RADIUS_RANGE = (4, 9)  # Radius of the earthquake
-EARTHQUAKE_DAMAGES_RANGE = (30, 60)  # Damage to all tile in the earthquake radius
+EARTHQUAKE_RADIUS_RANGE = (3, 7)  # Radius of the earthquake
+EARTHQUAKE_DAMAGES_RANGE = (20, 40)  # Damage to all tile in the earthquake radius
 EARTHQUAKE_MIN_DAMAGES = 10  # Damage for tiles the farthest from earthquake center
 DROP_ACTIONS_RANGE = (1, 30)  # Number of actions in the drop
 RANDOM_EVENTS_PROBABILITIES = {
