@@ -1,5 +1,5 @@
-{% for player in players %}
-    <div class="player {% if not player.can_play %}cannot-play{% elif player.is_protected %}is-protected{% endif %}" style="--player-color: {{ player.color }}">
+{% for player in players %}{% with can_play=player.can_play %}
+    <div class="player {% if not can_play %}cannot-play{% elif player.is_protected %}is-protected{% elif not player.nb_tiles %}no-tiles{% endif %}" style="--player-color: {{ player.color }}">
         <div class="player-color"></div>
         <div class="player-rank">{{ player.rank }}</div>
         <div class="player-info">
@@ -14,33 +14,43 @@
                 <div class="player-percent-tiles">{{ player.percent_tiles }}</div>
             {% endif %}
         </div>
-        {% if game.config.multi_steps %}
-            <div class="player-actions">
-                <div class="player-actions-inner">
-                {% for action in player.current_turn_actions %}
-                    {% if action.state == ActionState.CREATED or action.state == ActionState.CONFIRMED %}
-                    <span>
-                        <strong>{{ action.type.label.0|upper }}</strong>
-                        {% if action.tile_col or action.state == ActionState.CONFIRMED %}
-                            ({% comment %}
-                            {% endcomment %}{% if action.tile_col is not None %}{{ action.tile.for_human }}{% endif %}{% comment %}
-                            {% endcomment %}{% if action.state == ActionState.CONFIRMED %}{% if action.tile_col is not None %}, {% endif %}{{ action.efficiency_for_human }}{% endif %}{% comment %}
-                            {% endcomment %})
-                        {% endif %}
-                        {% if action.state == ActionState.CONFIRMED %}
-                            <span class="ok-symbol">✔️</span>
-                        {% else %}
-                            <span class="ko-symbol">✖️</span>
-                        {% endif %}
-                    </span>
-                    {% endif %}
-                {% endfor %}
-                </div>
+        {% if not can_play %}
+            <div class="player-respawn-turn">
+                Prochain respawn possible au tour {{ player.next_respawn_turn }}
             </div>
+        {% elif game.config.multi_steps %}
+            {% if not player.nb_tiles %}
+                <div class="player-no-tiles">
+                    Il faut commencer sur une case grise !
+                </div>
+            {% else %}
+                <div class="player-actions">
+                    <div class="player-actions-inner">
+                    {% for action in player.current_turn_actions %}
+                        {% if action.state == ActionState.CREATED or action.state == ActionState.CONFIRMED %}
+                        <span>
+                            <strong>{{ action.type.label.0|upper }}</strong>
+                            {% if action.tile_col or action.state == ActionState.CONFIRMED %}
+                                ({% comment %}
+                                {% endcomment %}{% if action.tile_col is not None %}{{ action.tile.for_human }}{% endif %}{% comment %}
+                                {% endcomment %}{% if action.state == ActionState.CONFIRMED %}{% if action.tile_col is not None %}, {% endif %}{{ action.efficiency_for_human }}{% endif %}{% comment %}
+                                {% endcomment %})
+                            {% endif %}
+                            {% if action.state == ActionState.CONFIRMED %}
+                                <span class="ok-symbol">✔️</span>
+                            {% else %}
+                                <span class="ko-symbol">✖️</span>
+                            {% endif %}
+                        </span>
+                        {% endif %}
+                    {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
         {% else %}
             <div class="player-extra">
                 (total: {{ player.nb_games }} départ{{ player.nb_games|pluralize }},  {{ player.nb_kills }} kill{{ player.nb_kills|pluralize }}, {{ player.nb_actions }} case{{ player.nb_actions|pluralize }})
             </div>
         {% endif %}
     </div>
-{% endfor %}
+{% endwith %}{% endfor %}

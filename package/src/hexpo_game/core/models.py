@@ -351,6 +351,13 @@ class PlayerInGame(BaseModel):
             )
         )
 
+    @property
+    def next_respawn_turn(self) -> int:
+        """Get the next turn the player can respawn."""
+        if self.ended_turn is None:
+            return self.game.current_turn
+        return self.ended_turn + self.game.config.respawn_cooldown_turns + 1
+
     def die(self, turn: Optional[int] = None, killer: Optional[PlayerInGame] = None) -> None:
         """Set the player as dead."""
         self.ended_turn = self.game.current_turn if turn is None else turn

@@ -191,6 +191,9 @@ body.multi-steps:not([data-game-step="collecting_actions"]) #actions {
 .player.is-protected {
     background-color: #0a4b0a;
 }
+.player.no-tiles {
+    background-color: var(--bright-color);
+}
 
 .player-info {
     display: flex;

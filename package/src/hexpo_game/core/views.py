@@ -168,6 +168,7 @@ class GameState:
                 "can_play": player_in_game.ended_turn is None or player_in_game.can_respawn(),
                 "is_protected": player_in_game.is_protected(),
                 "nb_tiles": player_in_game.nb_tiles,  # type: ignore[attr-defined]
+                "next_respawn_turn": player_in_game.next_respawn_turn if player_in_game.ended_turn else None,
             }
             | (
                 {
