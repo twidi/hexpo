@@ -1013,13 +1013,6 @@ def erode_map(game: Game, grid: Grid) -> tuple[list[PlayerInGame], GameMessages]
                 continue
             occupied_tile.level -= damage
             if occupied_tile.level > 0:
-                logger_erosion.info(
-                    "Erosion touched tile %s from %s: -%s -> %s",
-                    tile.for_human(),
-                    player_in_game.player.name,
-                    damage,
-                    occupied_tile.level,
-                )
                 occupied_tile.save()
                 continue
             occupied_tile.delete()
