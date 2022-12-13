@@ -144,7 +144,7 @@ class GameState:
 
         if self.game.config.multi_steps and self.game.current_turn_step in (
             GameStep.COLLECTING_ACTIONS,
-            GameStep.RANDOM_EVENTS_BEFORE,
+            GameStep.RANDOM_EVENTS,
             GameStep.EXECUTING_ACTIONS,
         ):
             all_actions = self.game.action_set.filter(

@@ -185,11 +185,7 @@ RANDOM_EVENTS_PROBABILITIES = {
 }
 
 
-class RandomEventTurnMoment(models.TextChoices):
-    """Represent the different moments of the turn where a random event can happen."""
-
-    BEFORE = "before", "Before executions of actions"
-    AFTER = "after", "After executions of actions"
+EROSION_DAMAGES = 0.25  # Damage to the tile level for each border that is not with a tile from the same player
 
 
 class GameStep(models.TextChoices):
@@ -197,9 +193,9 @@ class GameStep(models.TextChoices):
 
     WAITING_FOR_PLAYERS = "waiting_for_players", "Attente de nouveaux joueurs"
     COLLECTING_ACTIONS = "collecting_actions", "Collecte des actions"
-    RANDOM_EVENTS_BEFORE = "random_events_before", "Évènements aléatoires"
+    RANDOM_EVENTS = "random_events", "Évènements aléatoires"
     EXECUTING_ACTIONS = "executing_actions", "Éxécution des actions"
-    RANDOM_EVENTS_AFTER = "random_events_after", "Évènements aléatoires"
+    EROSION = "erosion", "Érosion"
 
     def next(self) -> GameStep:
         """Return the next step."""

@@ -6,10 +6,13 @@
         <p>Clique sur une action puis une case (sauf pour "Banquer"). 100% modifiable avant confirmation.</p>
         <p>Pour confirmer l'action (obligatoire), clique sur <span class='ok-symbol'>✔️</span>. Plus c'est fait tôt, plus l'action sera efficace.</p>
         <p>Répète pour chaque point d'action que tu as (droite de ton pseudo, à gauche de l'écran).</p>
-    {% elif turn_step == GameStep.RANDOM_EVENTS_BEFORE or turn_step == GameStep.RANDOM_EVENTS_AFTER %}
+    {% elif turn_step == GameStep.RANDOM_EVENTS %}
         <p>Tremblez, joueurs, quelque chose de terrible risque de se produire... ou pas !</p>
         <p>Éclair, tremblement de terre ou, pour votre grand plaisir, un drop de points d'actions...</p>
     {% elif turn_step == GameStep.EXECUTING_ACTIONS %}
         <p>Les actions sont en train d'être exécutées, et sont résumées en bas du stream.</p>
+    {% elif turn_step == GameStep.EROSION %}
+        <p>Toutes les cases avec une bordure visible subissent l'érosion !</p>
+        <p>Ne seront affichées en bas que les cases complètement errodées (0PV).</p>
     {% endif %}
 {% endwith %}

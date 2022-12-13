@@ -198,6 +198,7 @@ class GameMessageKind(enum.Enum):
     ACTION = "action"
     LEVEL_UPDATED = "level_updated"
     RANDOM_EVENT = "random_event"
+    EROSION = "erosion"
     OTHER = "other"
 
 

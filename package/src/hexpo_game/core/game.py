@@ -18,6 +18,7 @@ from django.utils import timezone
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES, get_click_target
 from .constants import (
+    EROSION_DAMAGES,
     LATENCY_DELAY,
     NB_COLORS,
     NO_EVENT_MESSAGES,
@@ -29,7 +30,6 @@ from .constants import (
     ClickTarget,
     GameMode,
     GameStep,
-    RandomEventTurnMoment,
     RandomEventType,
 )
 from .grid import ConcreteGrid, Grid
@@ -50,6 +50,7 @@ logger_new_players = logging.getLogger("hexpo_game.game.players")
 logger_collect = logging.getLogger("hexpo_game.game.collect")
 logger_events = logging.getLogger("hexpo_game.game.events")
 logger_execute = logging.getLogger("hexpo_game.game.execute")
+logger_erosion = logging.getLogger("hexpo_game.game.erosion")
 
 
 class PlayerClick(NamedTuple):
@@ -268,150 +269,21 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
                 )
             action.save()
 
-    @classmethod
-    def step_random_event(  # pylint: disable=too-many-branches, too-many-statements
-        cls, game: Game, grid: Grid, turn_moment: RandomEventTurnMoment, random_event: Optional[RandomEvent] = None
-    ) -> tuple[list[PlayerInGame], GameMessages]:
-        """Create a random event."""
-        if not game.config.multi_steps:
-            return [], []
-
-        messages: GameMessages = []
-        dead_players: list[PlayerInGame] = []
-
-        def add_anonymous_message(text: str) -> None:
-            messages.append(GameMessage(text, kind=GameMessageKind.RANDOM_EVENT, color=Color(255, 255, 255)))
-
-        if random_event is None and (random_event := RandomEvent.generate_event(game, turn_moment)) is None:
-            add_anonymous_message(choice(NO_EVENT_MESSAGES))
-            return dead_players, messages
-
-        def add_message(
-            player_in_game: PlayerInGame,
-            text: str,
-            kind: GameMessageKind = GameMessageKind.RANDOM_EVENT,
-        ) -> None:
-            messages.append(
-                GameMessage(text, kind=kind, color=player_in_game.color_object, player_id=player_in_game.player_id)
-            )
-
-        if random_event.event_type == RandomEventType.LIGHTNING:
-            logger_events.info(
-                "Random event: lightning in %s, damage: %s",
-                random_event.tile.for_human(),
-                random_event.lightning_damage,
-            )
-            player_in_game, tile_destroyed = random_event.apply_lightning()
-            if player_in_game is None:
-                logger_events.info("Lightning with no effect")
-                add_anonymous_message(
-                    f"Un éclair de force {random_event.lightning_damage} "
-                    f"a frappé en {random_event.tile.for_human()} sans faire de dégats.",
-                )
-            else:
-                if tile_destroyed:
-                    logger_events.info("Lightning destroyed %s tile", player_in_game.player.name)
-                    add_message(
-                        player_in_game,
-                        f"{player_in_game.player.name} a perdu {random_event.tile.for_human()} "
-                        f"suite à un éclair de force {random_event.lightning_damage}",
-                    )
-                    if not player_in_game.count_tiles():
-                        logger_events.warning("%s IS NOW DEAD", player_in_game.player.name)
-                        player_in_game.die(turn=game.current_turn)
-                        add_message(
-                            player_in_game,
-                            f"{player_in_game.player.name} a disparu de la carte, terrassé par cet éclair",
-                            GameMessageKind.DEATH,
-                        )
-                        dead_players.append(player_in_game)
-                else:
-                    logger_events.info("Lightning touched %s tile", player_in_game.player.name)
-                    add_message(
-                        player_in_game,
-                        f"{player_in_game.player.name} a reçu un éclair de force {random_event.lightning_damage} "
-                        f"en {random_event.tile.for_human()}",
-                    )
-
-        elif random_event.event_type == RandomEventType.EARTHQUAKE:
-            logger_events.info(
-                "Random event: earthquake in %s, damage: %s, radius: %s",
-                random_event.tile.for_human(),
-                random_event.earthquake_damage,
-                random_event.earthquake_radius,
-            )
-            touched_players_in_game = random_event.apply_earthquake(grid)
-            if touched_players_in_game:
-                add_anonymous_message(
-                    f"Un tremblement de terre de force {random_event.earthquake_damage} "
-                    f"et rayon {random_event.earthquake_radius} a frappé en {random_event.tile.for_human()}",
-                )
-            else:
-                logger_events.info("Earthquake with no effect")
-                add_anonymous_message(
-                    f"Un tremblement de terre de force {random_event.earthquake_damage} "
-                    f"et rayon {random_event.earthquake_radius} a frappé en {random_event.tile.for_human()} "
-                    f"sans faire de dégats.",
-                )
-            for player_in_game, (nb_tiles, nb_destroyed_tiles) in touched_players_in_game.items():
-                nb_touched_tiles = nb_tiles - nb_destroyed_tiles
-                logger_events.info(
-                    "Earthquake on %s: %s touched, %s destroyed",
-                    player_in_game.player.name,
-                    nb_touched_tiles,
-                    nb_destroyed_tiles,
-                )
-                if nb_touched_tiles and nb_destroyed_tiles:
-                    add_message(
-                        player_in_game,
-                        f"{player_in_game.player.name} a eu "
-                        f"{nb_touched_tiles} cases touchée{'s' if nb_touched_tiles > 1 else ''}"
-                        f" et {nb_destroyed_tiles} détruite{'s' if nb_destroyed_tiles > 1 else ''}",
-                    )
-                elif nb_touched_tiles:
-                    add_message(
-                        player_in_game,
-                        f"{player_in_game.player.name} a eu "
-                        f"{nb_touched_tiles} cases touchée{'s' if nb_touched_tiles > 1 else ''}",
-                    )
-                else:
-                    add_message(
-                        player_in_game,
-                        f"{player_in_game.player.name} a eu "
-                        f"{nb_destroyed_tiles} case détruite{'s' if nb_destroyed_tiles > 1 else ''}",
-                    )
-                if not player_in_game.count_tiles():
-                    logger_events.warning("%s IS NOW DEAD", player_in_game.player.name)
-                    player_in_game.die(turn=game.current_turn)
-                    add_message(
-                        player_in_game,
-                        f"{player_in_game.player.name} a disparu de la carte, terrassé par ce tremblement de terre",
-                        GameMessageKind.DEATH,
-                    )
-                    dead_players.append(player_in_game)
-
-        elif random_event.event_type == RandomEventType.DROP_ACTIONS:
-            logger_events.info(
-                "Random event: drop in %s, amount: %s",
-                random_event.tile.for_human(),
-                random_event.drop_actions_amount,
-            )
-            if (player_in_game := random_event.apply_drop()) is None:
-                logger_events.info("Drop with no effect")
-                add_anonymous_message(f"Un drop de points d'actions a eu lieu en {random_event.tile.for_human()}.")
-            else:
-                logger_events.info("Drop on %s tile", player_in_game.player.name)
-                add_message(
-                    player_in_game,
-                    f"{player_in_game.player.name} a récupéré {random_event.drop_actions_amount} points d'actions "
-                    f"suite a un drop en {random_event.tile.for_human()}",
-                )
-
-        return dead_players, messages
-
-    async def step_random_events(self, turn_moment: RandomEventTurnMoment) -> None:
+    async def step_random_events(self) -> None:
         """Generate some random events after collecting the actions and before executing them."""
-        _, messages = await sync_to_async(self.step_random_event)(self.game, self.grid, turn_moment)
+        if not self.game.config.multi_steps:
+            return
+        _, messages = await sync_to_async(run_random_events)(self.game, self.grid)
+        if messages:
+            await self.send_messages(messages)
+        if self.game.config.multi_steps:
+            await asyncio.sleep(self.game.config.message_delay.total_seconds() * (len(messages) + 3))
+
+    async def step_erosion(self) -> None:
+        """Erode borders of players maps."""
+        if not self.game.config.multi_steps:
+            return
+        _, messages = await sync_to_async(erode_map)(self.game, self.grid)
         if messages:
             await self.send_messages(messages)
         if self.game.config.multi_steps:
@@ -450,12 +322,12 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
             await self.step_waiting_for_players()
         elif step == GameStep.COLLECTING_ACTIONS:
             await self.step_collecting_actions()
-        elif step == GameStep.RANDOM_EVENTS_BEFORE:
-            await self.step_random_events(RandomEventTurnMoment.BEFORE)
+        elif step == GameStep.RANDOM_EVENTS:
+            await self.step_random_events()
         elif step == GameStep.EXECUTING_ACTIONS:
             await self.step_executing_actions()
-        elif step == GameStep.RANDOM_EVENTS_AFTER:
-            await self.step_random_events(RandomEventTurnMoment.AFTER)
+        elif step == GameStep.EROSION:
+            await self.step_erosion()
         else:
             raise ValueError(f"Unknown step {step}")
 
@@ -1110,6 +982,206 @@ def confirm_action(
             action_tile.for_human() if (action_tile := action.tile) is not None else None,
         )
     return action
+
+
+def erode_map(game: Game, grid: Grid) -> tuple[list[PlayerInGame], GameMessages]:
+    """Erode borders of players maps."""
+    if not game.config.multi_steps:
+        return [], []
+
+    messages: GameMessages = []
+    dead_players: list[PlayerInGame] = []
+
+    def add_message(
+        player_in_game: PlayerInGame,
+        text: str,
+        kind: GameMessageKind = GameMessageKind.EROSION,
+    ) -> None:
+        messages.append(
+            GameMessage(text, kind=kind, color=player_in_game.color_object, player_id=player_in_game.player_id)
+        )
+
+    players_in_game = game.get_current_players_in_game_with_occupied_tiles()
+    for player_in_game in players_in_game:
+        occupied_tiles = list(player_in_game.occupiedtile_set.all())
+        nb_tiles = len(occupied_tiles)
+        border_tiles = grid.get_border_tiles({occupied_tile.tile for occupied_tile in occupied_tiles})
+        for occupied_tile in occupied_tiles:
+            try:
+                damage = EROSION_DAMAGES * len(border_tiles[tile := occupied_tile.tile])
+            except KeyError:
+                continue
+            occupied_tile.level -= damage
+            if occupied_tile.level > 0:
+                logger_erosion.info(
+                    "Erosion touched tile %s from %s: -%s -> %s",
+                    tile.for_human(),
+                    player_in_game.player.name,
+                    damage,
+                    occupied_tile.level,
+                )
+                occupied_tile.save()
+                continue
+            occupied_tile.delete()
+            logger_erosion.info("Erosion destroyed tile %s from %s", tile.for_human(), player_in_game.player.name)
+            add_message(
+                player_in_game,
+                f"{player_in_game.player.name} a perdu {tile.for_human()} à cause de l'érosion",
+            )
+            nb_tiles -= 1
+
+        if nb_tiles <= 0:
+            logger_erosion.warning("%s IS NOW DEAD", player_in_game.player.name)
+            player_in_game.die(turn=game.current_turn)
+            add_message(
+                player_in_game,
+                f"{player_in_game.player.name} a disparu de la carte, érodé jusqu'à l'os",
+                GameMessageKind.DEATH,
+            )
+            dead_players.append(player_in_game)
+
+    return dead_players, messages
+
+
+def run_random_events(  # pylint: disable=too-many-branches, too-many-statements
+    game: Game, grid: Grid, random_event: Optional[RandomEvent] = None
+) -> tuple[list[PlayerInGame], GameMessages]:
+    """Create a random event."""
+    if not game.config.multi_steps:
+        return [], []
+
+    messages: GameMessages = []
+    dead_players: list[PlayerInGame] = []
+
+    def add_anonymous_message(text: str) -> None:
+        messages.append(GameMessage(text, kind=GameMessageKind.RANDOM_EVENT, color=Color(255, 255, 255)))
+
+    if random_event is None and (random_event := RandomEvent.generate_event(game)) is None:
+        add_anonymous_message(choice(NO_EVENT_MESSAGES))
+        return dead_players, messages
+
+    def add_message(
+        player_in_game: PlayerInGame,
+        text: str,
+        kind: GameMessageKind = GameMessageKind.RANDOM_EVENT,
+    ) -> None:
+        messages.append(
+            GameMessage(text, kind=kind, color=player_in_game.color_object, player_id=player_in_game.player_id)
+        )
+
+    if random_event.event_type == RandomEventType.LIGHTNING:
+        logger_events.info(
+            "Random event: lightning in %s, damage: %s",
+            random_event.tile.for_human(),
+            random_event.lightning_damage,
+        )
+        player_in_game, tile_destroyed = random_event.apply_lightning()
+        if player_in_game is None:
+            logger_events.info("Lightning with no effect")
+            add_anonymous_message(
+                f"Un éclair de force {random_event.lightning_damage} "
+                f"a frappé en {random_event.tile.for_human()} sans faire de dégats.",
+            )
+        else:
+            if tile_destroyed:
+                logger_events.info("Lightning destroyed %s tile", player_in_game.player.name)
+                add_message(
+                    player_in_game,
+                    f"{player_in_game.player.name} a perdu {random_event.tile.for_human()} "
+                    f"suite à un éclair de force {random_event.lightning_damage}",
+                )
+                if not player_in_game.count_tiles():
+                    logger_events.warning("%s IS NOW DEAD", player_in_game.player.name)
+                    player_in_game.die(turn=game.current_turn)
+                    add_message(
+                        player_in_game,
+                        f"{player_in_game.player.name} a disparu de la carte, terrassé par cet éclair",
+                        GameMessageKind.DEATH,
+                    )
+                    dead_players.append(player_in_game)
+            else:
+                logger_events.info("Lightning touched %s tile", player_in_game.player.name)
+                add_message(
+                    player_in_game,
+                    f"{player_in_game.player.name} a reçu un éclair de force {random_event.lightning_damage} "
+                    f"en {random_event.tile.for_human()}",
+                )
+
+    elif random_event.event_type == RandomEventType.EARTHQUAKE:
+        logger_events.info(
+            "Random event: earthquake in %s, damage: %s, radius: %s",
+            random_event.tile.for_human(),
+            random_event.earthquake_damage,
+            random_event.earthquake_radius,
+        )
+        touched_players_in_game = random_event.apply_earthquake(grid)
+        if touched_players_in_game:
+            add_anonymous_message(
+                f"Un tremblement de terre de force {random_event.earthquake_damage} "
+                f"et rayon {random_event.earthquake_radius} a frappé en {random_event.tile.for_human()}",
+            )
+        else:
+            logger_events.info("Earthquake with no effect")
+            add_anonymous_message(
+                f"Un tremblement de terre de force {random_event.earthquake_damage} "
+                f"et rayon {random_event.earthquake_radius} a frappé en {random_event.tile.for_human()} "
+                f"sans faire de dégats.",
+            )
+        for player_in_game, (nb_tiles, nb_destroyed_tiles) in touched_players_in_game.items():
+            nb_touched_tiles = nb_tiles - nb_destroyed_tiles
+            logger_events.info(
+                "Earthquake on %s: %s touched, %s destroyed",
+                player_in_game.player.name,
+                nb_touched_tiles,
+                nb_destroyed_tiles,
+            )
+            if nb_touched_tiles and nb_destroyed_tiles:
+                add_message(
+                    player_in_game,
+                    f"{player_in_game.player.name} a eu "
+                    f"{nb_touched_tiles} cases touchée{'s' if nb_touched_tiles > 1 else ''}"
+                    f" et {nb_destroyed_tiles} détruite{'s' if nb_destroyed_tiles > 1 else ''}",
+                )
+            elif nb_touched_tiles:
+                add_message(
+                    player_in_game,
+                    f"{player_in_game.player.name} a eu "
+                    f"{nb_touched_tiles} cases touchée{'s' if nb_touched_tiles > 1 else ''}",
+                )
+            else:
+                add_message(
+                    player_in_game,
+                    f"{player_in_game.player.name} a eu "
+                    f"{nb_destroyed_tiles} case détruite{'s' if nb_destroyed_tiles > 1 else ''}",
+                )
+            if not player_in_game.count_tiles():
+                logger_events.warning("%s IS NOW DEAD", player_in_game.player.name)
+                player_in_game.die(turn=game.current_turn)
+                add_message(
+                    player_in_game,
+                    f"{player_in_game.player.name} a disparu de la carte, terrassé par ce tremblement de terre",
+                    GameMessageKind.DEATH,
+                )
+                dead_players.append(player_in_game)
+
+    elif random_event.event_type == RandomEventType.DROP_ACTIONS:
+        logger_events.info(
+            "Random event: drop in %s, amount: %s",
+            random_event.tile.for_human(),
+            random_event.drop_actions_amount,
+        )
+        if (player_in_game := random_event.apply_drop()) is None:
+            logger_events.info("Drop with no effect")
+            add_anonymous_message(f"Un drop de points d'actions a eu lieu en {random_event.tile.for_human()}.")
+        else:
+            logger_events.info("Drop on %s tile", player_in_game.player.name)
+            add_message(
+                player_in_game,
+                f"{player_in_game.player.name} a récupéré {random_event.drop_actions_amount} points d'actions "
+                f"suite a un drop en {random_event.tile.for_human()}",
+            )
+
+    return dead_players, messages
 
 
 async def on_click(  # pylint: disable=unused-argument

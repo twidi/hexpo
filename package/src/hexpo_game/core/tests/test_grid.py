@@ -1,9 +1,10 @@
 """Tests for the grid package."""
+from itertools import product
 
 import numpy as np
 import pytest
 
-from hexpo_game.core.grid import ConcreteGrid, ConcreteTile, Grid
+from hexpo_game.core.grid import ConcreteGrid, ConcreteTile, Direction, Grid
 from hexpo_game.core.types import Color, Point, Tile
 
 
@@ -361,3 +362,62 @@ def test_get_tile_at_point():  # pylint: disable=too-many-statements
     assert grid.get_tile_at_point(Point(point.x - 2, point.y)) == Tile(0, 1)
     assert grid.get_tile_at_point(Point(point.x + 2, point.y - 2)) == Tile(1, 0)
     assert grid.get_tile_at_point(Point(point.x + 2, point.y + 2)) == Tile(1, 1)
+
+
+def test_get_border_tiles_single_tile():
+    """Test get_border_tiles with a single tile."""
+    grid = Grid(5, 5)
+    border_tiles = grid.get_border_tiles([Tile(0, 0)])
+    assert border_tiles == {
+        Tile(0, 0): {
+            Direction.NORTH,
+            Direction.NORTH_EAST,
+            Direction.SOUTH_EAST,
+            Direction.SOUTH,
+            Direction.SOUTH_WEST,
+            Direction.NORTH_WEST,
+        },
+    }
+
+
+def test_get_border_tiles_single_area():
+    """Test get_border_tiles with a single area."""
+    grid = Grid(5, 5)
+    border_tiles = grid.get_border_tiles([Tile(col, row) for col, row in product(range(3), range(3))])
+    assert border_tiles == {
+        Tile(0, 0): {Direction.NORTH, Direction.NORTH_EAST, Direction.SOUTH_WEST, Direction.NORTH_WEST},
+        Tile(1, 0): {Direction.NORTH},
+        Tile(2, 0): {Direction.NORTH, Direction.NORTH_EAST, Direction.SOUTH_EAST, Direction.NORTH_WEST},
+        Tile(0, 1): {Direction.NORTH_WEST, Direction.SOUTH_WEST},
+        Tile(2, 1): {Direction.NORTH_EAST, Direction.SOUTH_EAST},
+        Tile(0, 2): {Direction.SOUTH, Direction.SOUTH_WEST, Direction.NORTH_WEST},
+        Tile(1, 2): {Direction.SOUTH_EAST, Direction.SOUTH, Direction.SOUTH_WEST},
+        Tile(2, 2): {Direction.NORTH_EAST, Direction.SOUTH_EAST, Direction.SOUTH},
+    }
+
+
+def test_get_border_tiles_multiple_areas():
+    """Test get_border_tiles with multiple areas."""
+    grid = Grid(10, 10)
+    border_tiles = grid.get_border_tiles(
+        [Tile(col, row) for col, row in product(range(3), range(3))]
+        + [Tile(col, row) for col, row in product(range(4, 7), range(4, 7))]
+    )
+    assert border_tiles == {
+        Tile(0, 0): {Direction.NORTH, Direction.NORTH_EAST, Direction.SOUTH_WEST, Direction.NORTH_WEST},
+        Tile(1, 0): {Direction.NORTH},
+        Tile(2, 0): {Direction.NORTH, Direction.NORTH_EAST, Direction.SOUTH_EAST, Direction.NORTH_WEST},
+        Tile(0, 1): {Direction.NORTH_WEST, Direction.SOUTH_WEST},
+        Tile(2, 1): {Direction.NORTH_EAST, Direction.SOUTH_EAST},
+        Tile(0, 2): {Direction.SOUTH, Direction.SOUTH_WEST, Direction.NORTH_WEST},
+        Tile(1, 2): {Direction.SOUTH_EAST, Direction.SOUTH, Direction.SOUTH_WEST},
+        Tile(2, 2): {Direction.NORTH_EAST, Direction.SOUTH_EAST, Direction.SOUTH},
+        Tile(4, 4): {Direction.NORTH, Direction.NORTH_EAST, Direction.SOUTH_WEST, Direction.NORTH_WEST},
+        Tile(5, 4): {Direction.NORTH},
+        Tile(6, 4): {Direction.NORTH, Direction.NORTH_EAST, Direction.SOUTH_EAST, Direction.NORTH_WEST},
+        Tile(4, 5): {Direction.NORTH_WEST, Direction.SOUTH_WEST},
+        Tile(6, 5): {Direction.NORTH_EAST, Direction.SOUTH_EAST},
+        Tile(4, 6): {Direction.SOUTH, Direction.SOUTH_WEST, Direction.NORTH_WEST},
+        Tile(5, 6): {Direction.SOUTH_EAST, Direction.SOUTH, Direction.SOUTH_WEST},
+        Tile(6, 6): {Direction.NORTH_EAST, Direction.SOUTH_EAST, Direction.SOUTH},
+    }

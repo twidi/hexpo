@@ -28,7 +28,6 @@ from .constants import (
     GameMode,
     GameModeConfig,
     GameStep,
-    RandomEventTurnMoment,
     RandomEventType,
 )
 from .grid import ConcreteGrid, Grid
@@ -584,9 +583,6 @@ class RandomEvent(BaseModel):
 
     game = models.ForeignKey(Game, on_delete=models.CASCADE, help_text="Game the event is in.")
     turn = models.PositiveIntegerField(help_text="Turn number when the event happened.")
-    turn_moment = models.CharField(
-        max_length=255, help_text="Moment of the turn when the event happened.", choices=RandomEventTurnMoment.choices
-    )
     event_type = models.CharField(max_length=255, help_text="Type of the event.", choices=RandomEventType.choices)
     tile_col = models.IntegerField(help_text="The grid column of the event in the offset `odd-q` coordinate system.")
     tile_row = models.IntegerField(help_text="The grid row of the event in the offset `odd-q` coordinate system.")
@@ -613,17 +609,17 @@ class RandomEvent(BaseModel):
         return Tile(self.tile_col, self.tile_row)
 
     @classmethod
-    def generate_event(cls, game: Game, turn_moment: RandomEventTurnMoment) -> Optional[RandomEvent]:
+    def generate_event(cls, game: Game) -> Optional[RandomEvent]:
         """Generate a random event."""
         threshold = random()
         for kind, (low, high) in RANDOM_EVENTS_PROBABILITIES.items():
             if low <= threshold < high:
                 if kind == RandomEventType.DROP_ACTIONS:
-                    return cls.create_drop_event(game, turn_moment)
+                    return cls.create_drop_event(game)
                 if kind == RandomEventType.LIGHTNING:
-                    return cls.create_lightning_event(game, turn_moment)
+                    return cls.create_lightning_event(game)
                 if kind == RandomEventType.EARTHQUAKE:
-                    return cls.create_earthquake_event(game, turn_moment)
+                    return cls.create_earthquake_event(game)
                 break
         return None
 
@@ -641,7 +637,7 @@ class RandomEvent(BaseModel):
 
     @classmethod
     def create_lightning_event(
-        cls, game: Game, turn_moment: RandomEventTurnMoment, tile: Optional[Tile] = None, damage: Optional[int] = None
+        cls, game: Game, tile: Optional[Tile] = None, damage: Optional[int] = None
     ) -> RandomEvent:
         """Create a lightning event."""
         if tile is None:
@@ -649,7 +645,6 @@ class RandomEvent(BaseModel):
         return cls.objects.create(
             game=game,
             turn=game.current_turn,
-            turn_moment=turn_moment,
             event_type=RandomEventType.LIGHTNING,
             tile_col=tile.col,
             tile_row=tile.row,
@@ -660,7 +655,6 @@ class RandomEvent(BaseModel):
     def create_earthquake_event(
         cls,
         game: Game,
-        turn_moment: RandomEventTurnMoment,
         tile: Optional[Tile] = None,
         damage: Optional[int] = None,
         radius: Optional[int] = None,
@@ -671,7 +665,6 @@ class RandomEvent(BaseModel):
         return cls.objects.create(
             game=game,
             turn=game.current_turn,
-            turn_moment=turn_moment,
             event_type=RandomEventType.EARTHQUAKE,
             tile_col=tile.col,
             tile_row=tile.row,
@@ -680,16 +673,13 @@ class RandomEvent(BaseModel):
         )
 
     @classmethod
-    def create_drop_event(
-        cls, game: Game, turn_moment: RandomEventTurnMoment, tile: Optional[Tile] = None, amount: Optional[int] = None
-    ) -> RandomEvent:
+    def create_drop_event(cls, game: Game, tile: Optional[Tile] = None, amount: Optional[int] = None) -> RandomEvent:
         """Create a drop event."""
         if tile is None:
             tile = cls.get_random_tile(game)
         return cls.objects.create(
             game=game,
             turn=game.current_turn,
-            turn_moment=turn_moment,
             event_type=RandomEventType.DROP_ACTIONS,
             tile_col=tile.col,
             tile_row=tile.row,

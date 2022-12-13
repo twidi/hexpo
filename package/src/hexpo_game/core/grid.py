@@ -9,6 +9,7 @@ We use the "odd-q" grid (flat top and top left tile filled) with the simple offs
 from __future__ import annotations
 
 import base64
+import enum
 import math
 from dataclasses import dataclass, field
 from itertools import chain
@@ -63,6 +64,17 @@ DIRECTION_DIFFERENCES = (
 RenderedMap: TypeAlias = npt.NDArray[np.uint8]
 MaybeTile: TypeAlias = Optional[Tile]
 Neighbors: TypeAlias = tuple[MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTile, MaybeTile]
+
+
+class Direction(int, enum.Enum):
+    """Represent the different directions around a tile."""
+
+    NORTH = 0
+    NORTH_EAST = 1
+    SOUTH_EAST = 2
+    SOUTH = 3
+    SOUTH_WEST = 4
+    NORTH_WEST = 5
 
 
 @dataclass
@@ -200,6 +212,19 @@ class Grid:  # pylint: disable=too-many-instance-attributes
                 result.append((axial_center + AxialCoordinate(q, r)).to_tile())
         return result
 
+    def get_border_tiles(self, tiles: Iterable[Tile]) -> dict[Tile, set[Direction]]:
+        """Get the border tiles of a set of tiles."""
+        border_tiles: dict[Tile, set[Direction]] = {}
+        tiles_set = set(tiles)
+        for tile in tiles_set:
+            for direction, neighbor in enumerate(self.neighbors[tile]):
+                if neighbor and neighbor in tiles_set:
+                    continue
+                if tile not in border_tiles:
+                    border_tiles[tile] = set()
+                border_tiles[tile].add(Direction(direction))
+        return border_tiles
+
 
 TilePoints: TypeAlias = tuple[Point, Point, Point, Point, Point, Point]
 
@@ -334,7 +359,7 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
         use_transparency: bool = True,
         mode: DrawTileMode = DrawTileMode.CONTOUR,
     ) -> None:
-        """Draw the (perimeters of the) areas of the given tiles.
+        """Draw the perimeters of the areas of the given tiles, or fill them.
 
         Parameters
         ----------
@@ -361,10 +386,9 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
             drawing_map = self.map
             drawing_color = color
 
-        tiles_set = set(tiles)
-        for tile in tiles_set:
-            concrete_tile = self.tiles[tile.row][tile.col]
-            if mode == DrawTileMode.FILL:
+        if mode == DrawTileMode.FILL:
+            for tile in tiles:
+                concrete_tile = self.tiles[tile.row][tile.col]
                 cv2.fillConvexPoly(  # pylint: disable=no-member
                     drawing_map,
                     np.array(
@@ -374,8 +398,10 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
                     drawing_color,
                     cv2.LINE_AA,  # pylint: disable=no-member
                 )
-            else:
-                if mark:
+        else:
+            if mark:
+                for tile in tiles:
+                    concrete_tile = self.tiles[tile.row][tile.col]
                     cv2.circle(  # pylint: disable=no-member
                         drawing_map,
                         round(concrete_tile.center),  # type: ignore[call-overload]
@@ -384,9 +410,9 @@ class ConcreteGrid:  # pylint: disable=too-many-instance-attributes
                         THICKNESS,
                         cv2.LINE_AA,  # pylint: disable=no-member
                     )
-                for direction, neighbor in enumerate(self.grid.neighbors[tile]):
-                    if neighbor and neighbor in tiles_set:
-                        continue
+            for tile, directions in self.grid.get_border_tiles(tiles).items():
+                for direction in directions:
+                    concrete_tile = self.tiles[tile.row][tile.col]
                     offsets = SEGMENTS_OFFSETS[direction]
                     cv2.line(  # pylint: disable=no-member
                         drawing_map,
