@@ -1072,7 +1072,7 @@ def erode_map(game: Game, grid: Grid) -> tuple[list[PlayerInGame], GameMessages]
             player_in_game.die(turn=game.current_turn)
             add_message(
                 player_in_game,
-                f"{player_in_game.player.name} a disparu de la carte, érodé jusqu'à l'os",
+                f"Le temps a érodé {player_in_game.player.name} jusqu'à l'os...",
                 GameMessageKind.DEATH,
             )
             dead_players.append(player_in_game)
