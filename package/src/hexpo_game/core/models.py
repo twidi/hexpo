@@ -11,7 +11,7 @@ from typing import Any, Optional, cast
 
 from asgiref.sync import sync_to_async
 from django.db import models
-from django.db.models import Count, F, Max, OuterRef, Q, QuerySet, Subquery
+from django.db.models import Count, F, Max, OuterRef, Q, QuerySet, Subquery, Sum
 from django.utils import timezone
 
 from .constants import (
@@ -206,7 +206,9 @@ class Game(BaseModel):  # pylint: disable=too-many-public-methods
 
     def get_players_in_game_for_leader_board(self, limit: Optional[int] = None) -> QuerySet[PlayerInGame]:
         """Get the players in game for the leader board."""
-        queryset = self.get_all_players_in_games().annotate(nb_tiles=Count("occupiedtile"))
+        queryset = self.get_all_players_in_games().annotate(
+            nb_tiles=Count("occupiedtile"), tiles_level=Sum("occupiedtile__level")
+        )
         if self.config.multi_steps:
             queryset = queryset.filter(
                 Q(ended_turn__isnull=True) | Q(ended_turn__gte=self.current_turn - self.config.respawn_cooldown_turns)
@@ -234,7 +236,7 @@ class Game(BaseModel):  # pylint: disable=too-many-public-methods
                     .values("count")[:1]
                 ),
             )
-        queryset = queryset.select_related("player").order_by("-nb_tiles", "-dead_at")
+        queryset = queryset.select_related("player").order_by("-nb_tiles", "-dead_at", "-tiles_level")
         if limit is not None:
             queryset = queryset[:limit]
         return queryset
