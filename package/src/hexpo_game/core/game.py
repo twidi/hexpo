@@ -28,6 +28,7 @@ from .constants import (
     ActionType,
     ButtonToAction,
     ClickTarget,
+    GameEndMode,
     GameMode,
     GameStep,
     RandomEventType,
@@ -340,7 +341,8 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
     async def run(self) -> None:
         """Run the game loop."""
         current_turn = self.game.current_turn
-        while not self.end_loop_event.is_set() and not self.game.is_over():
+        game_is_over = False
+        while not self.end_loop_event.is_set() and not (game_is_over := await self.game.ais_over()):
             await self.run_current_step()
             force_step = None
             if (
@@ -361,6 +363,30 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
                         )
                     )
                     logger.info("New turn: %s", current_turn)
+
+        if game_is_over:
+            logger.info("Game is over")
+            await self.game_messages_queue.put(
+                GameMessage(
+                    text="Partie terminée",
+                    kind=GameMessageKind.GAME_OVER,
+                )
+            )
+            winner = cast(PlayerInGame, await sync_to_async(lambda: self.game.winner)())
+            if self.game.end_mode == GameEndMode.FULL_MAP:
+                winner_nb_tiles = self.grid.nb_tiles
+            else:
+                winner_nb_tiles = sync_to_async(winner.count_tiles)()
+            await self.game_messages_queue.put(
+                GameMessage(
+                    text=f"Le gagnant est {winner.player.name}",
+                    kind=GameMessageKind.GAME_OVER,
+                    color=winner.color_object,
+                    player_id=winner.player_id,
+                    chat_text=f"Le gagnant de la partie est @{winner.player.name} "
+                    f"avec {winner_nb_tiles} cases conquises en {self.game.current_turn} tours !",
+                )
+            )
 
     async def end(self) -> None:
         """End the game loop."""

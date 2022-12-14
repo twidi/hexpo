@@ -20,6 +20,14 @@ class GameMode(models.TextChoices):
     TURN_BY_TURN = "turn-by-turn", "Turn by turn"
 
 
+class GameEndMode(models.TextChoices):
+    """The mode of the end of the game."""
+
+    ENDLESS = "endless", "Sans fin"
+    TURN_LIMIT = "turn-limit", "Nombre de tours limité"
+    FULL_MAP = "full-map", "100% occupation"
+
+
 class ActionType(models.TextChoices):
     """Represent the different types of actions."""
 
@@ -37,7 +45,7 @@ class GameModeConfig(NamedTuple):
     step_waiting_for_players_duration: timedelta
     step_collecting_actions_duration: timedelta
     message_delay: timedelta
-    can_end: bool
+    default_end_mode: GameEndMode
     multi_steps: bool
     player_start_level: int
     tile_start_level: float
@@ -66,7 +74,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         step_waiting_for_players_duration=timedelta(seconds=0),
         step_collecting_actions_duration=timedelta(seconds=1),
         message_delay=timedelta(seconds=1.25),
-        can_end=False,
+        default_end_mode=GameEndMode.ENDLESS,
         multi_steps=False,
         player_start_level=3,
         tile_start_level=100.0,
@@ -88,7 +96,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         step_waiting_for_players_duration=timedelta(seconds=0),
         step_collecting_actions_duration=timedelta(seconds=1),
         message_delay=timedelta(seconds=1.25),
-        can_end=False,
+        default_end_mode=GameEndMode.ENDLESS,
         multi_steps=False,
         player_start_level=3,
         tile_start_level=100.0,
@@ -110,7 +118,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         step_waiting_for_players_duration=timedelta(seconds=10),
         step_collecting_actions_duration=timedelta(seconds=30),
         message_delay=timedelta(seconds=2.5),
-        can_end=True,
+        default_end_mode=GameEndMode.FULL_MAP,
         multi_steps=True,
         player_start_level=1,
         tile_start_level=20.0,

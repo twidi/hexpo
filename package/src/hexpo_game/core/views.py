@@ -19,7 +19,7 @@ from django.template import loader
 
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES
-from .constants import ActionState, ActionType, ClickTarget, GameStep
+from .constants import ActionState, ActionType, ClickTarget, GameEndMode, GameStep
 from .grid import ConcreteGrid
 from .models import Action, Game, PlayerInGame
 from .types import Color, DrawTileMode, GameMessage, GameMessagesQueue, Tile
@@ -215,6 +215,7 @@ class GameState:
         context = {
             "game": self.game,
             "GameStep": GameStep,
+            "GameEndMode": GameEndMode,
         }
         html = loader.render_to_string("core/include_step_and_instructions_fragment.html", context)
         return Response(text=html, content_type="text/html")
@@ -255,6 +256,7 @@ class GameState:
             "coordinates_vertical": ascii_letters[26:][: self.grid.nb_rows],
             "game": self.game,
             "GameStep": GameStep,
+            "GameEndMode": GameEndMode,
             "ActionType": ActionType,
             "ActionState": ActionState,
         }

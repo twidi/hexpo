@@ -25,6 +25,7 @@ from .constants import (
     ActionFailureReason,
     ActionState,
     ActionType,
+    GameEndMode,
     GameMode,
     GameModeConfig,
     GameStep,
@@ -56,6 +57,8 @@ class Game(BaseModel):
 
     mode = models.CharField(max_length=255, choices=GameMode.choices, default=GameMode.FREE_FULL)
     started_at = models.DateTimeField(auto_now_add=True, help_text="When the game started.")
+    end_mode = models.CharField(max_length=255, choices=GameEndMode.choices, default=GameEndMode.ENDLESS)
+    end_mode_turn = models.PositiveIntegerField(null=True, help_text="The turn at which the game will end.")
     ended_at = models.DateTimeField(null=True, blank=True, help_text="When the game ended.")
     grid_nb_cols = models.PositiveIntegerField(help_text="Number of columns in the grid.")
     grid_nb_rows = models.PositiveIntegerField(help_text="Number of rows in the grid.")
@@ -65,8 +68,20 @@ class Game(BaseModel):
     )
     current_turn_step_started_at = models.DateTimeField(null=True, help_text="When the current turn step started.")
     current_turn_step_end = models.DateTimeField(null=True, help_text="When the current turn step ends.")
+    winner = models.ForeignKey("PlayerInGame", on_delete=models.SET_NULL, null=True, related_name="won_games")
 
     force_config: Optional[GameModeConfig] = None
+
+    constraints = [
+        models.CheckConstraint(
+            name="%(app_label)s_%(class)s_end_mode_turn",
+            check=~Q(end_mode=GameEndMode.TURN_LIMIT) | Q(end_mode_turn__isnull=False),
+        ),
+        models.CheckConstraint(
+            name="%(app_label)s_%(class)s_winner",
+            check=Q(ended_at__isnull=True) | Q(winner__isnull=False),
+        ),
+    ]
 
     @cached_property
     def config(self) -> GameModeConfig:
@@ -81,12 +96,19 @@ class Game(BaseModel):
         self.save(update_fields=["ended_at"])
 
     @classmethod
-    def get_current(cls, game_mode: GameMode, nb_tiles: int, width: int, height: int) -> tuple[Game, float]:
+    def get_current(
+        cls, game_mode: GameMode, nb_tiles: int, width: int, height: int, end_mode: Optional[GameEndMode] = None
+    ) -> tuple[Game, float]:
         """Get the current game (or create one if no current one)."""
         game = cls.objects.filter(mode=game_mode, ended_at=None).order_by("-started_at").first()
         if game is None:
             nb_cols, nb_rows, tile_size = ConcreteGrid.compute_grid_size(nb_tiles, width, height)
-            game = Game.objects.create(mode=game_mode, grid_nb_cols=nb_cols, grid_nb_rows=nb_rows)
+            game = Game.objects.create(
+                mode=game_mode,
+                end_mode=GAME_MODE_CONFIGS[game_mode].default_end_mode if end_mode is None else end_mode,
+                grid_nb_cols=nb_cols,
+                grid_nb_rows=nb_rows,
+            )
         else:
             tile_size = ConcreteGrid.compute_tile_size(game.grid_nb_cols, game.grid_nb_rows, width, height)
         return game, tile_size
@@ -224,12 +246,32 @@ class Game(BaseModel):
 
     def is_over(self) -> bool:
         """Check if the game is over."""
-        return self.ended_at is not None
+        if self.ended_at is not None:
+            return True
+        if self.end_mode == GameEndMode.ENDLESS:
+            return False
+        if (self.end_mode == GameEndMode.TURN_LIMIT and self.current_turn >= cast(int, self.end_mode_turn)) or (
+            self.end_mode == GameEndMode.FULL_MAP and self.occupiedtile_set.count() >= self.grid.nb_tiles
+        ):
+            self.ended_at = timezone.now()
+            self.winner = self.get_players_in_game_for_leader_board(limit=1).first()
+            self.save()
+            return True
+        return False
+
+    async def ais_over(self) -> bool:
+        """Check if the game is over."""
+        return cast(bool, await sync_to_async(self.is_over)())
 
     @property
     def step(self) -> GameStep:
         """Get the current step of the game."""
         return GameStep(self.current_turn_step)
+
+    @property
+    def end_mode_object(self) -> GameEndMode:
+        """Get the end mode of the game."""
+        return GameEndMode(self.end_mode)
 
     @cached_property
     def grid(self) -> Grid:

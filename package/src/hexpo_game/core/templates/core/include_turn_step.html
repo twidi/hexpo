@@ -1,5 +1,14 @@
 {% with turn_step=game.step %}
-<span id="turn-number">Tour #<span>{{ game.current_turn }}</span></span>
+<span id="turn-number">Tour #{{ game.current_turn }}</span>
+<span id="end-mode">
+    {% if game.end_mode == GameEndMode.ENDLESS %}
+        Partie sans fin !
+    {% elif game.end_mode == GameEndMode.TURN_LIMIT %}
+        Remplis au max avant le tour #{{ game.end_mode_turn }} !
+    {% elif game.end_mode == GameEndMode.FULL_MAP %}
+        Remplis la map et gagne !
+    {% endif %}
+</span>
 {% if game.config.multi_steps %}
     <span id="turn-step-name"><span>&lt;&nbsp;</span>{{ turn_step.label }}<span>&nbsp;&gt;</span></span>
         {% if turn_step == GameStep.WAITING_FOR_PLAYERS or turn_step == GameStep.COLLECTING_ACTIONS %}
