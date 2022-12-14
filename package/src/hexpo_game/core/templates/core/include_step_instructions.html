@@ -1,5 +1,7 @@
 {% with turn_step=game.step %}
-    {% if turn_step == GameStep.WAITING_FOR_PLAYERS %}
+    {% if game.ended_at %}
+        <p class="game-ended">{% if winner %}PARTIE GAGNÉE PAR <strong>{{ winner.player.name }}</strong>{% else %}PARTIE TERMINÉE{% endif %}</p>
+    {% elif turn_step == GameStep.WAITING_FOR_PLAYERS %}
         <p>Si tu as suivi les instructions à droite, il est temps de rejoindre la partie.</p>
         <p>Clique sur une case libre (grise), puis attend la prochaine étape pour faire tes actions.</p>
     {% elif turn_step == GameStep.COLLECTING_ACTIONS %}

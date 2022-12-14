@@ -251,7 +251,7 @@ class Game(BaseModel):  # pylint: disable=too-many-public-methods
             return True
         if self.end_mode == GameEndMode.ENDLESS:
             return False
-        if (self.end_mode == GameEndMode.TURN_LIMIT and self.current_turn >= cast(int, self.end_mode_turn)) or (
+        if (self.end_mode == GameEndMode.TURN_LIMIT and self.current_turn > cast(int, self.end_mode_turn)) or (
             self.end_mode == GameEndMode.FULL_MAP and self.occupiedtile_set.count() >= self.grid.nb_tiles
         ):
             self.ended_at = timezone.now()

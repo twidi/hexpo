@@ -343,8 +343,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
     async def run(self) -> None:
         """Run the game loop."""
         current_turn = self.game.current_turn
-        game_is_over = False
-        while not self.end_loop_event.is_set() and not (game_is_over := await self.game.ais_over()):
+        while not (game_is_over := await self.game.ais_over()) and not self.end_loop_event.is_set():
             await self.run_current_step()
             force_step = None
             if (
@@ -367,28 +366,32 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
                     logger.info("New turn: %s", current_turn)
 
         if game_is_over:
-            logger.info("Game is over")
-            await self.game_messages_queue.put(
+            messages: GameMessages = [
                 GameMessage(
                     text="Partie terminée",
                     kind=GameMessageKind.GAME_OVER,
                 )
-            )
-            winner = cast(PlayerInGame, await sync_to_async(lambda: self.game.winner)())
-            if self.game.end_mode == GameEndMode.FULL_MAP:
-                winner_nb_tiles = self.grid.nb_tiles
-            else:
-                winner_nb_tiles = sync_to_async(winner.count_tiles)()
-            await self.game_messages_queue.put(
-                GameMessage(
-                    text=f"Le gagnant est {winner.player.name}",
-                    kind=GameMessageKind.GAME_OVER,
-                    color=winner.color_object,
-                    player_id=winner.player_id,
-                    chat_text=f"Le gagnant de la partie est @{winner.player.name} "
-                    f"avec {winner_nb_tiles} cases conquises en {self.game.current_turn} tours !",
+            ]
+
+            if self.game.winner_id:
+                winner = await PlayerInGame.objects.filter(id=self.game.winner_id).select_related("player").aget()
+                if self.game.end_mode == GameEndMode.FULL_MAP:
+                    winner_nb_tiles = self.grid.nb_tiles
+                else:
+                    winner_nb_tiles = await sync_to_async(winner.count_tiles)()
+                logger.info("Game was won by %s with %s tiles", winner.player.name, winner_nb_tiles)
+                messages.append(
+                    GameMessage(
+                        text=f"Le gagnant est {winner.player.name}",
+                        kind=GameMessageKind.GAME_OVER,
+                        color=winner.color_object,
+                        player_id=winner.player_id,
+                        chat_text=f"@{winner.player.name} remporte la partie avec {winner_nb_tiles} cases "
+                        f"conquises en {self.game.current_turn} tours !",
+                    )
                 )
-            )
+
+            await self.send_messages(messages)
 
     async def end(self) -> None:
         """End the game loop."""

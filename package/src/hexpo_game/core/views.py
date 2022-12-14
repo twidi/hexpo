@@ -217,6 +217,10 @@ class GameState:
             "GameStep": GameStep,
             "GameEndMode": GameEndMode,
         }
+        if self.game.ended_at and self.game.winner_id:
+            context["winner"] = (
+                await PlayerInGame.objects.filter(id=self.game.winner_id).select_related("player").aget()
+            )
         html = loader.render_to_string("core/include_step_and_instructions_fragment.html", context)
         return Response(text=html, content_type="text/html")
 
@@ -260,6 +264,10 @@ class GameState:
             "ActionType": ActionType,
             "ActionState": ActionState,
         }
+        if self.game.ended_at and self.game.winner_id:
+            context["winner"] = (
+                await PlayerInGame.objects.filter(id=self.game.winner_id).select_related("player").aget()
+            )
 
         html = loader.render_to_string("core/index.html", context)
         return Response(text=html, content_type="text/html")

@@ -95,6 +95,16 @@ body.multi-steps #top-bar #general-instructions {
 }
 #step-instructions {
     padding-left: 20px;
+    flex-grow: 1;
+}
+#step-instructions > p.game-ended {
+    text-align: center;
+    font-size: 36px;
+    align-self: center;
+}
+#step-instructions > p.game-ended strong {
+    background: var(--bright-color);
+    padding: 0.25em 0.5em;
 }
 #turn-step {
     background-color: var(--shell-background);
@@ -251,7 +261,7 @@ body.multi-steps:not([data-game-step="collecting_actions"]) #actions {
 .player-name {
     flex-grow: 1;
     text-align: left;
-    max-width: 12em;
+    max-width: 8.5em;
     overflow: hidden;
 }
 body.multi-steps .player-name {
