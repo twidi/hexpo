@@ -20,6 +20,7 @@ from .constants import (
     EARTHQUAKE_MIN_DAMAGES,
     EARTHQUAKE_RADIUS_RANGE,
     GAME_MODE_CONFIGS,
+    INACTIVE_PLAYER_THRESHOLD,
     LIGHTNING_DAMAGES_RANGE,
     RANDOM_EVENTS_PROBABILITIES,
     ActionFailureReason,
@@ -52,7 +53,7 @@ class BaseModel(models.Model):
         await sync_to_async(self.save)(*args, **kwargs)
 
 
-class Game(BaseModel):
+class Game(BaseModel):  # pylint: disable=too-many-public-methods
     """Represent a playing game."""
 
     mode = models.CharField(max_length=255, choices=GameMode.choices, default=GameMode.FREE_FULL)
@@ -481,6 +482,15 @@ class PlayerInGame(BaseModel):
                 player_in_game.level = new_level
                 await player_in_game.asave()
         return updated
+
+    def is_active(self) -> bool:
+        """Return whether the player is active or not."""
+        last_action = (
+            self.action_set.filter(state__in=(ActionState.SUCCESS, ActionState.FAILURE)).order_by("-turn").first()
+        )
+        if last_action is None:
+            return False
+        return last_action.turn >= self.game.current_turn - INACTIVE_PLAYER_THRESHOLD
 
 
 class OccupiedTile(BaseModel):

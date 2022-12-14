@@ -18,7 +18,8 @@ from django.utils import timezone
 from .. import django_setup  # noqa: F401  # pylint: disable=unused-import
 from .click_handler import COORDINATES, get_click_target
 from .constants import (
-    EROSION_DAMAGES,
+    EROSION_DAMAGES_ACTIVE_PLAYER,
+    EROSION_DAMAGES_INACTIVE_PLAYER,
     LATENCY_DELAY,
     NB_COLORS,
     NO_EVENT_MESSAGES,
@@ -1032,9 +1033,12 @@ def erode_map(game: Game, grid: Grid) -> tuple[list[PlayerInGame], GameMessages]
         occupied_tiles = list(player_in_game.occupiedtile_set.all())
         nb_tiles = len(occupied_tiles)
         border_tiles = grid.get_border_tiles({occupied_tile.tile for occupied_tile in occupied_tiles})
+        is_active = player_in_game.is_active()
         for occupied_tile in occupied_tiles:
             try:
-                damage = EROSION_DAMAGES * len(border_tiles[tile := occupied_tile.tile])
+                damage = (EROSION_DAMAGES_ACTIVE_PLAYER if is_active else EROSION_DAMAGES_INACTIVE_PLAYER) * len(
+                    border_tiles[tile := occupied_tile.tile]
+                )
             except KeyError:
                 continue
             occupied_tile.level -= damage

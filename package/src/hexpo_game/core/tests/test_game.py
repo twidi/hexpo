@@ -1380,6 +1380,21 @@ async def test_erosion_on_only_occupied_tile_no_kill():
     assert len(dead_players) == 0
     assert len(messages) == 0
     occupied_tile = await game.occupiedtile_set.aget(col=tile.col, row=tile.row)
+    assert occupied_tile.level == 19.4
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_erosion_on_only_occupied_tile_no_kill_for_inactive_player():
+    """Test erosion on the only high pv tile of an inactive player."""
+    game = await make_turn_game()
+    await make_player_in_game(game, await make_player(), [tile := Tile(0, 0)])
+    game.current_turn = 50
+    await game.asave()
+    dead_players, messages = await sync_to_async(erode_map)(game, get_grid(game))
+    assert len(dead_players) == 0
+    assert len(messages) == 0
+    occupied_tile = await game.occupiedtile_set.aget(col=tile.col, row=tile.row)
     assert occupied_tile.level == 18.5
 
 
@@ -1390,7 +1405,7 @@ async def test_erosion_on_only_occupied_tile_with_kill():
     game = await make_turn_game()
     player_in_game = await make_player_in_game(game, await make_player(), [tile := Tile(0, 0)])
     occupied_tile = await game.occupiedtile_set.aget(col=tile.col, row=tile.row)
-    occupied_tile.level = 1
+    occupied_tile.level = 0.1
     await occupied_tile.asave()
     dead_players, messages = await sync_to_async(erode_map)(game, get_grid(game))
     assert len(dead_players) == 1
@@ -1410,7 +1425,7 @@ async def test_erosion_on_not_only_occupied_tile_with_kill():
     game = await make_turn_game()
     player_in_game = await make_player_in_game(game, await make_player(), [tile := Tile(0, 0), tile2 := Tile(1, 0)])
     occupied_tile = await game.occupiedtile_set.aget(col=tile.col, row=tile.row)
-    occupied_tile.level = 1
+    occupied_tile.level = 0.1
     await occupied_tile.asave()
     dead_players, messages = await sync_to_async(erode_map)(game, get_grid(game))
     assert len(dead_players) == 0
@@ -1420,4 +1435,4 @@ async def test_erosion_on_not_only_occupied_tile_with_kill():
     assert await game.occupiedtile_set.filter(col=tile.col, row=tile.row).aexists() is False
     await assert_death(player_in_game, False)
     occupied_tile = await game.occupiedtile_set.aget(col=tile2.col, row=tile2.row)
-    assert occupied_tile.level == 18.75
+    assert occupied_tile.level == 19.5

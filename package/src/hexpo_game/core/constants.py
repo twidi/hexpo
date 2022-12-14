@@ -193,7 +193,10 @@ RANDOM_EVENTS_PROBABILITIES = {
 }
 
 
-EROSION_DAMAGES = 0.25  # Damage to the tile level for each border that is not with a tile from the same player
+# Damage to the tile level for each border that is not with a tile from the same player
+EROSION_DAMAGES_ACTIVE_PLAYER = 0.1
+EROSION_DAMAGES_INACTIVE_PLAYER = 0.25
+INACTIVE_PLAYER_THRESHOLD = 10  # Number of turns without action to consider a player inactive
 
 
 class GameStep(models.TextChoices):
