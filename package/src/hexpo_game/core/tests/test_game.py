@@ -959,7 +959,7 @@ async def create_game_loop(
         waiting_for_players_duration=waiting_for_players_duration,
         collecting_actions_duration=collecting_actions_duration,
         latency_delay=timedelta(seconds=0),
-        go_next_turn_if_no_actions=True,
+        wait_for_players_if_no_actions=False,
     )
 
 

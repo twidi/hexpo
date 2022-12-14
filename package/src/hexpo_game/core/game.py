@@ -80,7 +80,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         waiting_for_players_duration: Optional[timedelta] = None,
         collecting_actions_duration: Optional[timedelta] = None,
         latency_delay: timedelta = LATENCY_DELAY,
-        go_next_turn_if_no_actions: bool = False,
+        wait_for_players_if_no_actions: bool = True,
     ):
         """Initialize the game loop."""
         self.clicks_queue: ClicksQueue = clicks_queue
@@ -100,7 +100,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
             else collecting_actions_duration
         )
         self.latency_delay: timedelta = latency_delay
-        self.go_next_turn_if_no_actions: bool = go_next_turn_if_no_actions
+        self.wait_for_players_if_no_actions: bool = wait_for_players_if_no_actions
         self.end_loop_event: asyncio.Event = asyncio.Event()
         self.end_step_event: asyncio.Event = asyncio.Event()
 
@@ -346,11 +346,21 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         while not (game_is_over := await self.game.ais_over()) and not self.end_loop_event.is_set():
             await self.run_current_step()
             force_step = None
+            # pylint: disable=too-many-boolean-expressions
             if (
                 self.game.config.multi_steps
                 and self.game.current_turn_step == GameStep.COLLECTING_ACTIONS
-                and not self.go_next_turn_if_no_actions
-                and not await self.game.confirmed_actions_for_turn().aexists()
+                and (
+                    (
+                        self.wait_for_players_if_no_actions
+                        and not await self.game.confirmed_actions_for_turn().aexists()
+                    )
+                    or (
+                        self.game.config.min_players > 1
+                        and await self.game.playeringame_set.filter(start_tile_col__isnull=False).acount()
+                        < self.game.config.min_players
+                    )
+                )
             ):
                 force_step = GameStep.WAITING_FOR_PLAYERS
             await self.game.anext_step(force_step)  # will change the turn if needed

@@ -40,6 +40,7 @@ class ActionType(models.TextChoices):
 class GameModeConfig(NamedTuple):
     """The configuration of a game mode."""
 
+    min_players: int
     max_players: int
     neighbors_only: bool
     step_waiting_for_players_duration: timedelta
@@ -69,6 +70,7 @@ class GameModeConfig(NamedTuple):
 
 GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
     GameMode.FREE_FULL: GameModeConfig(
+        min_players=1,
         max_players=50,
         neighbors_only=False,
         step_waiting_for_players_duration=timedelta(seconds=0),
@@ -91,6 +93,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         player_levels={},
     ),
     GameMode.FREE_NEIGHBOR: GameModeConfig(
+        min_players=1,
         max_players=50,
         neighbors_only=True,
         step_waiting_for_players_duration=timedelta(seconds=0),
@@ -113,6 +116,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         player_levels={},
     ),
     GameMode.TURN_BY_TURN: GameModeConfig(
+        min_players=2,
         max_players=15,
         neighbors_only=True,
         step_waiting_for_players_duration=timedelta(seconds=10),
