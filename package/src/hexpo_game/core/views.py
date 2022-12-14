@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from string import ascii_letters
 from time import time
-from typing import Any
+from typing import Any, Optional, TypeAlias, cast
 
 from aiohttp import web
 from aiohttp.web import Response
@@ -43,6 +43,9 @@ def int_or_float_as_str(value: float) -> str:
     return str(int(value)) if value.is_integer() else f"{value:.2f}"
 
 
+GridState: TypeAlias = dict[Tile, tuple[int, datetime]]
+
+
 @dataclass
 class GameState:
     """The state of the current running game."""
@@ -54,7 +57,7 @@ class GameState:
     def __post_init__(self) -> None:
         """Get the last players and prepare the list of messages."""
         self.messages: list[GameMessage] = []
-        self.grid_state: dict[Tile, tuple[int, datetime]] = {}
+        self.grid_state: Optional[GridState] = None
 
     async def update_forever(self, game_messages_queue: GameMessagesQueue, delay: float) -> None:
         """Update the game state forever."""
@@ -92,7 +95,7 @@ class GameState:
                 self.messages.append(message)
                 queue.task_done()
 
-    def get_grid_state(self) -> dict[Tile, tuple[int, datetime]]:
+    def get_grid_state(self) -> GridState:
         """Return the grid state."""
         return {
             Tile(col, row): (player_in_game_id, updated_at)
@@ -103,7 +106,7 @@ class GameState:
 
     async def draw_grid(self) -> bool:
         """Redraw the grid."""
-        new_grid_state = await sync_to_async(self.get_grid_state)()
+        new_grid_state = cast(GridState, await sync_to_async(self.get_grid_state)())
         if new_grid_state == self.grid_state:
             return False
 
