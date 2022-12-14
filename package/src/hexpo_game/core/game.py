@@ -817,15 +817,18 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
 
 def compute_start_banked_actions(game: Game, mininum: float) -> float:
     """Compute the number of banked actions for a player entering the game."""
-    return max(
-        mininum,
-        (
-            game.get_all_players_in_games()
-            .annotate(nb_tiles=Count("occupiedtile"))
-            .filter(nb_tiles__gt=0)
-            .aggregate(Avg("nb_tiles"))["nb_tiles__avg"]
-            or 0
-        ),
+    return (
+        max(
+            mininum,
+            (
+                game.get_all_players_in_games()
+                .annotate(nb_tiles=Count("occupiedtile"))
+                .filter(nb_tiles__gt=0)
+                .aggregate(Avg("nb_tiles"))["nb_tiles__avg"]
+                or 0
+            ),
+        )
+        / 2
     )
 
 
