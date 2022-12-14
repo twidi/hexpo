@@ -179,9 +179,9 @@ EARTHQUAKE_DAMAGES_RANGE = (20, 40)  # Damage to all tile in the earthquake radi
 EARTHQUAKE_MIN_DAMAGES = 10  # Damage for tiles the farthest from earthquake center
 DROP_ACTIONS_RANGE = (1, 30)  # Number of actions in the drop
 RANDOM_EVENTS_PROBABILITIES = {
-    RandomEventType.LIGHTNING: (0, 0.1),
-    RandomEventType.EARTHQUAKE: (0.1, 0.14),
-    RandomEventType.DROP_ACTIONS: (0.14, 0.2),
+    RandomEventType.LIGHTNING: (0, 0.15),
+    RandomEventType.EARTHQUAKE: (0.2, 0.25),
+    RandomEventType.DROP_ACTIONS: (0.3, 0.45),
 }
 
 
