@@ -286,6 +286,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         if not self.game.config.multi_steps:
             return
         _, messages = await sync_to_async(erode_map)(self.game, self.grid)
+        messages.extend(await update_levels(self.game))
         if messages:
             await self.send_messages(messages)
         if self.game.config.multi_steps:
@@ -843,19 +844,29 @@ async def aplay_turn(
 
     if game.config.multi_steps:
         await PlayerInGame.aupdate_all_banked_actions(nb_actions)
+        await update_levels(game)
 
-        updated_levels = await PlayerInGame.aupdate_all_levels(game)
-        for player_in_game, (old_level, new_level) in updated_levels.items():
-            all_messages.append(
-                GameMessage(
-                    text=f"{player_in_game.player.name} avance level {new_level}"
-                    if new_level > old_level
-                    else f"{player_in_game.player.name} rétrograde level {new_level}",
-                    kind=GameMessageKind.LEVEL_UPDATED,
-                    color=player_in_game.color_object,
-                    player_id=player_in_game.player_id,
-                )
+    return all_messages
+
+
+async def update_levels(game: Game) -> GameMessages:
+    """Update levels of all players."""
+    if not game.config.multi_steps:
+        return []
+
+    all_messages: GameMessages = []
+    updated_levels = await PlayerInGame.aupdate_all_levels(game)
+    for player_in_game, (old_level, new_level) in updated_levels.items():
+        all_messages.append(
+            GameMessage(
+                text=f"{player_in_game.player.name} avance level {new_level}"
+                if new_level > old_level
+                else f"{player_in_game.player.name} rétrograde level {new_level}",
+                kind=GameMessageKind.LEVEL_UPDATED,
+                color=player_in_game.color_object,
+                player_id=player_in_game.player_id,
             )
+        )
 
     return all_messages
 
