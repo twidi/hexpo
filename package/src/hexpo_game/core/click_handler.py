@@ -7,8 +7,8 @@ from .types import Point
 
 SCREEN_SIZE = (2560, 1440)
 COORDINATES: dict[ClickTarget, tuple[tuple[int, int], tuple[int, int]]] = {  # ((left, top), (right, bottom))
-    ClickTarget.BTN_BANK: ((283, 192), (358, 236)),
-    ClickTarget.BTN_CONFIRM: ((368, 200), (402, 229)),
+    ClickTarget.BTN_BANK: ((663, 1296), (1132, 1346)),
+    ClickTarget.BTN_CONFIRM: ((1601, 1296), (2070, 1346)),
     ClickTarget.MAP: ((464, 232), (2276, 1256)),
 }
 

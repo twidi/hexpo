@@ -146,30 +146,12 @@ body.multi-steps #top-bar #general-instructions {
     box-shadow: 14px 0 11px 2px var(--shell-shadow);
     border-right: solid 2px var(--bright-color);
 }
-
-#actions {
-    display: flex;
-    padding: 10px;
-    gap: 10px;
-    width: 100%;
-    justify-content: stretch;
-    align-items: center;
-}
-body:not(.multi-steps) #actions {
-    display: none;
-}
-body.multi-steps:not([data-game-step="collecting_actions"]) #actions {
-    visibility: hidden;
-}
-.action-btn.hidden {
-    visibility: hidden;
-}
-.action-btn:not(#action-btn-confirm) {
-    color: var(--text-color);
-    padding: 10px 3px;
-    border: 1px solid var(--bright-color);
-    text-align: center;
-    background-color: #11091f;
+#read-notice {
+	padding: 10px;
+	text-align: center;
+	font-size: 20px;
+	border: solid 2px var(--bright-color);
+	margin: 12px;
 }
 .ok-symbol {
     color: transparent;
@@ -405,7 +387,52 @@ body.multi-steps .player-name {
     justify-content: center;
     width: calc(var(--map-width) + 2 * var(--coordinates-size) - 10px);
     margin-left: 15px;
+    position: relative;
 }
+#buttons {
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-start;
+    width: 100%;
+    position: absolute;
+    top: -10px;
+    left: 0;
+    right: 0;
+    bottom: 10px;
+    font-size: 24px;
+    font-weight: bold;
+}
+body.multi-steps:not([data-game-step="collecting_actions"]) #buttons {
+    display: none;
+}
+#buttons .btn {
+    border: solid 4px var(--bright-color);
+    width: 25%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding-inline: 5px;
+    height: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    box-shadow: 7px 7px 11px 2px var(--shell-shadow);
+    position: relative;
+}
+#buttons .btn > span:last-child {
+    font-size: 20px;
+    color: #eee;
+    position: absolute;
+    top: calc(100% + 4px);
+    background: rgba(0, 0, 0, 0.5);
+    height: auto;
+    padding: 10px;
+    left: -4px;
+    right: -4px;
+    box-shadow: 7px 7px 11px 2px var(--shell-shadow);
+}
+
 #messages-queue { display: none; }
 #messages {
     font-size: 24px;

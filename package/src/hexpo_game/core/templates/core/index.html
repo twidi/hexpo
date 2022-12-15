@@ -27,12 +27,8 @@
                 {% endif %}
             </div>
             <div id="left-bar">
-                <div id="actions">
-                    <div class="action-btn hidden" id="action-btn-attack">Attaquer</div>
-                    <div class="action-btn hidden" id="action-btn-defend">Défendre</div>
-                    <div class="action-btn hidden" id="action-btn-grow">Conquérir</div>
-                    <div class="action-btn positioned" id="action-btn-bank">{{ ActionType.BANK.label }}</div>
-                    <div class="action-btn positioned ok-symbol" id="action-btn-confirm">✔️</div>
+                <div id="read-notice">
+                    Lisez les instructions en haut du stream !
                 </div>
                 <div id="players">
                     {% include "core/include_players.html" with players=players %}
@@ -67,6 +63,16 @@
             </div>
             <div id="right-bar"></div>
             <div id="bottom-bar">
+                <div id="buttons">
+                    <div class="btn positioned" id="btn-bank">
+                        <span>{{ ActionType.BANK.label }}</span>
+                        <span>Coûte 1PA et met en banque max 0.8PA</span>
+                    </div>
+                    <div class="btn positioned" id="btn-confirm">
+                        <span><span class="ok-symbol">✔️</span> Confirmer</span>
+                        <span>À faire après chaque case (ou après "banquer")</span>
+                    </div>
+                </div>
                 <div id="messages-queue">
                     {% include "core/include_messages.html" with messages=messages %}
                 </div>
