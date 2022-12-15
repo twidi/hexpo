@@ -5,8 +5,8 @@
         <p>Si tu as suivi les instructions à droite, il est temps de rejoindre la partie.</p>
         <p>Clique sur une case libre (grise), puis attend la prochaine étape pour faire tes actions.</p>
     {% elif turn_step == GameStep.COLLECTING_ACTIONS %}
-        <p>Clique sur une action puis une case (sauf pour "Banquer"). 100% modifiable avant confirmation.</p>
-        <p>Pour confirmer l'action (obligatoire), clique sur <span class='ok-symbol'>✔️</span>. Plus c'est fait tôt, plus l'action sera efficace.</p>
+        <p>Clique sur une case puis sur "<span class='ok-symbol'>✔️</span> Confirmer" en bas du stream (plus rapide = action plus efficace).</p>
+        <p>Clique: autour de toi pour conquérir, un autre joueur pour l'attaquer, sur tes cases pour défendre.</p>
         <p>Répète pour chaque point d'action que tu as (droite de ton pseudo, à gauche de l'écran).</p>
     {% elif turn_step == GameStep.RANDOM_EVENTS %}
         <p>Tremblez, joueurs, quelque chose de terrible risque de se produire... ou pas !</p>
@@ -15,6 +15,6 @@
         <p>Les actions sont en train d'être exécutées, et sont résumées en bas du stream.</p>
     {% elif turn_step == GameStep.EROSION %}
         <p>Toutes les cases avec une bordure visible subissent l'érosion !</p>
-        <p>Ne seront affichées en bas que les cases complètement errodées (0PV).</p>
+        <p>Ne seront affichées en bas que les cases complètement erodées (0PV).</p>
     {% endif %}
 {% endwith %}
