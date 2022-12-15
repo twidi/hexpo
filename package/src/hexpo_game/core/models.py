@@ -253,20 +253,26 @@ class Game(BaseModel):  # pylint: disable=too-many-public-methods
             return True
         if self.end_mode == GameEndMode.ENDLESS:
             return False
-        # pylint: disable=too-many-boolean-expressions
-        if (
-            (self.end_mode == GameEndMode.TURN_LIMIT and self.current_turn > cast(int, self.end_mode_turn))
-            or (self.end_mode == GameEndMode.FULL_MAP and self.occupiedtile_set.count() >= self.grid.nb_tiles)
-            or (
-                self.end_mode == GameEndMode.HALF_MAP
-                and self.occupiedtile_set.count() >= math.ceil(self.grid.nb_tiles / 2)
-            )
-        ):
-            self.ended_at = timezone.now()
-            self.winner = self.get_players_in_game_for_leader_board(limit=1).first()
-            self.save()
-            return True
-        return False
+
+        winner: Optional[PlayerInGame] = None
+        if self.end_mode == GameEndMode.TURN_LIMIT and self.current_turn > cast(int, self.end_mode_turn):
+            winner = self.get_players_in_game_for_leader_board(limit=1).first()
+
+        elif self.end_mode in (GameEndMode.FULL_MAP, GameEndMode.HALF_MAP):
+            if (winner := self.get_players_in_game_for_leader_board(limit=1).first()) is not None:
+                nb_tiles = winner.nb_tiles  # type: ignore[attr-defined]
+                if self.end_mode == GameEndMode.FULL_MAP and nb_tiles < self.grid.nb_tiles:
+                    winner = None
+                elif self.end_mode == GameEndMode.HALF_MAP and nb_tiles < self.grid.nb_tiles:
+                    winner = None
+
+        if winner is None:
+            return False
+
+        self.ended_at = timezone.now()
+        self.winner = winner
+        self.save()
+        return True
 
     async def ais_over(self) -> bool:
         """Check if the game is over."""
