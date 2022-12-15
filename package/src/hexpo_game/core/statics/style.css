@@ -161,6 +161,9 @@ body:not(.multi-steps) #actions {
 body.multi-steps:not([data-game-step="collecting_actions"]) #actions {
     visibility: hidden;
 }
+.action-btn.hidden {
+    visibility: hidden;
+}
 .action-btn:not(#action-btn-confirm) {
     color: var(--text-color);
     padding: 10px 3px;

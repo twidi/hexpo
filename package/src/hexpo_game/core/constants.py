@@ -35,6 +35,7 @@ class ActionType(models.TextChoices):
     DEFEND = "defend", "Défendre"
     GROW = "grow", "Conquérir"
     BANK = "bank", "Banquer"
+    TILE = "tile", "Case"
 
 
 class GameModeConfig(NamedTuple):
@@ -66,6 +67,11 @@ class GameModeConfig(NamedTuple):
     def message_delay_ms(self) -> int:
         """Return the delay between messages in milliseconds."""
         return int(self.message_delay.total_seconds() * 1000)
+
+    @property
+    def single_step(self) -> bool:
+        """Return if the game is in single step mode."""
+        return not self.multi_steps
 
 
 GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
@@ -158,12 +164,7 @@ class ActionFailureReason(models.TextChoices):
     GROW_SELF = "grow_self", "Already it's tile"
     GROW_PROTECTED = "grow_protected", "Tile is protected"
     GROW_NO_NEIGHBOR = "grow_no_neighbor", "Not on a neighbor"
-    GROW_OCCUPIED = "grow_occupied", "Tile is occupied"
-    ATTACK_EMPTY = "attack_empty", "Tile is empty"
-    ATTACK_SELF = "attack_self", "Already it's tile"
     ATTACK_PROTECTED = "attack_protected", "Tile is protected"
-    DEFEND_EMPTY = "defend_empty", "Tile is empty"
-    DEFEND_OTHER = "defend_other", "Not your tile"
 
 
 class RandomEventType(models.TextChoices):
@@ -237,9 +238,6 @@ class ClickTarget(str, enum.Enum):
 
 
 ButtonToAction: dict[ClickTarget, ActionType] = {
-    ClickTarget.BTN_ATTACK: ActionType.ATTACK,
-    ClickTarget.BTN_DEFEND: ActionType.DEFEND,
-    ClickTarget.BTN_GROW: ActionType.GROW,
     ClickTarget.BTN_BANK: ActionType.BANK,
 }
 

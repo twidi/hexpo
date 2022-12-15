@@ -9,7 +9,16 @@ from contextlib import suppress
 from datetime import datetime, timedelta
 from queue import Empty
 from random import choice
-from typing import Any, Callable, Coroutine, NamedTuple, Optional, TypeAlias, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Coroutine,
+    NamedTuple,
+    Optional,
+    TypeAlias,
+    cast,
+)
 
 from asgiref.sync import sync_to_async
 from django.db.models import Avg, Count
@@ -106,7 +115,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
 
     async def step_waiting_for_players(self) -> None:
         """Wait for new players to join the game."""
-        if not self.game.config.multi_steps or await self.game.occupiedtile_set.acount() == self.grid.nb_tiles:
+        if self.game.config.single_step or await self.game.occupiedtile_set.acount() == self.grid.nb_tiles:
             return
         end_step_at = await self.game.areset_step_times(update_start=True, duration=self.waiting_for_players_duration)
         if self.game.config.multi_steps:
@@ -209,14 +218,14 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
             return None
         if not can_create_action(player_in_game):
             return None
-        if (action := create_or_update_action(player_in_game, game, ActionType.GROW)) is None:
+        if (action := create_or_update_action(player_in_game, game, ActionType.TILE)) is None:
             return None
         set_action_tile(player_in_game, game, tile, action=action)
         confirm_action(player_in_game, game, action=action)
         return action
 
     @classmethod
-    def step_collecting_actions_handle_click_multi_steps(
+    def step_collecting_actions_handle_click_multi_steps(  # pylint: disable=too-many-return-statements
         cls, player_click: PlayerClick, game: Game
     ) -> Optional[Action]:
         """Handle a click for a multi steps game."""
@@ -226,8 +235,10 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
             return None
         if not can_create_action(player_in_game):
             return None
-        if (action_type := ButtonToAction.get(target)) is not None:
+        if (action_type := ButtonToAction.get(target)) == ActionType.BANK:
             return create_or_update_action(player_in_game, game, action_type)
+        if action_type is not None:
+            return None
         if target == ClickTarget.MAP and tile is not None:
             return set_action_tile(player_in_game, game, tile)
         if target == ClickTarget.BTN_CONFIRM:
@@ -273,7 +284,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
 
     async def step_random_events(self) -> None:
         """Generate some random events after collecting the actions and before executing them."""
-        if not self.game.config.multi_steps:
+        if self.game.config.single_step:
             return
         _, messages = await sync_to_async(run_random_events)(self.game, self.grid)
         if messages:
@@ -283,7 +294,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
 
     async def step_erosion(self) -> None:
         """Erode borders of players maps."""
-        if not self.game.config.multi_steps:
+        if self.game.config.single_step:
             return
         _, messages = await sync_to_async(erode_map)(self.game, self.grid)
         messages.extend(await update_levels(self.game))
@@ -453,7 +464,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
     if (action.tile_col is None or action.tile_row is None) and action.action_type != ActionType.BANK:
         return []
 
-    if not player_in_game.nb_tiles and action.action_type != ActionType.GROW:
+    if not player_in_game.nb_tiles and action.action_type == ActionType.BANK:
         action.fail(reason=ActionFailureReason.BAD_FIRST)
         logger.warning("%s had no tiles but did a wrong first action: %s", player.name, action.action_type)
         return []
@@ -480,6 +491,10 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
         )
 
     if action.action_type == ActionType.BANK:
+        if not player_in_game.nb_tiles:
+            action.fail(reason=ActionFailureReason.BAD_FIRST)
+            logger.warning("%s had no tiles but did a wrong first action: %s", player.name, action.action_type)
+            return []
         old_banked = player_in_game.banked_actions
         player_in_game.banked_actions += (banked := game.config.bank_value * action.efficiency)
         player_in_game.save()
@@ -501,26 +516,41 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
         .annotate(occupier_nb_tiles=Count("player_in_game__occupiedtile"))
         .first()
     )
+
+    if occupied_tile is None or game.config.single_step:
+        action.action_type = ActionType.GROW
+    elif occupied_tile.player_in_game_id == player_in_game.id:
+        action.action_type = ActionType.DEFEND
+    else:
+        action.action_type = ActionType.ATTACK
+    action.save(update_fields=["action_type"])
+
+    if not player_in_game.nb_tiles and occupied_tile is not None:
+        if (is_protected := occupied_tile.player_in_game.is_protected()) or game.config.multi_steps:
+            action.fail(reason=ActionFailureReason.BAD_FIRST)
+            return [
+                GameMessage(
+                    text=f"{player_in_game.player.name} n'a pu "
+                    f"{'commencer' if player_in_game.first_in_game_for_player else 'revenir'} "
+                    f"en {tile.for_human()} {'protégée' if is_protected else 'occupée'}",
+                    kind=GameMessageKind.SPAWN_FAILED,
+                    color=player_in_game.color_object,
+                    player_id=player.id,
+                    chat_text=None
+                    if player.welcome_chat_message_sent_at
+                    else (
+                        f"Bienvenue dans la partie @{player_in_game.player.name} ! "
+                        f"Mais tu as cliqué sur une case {'protégée' if is_protected else 'occupée'} ! "
+                        "Essaye sur une case libre (grise) !"
+                    ),
+                )
+            ]
+
     tile_dist_compensation = grid.tile_distance_from_origin_compensation(tile) if game.config.multi_steps else 0.0
 
     if action.action_type == ActionType.ATTACK:
-        if occupied_tile is None:
-            logger.warning("%s attacked %s but it's not occupied", player.name, tile.for_human())
-            action.fail(reason=ActionFailureReason.ATTACK_EMPTY)
-            add_message(
-                player_in_game,
-                f"{player_in_game.player.name} a attaqué en vain en {tile.for_human()} non occupée",
-            )
-            return messages
-
-        if occupied_tile.player_in_game_id == player_in_game.id:
-            logger.warning("%s attacked %s but it's their own", player.name, tile.for_human())
-            add_message(
-                player_in_game, f"{player_in_game.player.name} a attaqué en vain chez lui en {tile.for_human()}"
-            )
-            action.fail(reason=ActionFailureReason.ATTACK_SELF)
-            return messages
-
+        if TYPE_CHECKING:
+            assert occupied_tile is not None
         if occupied_tile.player_in_game.is_protected(occupied_tile.occupier_nb_tiles):
             logger.warning(
                 "%s attacked %s but it's occupied by %s and protected",
@@ -589,30 +619,8 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
         action.success()
 
     elif action.action_type == ActionType.DEFEND:
-        if occupied_tile is None:
-            logger.warning("%s defended %s but it's not occupied", player.name, tile.for_human())
-            action.fail(reason=ActionFailureReason.DEFEND_EMPTY)
-            add_message(
-                player_in_game,
-                f"{player_in_game.player.name} a défendu en vain en {tile.for_human()} non occupée",
-            )
-            return messages
-
-        if occupied_tile.player_in_game_id != player_in_game.id:
-            logger.warning(
-                "%s defended %s but it's occupied by %s",
-                player.name,
-                tile.for_human(),
-                occupied_tile.player_in_game.player.name,
-            )
-            add_message(
-                player_in_game,
-                f"{player_in_game.player.name} a défendu en vain en {tile.for_human()} "
-                f"chez {occupied_tile.player_in_game.player.name}",
-            )
-            action.fail(reason=ActionFailureReason.DEFEND_OTHER)
-            return messages
-
+        if TYPE_CHECKING:
+            assert occupied_tile is not None
         old_level = occupied_tile.level
         occupied_tile.level += (
             improvement := game.config.defend_improvement * action.efficiency + tile_dist_compensation
@@ -658,41 +666,6 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             return messages
 
         if occupied_tile is not None:
-            if not game.config.can_grow_on_occupied:
-                logger.warning(
-                    "%s %s on %s but it's occupied by %s",
-                    player.name,
-                    "grew" if player_in_game.nb_tiles else "started",
-                    tile.for_human(),
-                    occupied_tile.player_in_game.player.name,
-                )
-                action.fail(reason=ActionFailureReason.GROW_OCCUPIED)
-                if not player_in_game.nb_tiles:
-                    messages.append(
-                        GameMessage(
-                            text=f"{player_in_game.player.name} n'a pu "
-                            f"{'commencer' if player_in_game.first_in_game_for_player else 'revenir'} "
-                            f"en {tile.for_human()} occupée",
-                            kind=GameMessageKind.SPAWN_FAILED,
-                            color=player_in_game.color_object,
-                            player_id=player.id,
-                            chat_text=None
-                            if player.welcome_chat_message_sent_at
-                            else (
-                                f"Bienvenue dans la partie @{player_in_game.player.name} ! "
-                                "Mais tu as cliqué sur une case occupée ! "
-                                "Essaye sur une case libre !"
-                            ),
-                        )
-                    )
-                else:
-                    add_message(
-                        player_in_game,
-                        f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()} "
-                        f"chez {occupied_tile.player_in_game.player.name}",
-                    )
-                return messages
-
             if occupied_tile.player_in_game.is_protected():
                 logger.warning(
                     "%s %s on %s but it's occupied by %s and protected",
@@ -702,31 +675,11 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                     occupied_tile.player_in_game.player.name,
                 )
                 action.fail(reason=ActionFailureReason.GROW_PROTECTED)
-                if not player_in_game.nb_tiles:
-                    messages.append(
-                        GameMessage(
-                            text=f"{player_in_game.player.name} n'a pu "
-                            f"{'commencer' if player_in_game.first_in_game_for_player else 'revenir'} "
-                            f"en {tile.for_human()} protégee",
-                            kind=GameMessageKind.SPAWN_FAILED,
-                            color=player_in_game.color_object,
-                            player_id=player.id,
-                            chat_text=None
-                            if player.welcome_chat_message_sent_at
-                            else (
-                                f"Bienvenue dans la partie @{player_in_game.player.name} ! "
-                                "Mais tu as cliqué sur une case protégée ! "
-                                "Essaye sur une case sans rond au milieu !"
-                            ),
-                        )
-                    )
-                else:
-                    add_message(
-                        player_in_game,
-                        f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()} "
-                        f"chez {occupied_tile.player_in_game.player.name}, protégée",
-                    )
-
+                add_message(
+                    player_in_game,
+                    f"{player_in_game.player.name} n'a pu s'agrandir en {tile.for_human()} "
+                    f"chez {occupied_tile.player_in_game.player.name}, protégée",
+                )
                 return messages
 
             logger.info(
@@ -765,9 +718,9 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                 tile_row=tile.row,
             ):
                 if drop_event.apply_drop(new_occupied_tile) is None:
-                    logger.warning("Drop couldn't be picked up by %s on %s", player.name, tile.for_human())
+                    logger_events.warning("Drop couldn't be picked up by %s on %s", player.name, tile.for_human())
                 else:
-                    logger.info(
+                    logger_events.info(
                         "%s picked up drop of %s on %s",
                         player_in_game.player.name,
                         drop_event.drop_actions_amount,
@@ -776,7 +729,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                     add_message(
                         player_in_game,
                         f"{player_in_game.player.name} a récupéré {drop_event.drop_actions_amount} points d'actions "
-                        f"en {tile.for_human()} suite a un ancien drop",
+                        f"en {tile.for_human()} suite à un ancien drop",
                     )
 
         if not player_in_game.nb_tiles:
@@ -867,7 +820,7 @@ async def aplay_turn(
 
 async def update_levels(game: Game) -> GameMessages:
     """Update levels of all players."""
-    if not game.config.multi_steps:
+    if game.config.single_step:
         return []
 
     all_messages: GameMessages = []
@@ -961,14 +914,8 @@ def set_action_tile(
 ) -> Optional[Action]:
     """Set the tile of the action currently being created."""
     if action is None:
-        action = get_current_action(player_in_game, game)
+        action = create_or_update_action(player_in_game, game, ActionType.TILE)
     if action is None:
-        logger_collect.warning("%s has no current action", player_in_game.player.name)
-        return None
-    if action.action_type == ActionType.BANK:
-        logger_collect.warning(
-            "%s has a %s action so cannot set a tile", player_in_game.player.name, ActionType(action.action_type).name
-        )
         return None
     action.set_tile(tile)
     logger_collect.info(
@@ -982,7 +929,7 @@ def set_action_tile(
 
 def create_or_update_action(player_in_game: PlayerInGame, game: Game, action_type: ActionType) -> Optional[Action]:
     """Create or update an action for a player in game."""
-    if player_in_game.start_tile_col is None and action_type != ActionType.GROW:
+    if player_in_game.start_tile_col is None and action_type == ActionType.BANK:
         logger_collect.warning(
             "%s cannot %s as a %s player",
             player_in_game.player.name,
@@ -992,10 +939,11 @@ def create_or_update_action(player_in_game: PlayerInGame, game: Game, action_typ
         return None
     action = get_current_action(player_in_game, game)
     if action is not None:
+        if action_type != action.action_type:
+            logger_collect.info("%s updated its action to a %s action", player_in_game.player.name, action_type.name)
         action.action_type = action_type
         action.set_tile(None, save=False)
         action.save()
-        logger_collect.info("%s updated its action to a %s action", player_in_game.player.name, action_type.name)
         return action
     logger_collect.info("%s created a %s action", player_in_game.player.name, action_type.name)
     return Action.objects.create(
@@ -1040,7 +988,7 @@ def confirm_action(
 
 def erode_map(game: Game, grid: Grid) -> tuple[list[PlayerInGame], GameMessages]:
     """Erode borders of players maps."""
-    if not game.config.multi_steps:
+    if game.config.single_step:
         return [], []
 
     messages: GameMessages = []
@@ -1097,7 +1045,7 @@ def run_random_events(  # pylint: disable=too-many-branches, too-many-statements
     game: Game, grid: Grid, random_event: Optional[RandomEvent] = None
 ) -> tuple[list[PlayerInGame], GameMessages]:
     """Create a random event."""
-    if not game.config.multi_steps:
+    if game.config.single_step:
         return [], []
 
     messages: GameMessages = []
