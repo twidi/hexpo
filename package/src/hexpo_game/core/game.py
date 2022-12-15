@@ -620,11 +620,16 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
 
         nb_attacks[player_in_game.id] += 1
 
-        distance_efficiency = (
-            (1 - game.config.attack_farthest_efficiency) * distance
-            + game.config.attack_farthest_efficiency
-            - grid.max_distance
-        ) / (1 - grid.max_distance)
+        distance_efficiency = 1.0
+        if distance == 2:
+            distance_efficiency = game.config.attack_farthest_efficiency
+        elif distance > 2:
+            distance_efficiency = (
+                (1 - game.config.attack_farthest_efficiency) * distance
+                + game.config.attack_farthest_efficiency
+                - player_in_game.level
+            ) / (1 - player_in_game.level)
+
         occupied_tile.level -= (damage := game.config.attack_damage * action.efficiency * distance_efficiency)
 
         if occupied_tile.level <= 0:

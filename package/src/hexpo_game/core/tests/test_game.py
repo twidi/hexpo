@@ -667,7 +667,7 @@ async def test_turn_mode_farther_attack_is_less_efficient():
     await aplay_turn(game, grid)
     await assert_action_state(action, ActionState.SUCCESS)
     tile_level = (await game.occupiedtile_set.aget(col=far_tile.col, row=far_tile.row)).level
-    assert tile_level == 12.5
+    assert tile_level == 14
 
 
 @pytest.mark.asyncio
