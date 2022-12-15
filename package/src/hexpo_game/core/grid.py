@@ -197,10 +197,6 @@ class Grid:  # pylint: disable=too-many-instance-attributes
         nb_cols = nb_tiles / nb_rows
         return floor(nb_cols), floor(nb_rows)
 
-    def tile_distance_from_origin_compensation(self, tile: Tile) -> float:
-        """Compute the compensation of a tile depending of its distance from the origin."""
-        return tile.center_distance(self.first_tile) / self.max_center_distance * 0.05
-
     def get_tiles_in_radius(self, center: Tile, radius: int) -> list[Tile]:
         """Get all the tiles in a given radius around a center tile (center is considered part of the radius)."""
         radius -= 1

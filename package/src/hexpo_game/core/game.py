@@ -547,8 +547,6 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                 )
             ]
 
-    tile_dist_compensation = grid.tile_distance_from_origin_compensation(tile) if game.config.multi_steps else 0.0
-
     if action.action_type == ActionType.ATTACK:
         if TYPE_CHECKING:
             assert occupied_tile is not None
@@ -578,9 +576,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             + game.config.attack_farthest_efficiency
             - grid.max_distance
         ) / (1 - grid.max_distance)
-        occupied_tile.level -= (
-            damage := game.config.attack_damage * action.efficiency * distance_efficiency + tile_dist_compensation
-        )
+        occupied_tile.level -= (damage := game.config.attack_damage * action.efficiency * distance_efficiency)
 
         if occupied_tile.level <= 0:
             logger.info(
@@ -623,9 +619,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
         if TYPE_CHECKING:
             assert occupied_tile is not None
         old_level = occupied_tile.level
-        occupied_tile.level += (
-            improvement := game.config.defend_improvement * action.efficiency + tile_dist_compensation
-        )
+        occupied_tile.level += (improvement := game.config.defend_improvement * action.efficiency)
         occupied_tile.level = min(occupied_tile.level, 100.0)
         occupied_tile.save()
         logger.info(
@@ -705,7 +699,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                 col=tile.col,
                 row=tile.row,
                 player_in_game=player_in_game,
-                level=(tile_level := game.config.tile_start_level * action.efficiency + tile_dist_compensation),
+                level=(tile_level := game.config.tile_start_level * action.efficiency),
             )
             # noinspection InvisibleCharacter
             add_message(
