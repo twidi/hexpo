@@ -26,6 +26,7 @@ class GameEndMode(models.TextChoices):
     ENDLESS = "endless", "Sans fin"
     TURN_LIMIT = "turn-limit", "Nombre de tours limité"
     FULL_MAP = "full-map", "100% occupation"
+    HALF_MAP = "half-map", "50% occupation"
 
 
 class ActionType(models.TextChoices):
@@ -128,7 +129,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         step_waiting_for_players_duration=timedelta(seconds=10),
         step_collecting_actions_duration=timedelta(seconds=30),
         message_delay=timedelta(seconds=2.5),
-        default_end_mode=GameEndMode.FULL_MAP,
+        default_end_mode=GameEndMode.HALF_MAP,
         multi_steps=True,
         player_start_level=1,
         tile_start_level=20.0,

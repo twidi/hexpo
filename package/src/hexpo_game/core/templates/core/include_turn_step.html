@@ -6,7 +6,9 @@
     {% elif game.end_mode == GameEndMode.TURN_LIMIT %}
         Remplis au max avant le tour #{{ game.end_mode_turn }} !
     {% elif game.end_mode == GameEndMode.FULL_MAP %}
-        Remplis la map et gagne !
+        Remplis la map pour gagner !
+    {% elif game.end_mode == GameEndMode.HALF_MAP %}
+        Remplis 50% de la map pour gagner !
     {% endif %}
 </span>
 {% if game.config.multi_steps %}
