@@ -959,15 +959,20 @@ def create_or_update_action(player_in_game: PlayerInGame, game: Game, action_typ
         action.action_type = action_type
         action.set_tile(None, save=False)
         action.save()
-        return action
-    logger_collect.info("%s created a %s action", player_in_game.player.name, action_type.name)
-    return Action.objects.create(
-        player_in_game=player_in_game,
-        game=game,
-        turn=game.current_turn,
-        action_type=action_type,
-        state=ActionState.CREATED,
-    )
+        if action_type == ActionType.BANK:  # auto confirm bank action
+            confirm_action(player_in_game, game, action=action)
+    else:
+        logger_collect.info("%s created a %s action", player_in_game.player.name, action_type.name)
+        action = Action.objects.create(
+            player_in_game=player_in_game,
+            game=game,
+            turn=game.current_turn,
+            action_type=action_type,
+            state=ActionState.CREATED,
+        )
+    if action_type == ActionType.BANK:  # auto confirm bank action
+        confirm_action(player_in_game, game, action=action)
+    return action
 
 
 def confirm_action(

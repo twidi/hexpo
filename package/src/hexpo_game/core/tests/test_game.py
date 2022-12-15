@@ -143,8 +143,8 @@ def save_action(  # pylint: disable=too-many-return-statements,too-many-branches
             action = GameLoop.step_collecting_actions_handle_click_multi_steps(
                 PlayerClick(player, ClickTarget.MAP, tile), game
             )
-        # then make the player confirm the action
-        if action is not None:
+        # then make the player confirm the action (but not if it's a bank: it's automatic)
+        if action is not None and action.action_type != ActionType.BANK:
             action = GameLoop.step_collecting_actions_handle_click_multi_steps(
                 PlayerClick(player, ClickTarget.BTN_CONFIRM, None), game
             )

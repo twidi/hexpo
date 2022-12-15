@@ -437,15 +437,37 @@ body.multi-steps:not([data-game-step="collecting_actions"]) #buttons {
 }
 
 #btn-instructions {
-  position: absolute;
-  background: rgba(0, 0, 0, 0.6);
-  padding: 10px;
-  height: calc(100% - 6px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  box-shadow: 7px 7px 11px 2px var(--shell-shadow);
+    position: absolute;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 10px;
+    height: calc(100% - 6px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    flex-direction: column;
+    box-shadow: 7px 7px 11px 2px var(--shell-shadow);
+    gap: 20px;
+}
+#btn-instructions > span {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    line-height: 23px;
+}
+#btn-instructions > span > strong {
+    color: var(--bright-color);
+    display: inline-block;
+    padding-left: 10px;
+}
+#btn-instructions > span:first-child {
+    text-align: right;
+}
+#btn-instructions > span:last-child {
+    text-align: left;
+}
+#btn-instructions > span:last-child > strong {
+    transform: rotate(180deg);
 }
 
 #messages-queue { display: none; }
