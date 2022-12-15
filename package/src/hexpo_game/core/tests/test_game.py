@@ -609,8 +609,8 @@ async def test_turn_mode_can_attack():
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_turn_mode_farther_attack_is_less_efficient():
-    """Test that attacking a far tile is less efficient than a near one in turn mode"""
+async def test_turn_mode_too_attack():
+    """Test that attacking a tile too far is forbidden in turn mode"""
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
     far_tile = Tile(game.grid_nb_cols - 1, game.grid_nb_rows - 1)
     await make_player_in_game(game, await make_player(2), [far_tile])
@@ -621,10 +621,31 @@ async def test_turn_mode_farther_attack_is_less_efficient():
 
     assert (action := await asave_action(player_in_game.player, game, far_tile, efficiency=0.6)) is not None
     await aplay_turn(game, grid)
-    await assert_action_state(action, ActionState.SUCCESS)
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.ATTACK_TOO_FAR)
     assert (
         await game.occupiedtile_set.aget(col=far_tile.col, row=far_tile.row)
-    ).level == game.config.tile_start_level - (game.config.attack_damage * 0.6 * 0.2)
+    ).level == game.config.tile_start_level
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_farther_attack_is_less_efficient():
+    """Test that attacking a far tile is less efficient than a near one in turn mode"""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    far_tile = Tile(2, 2)
+    await make_player_in_game(game, await make_player(2), [far_tile])
+    await aplay_turn(game, grid := get_grid(game))
+
+    for _ in range(game.config.respawn_protected_max_turns + 1):
+        await game.anext_turn()
+
+    player_in_game.level = 3
+    await player_in_game.asave()
+    assert (action := await asave_action(player_in_game.player, game, far_tile, efficiency=0.6)) is not None
+    await aplay_turn(game, grid)
+    await assert_action_state(action, ActionState.SUCCESS)
+    tile_level = (await game.occupiedtile_set.aget(col=far_tile.col, row=far_tile.row)).level
+    assert tile_level == 12.5
 
 
 @pytest.mark.asyncio

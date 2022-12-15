@@ -134,7 +134,7 @@ GAME_MODE_CONFIGS: dict[GameMode, GameModeConfig] = {
         player_start_level=1,
         tile_start_level=20.0,
         attack_damage=20.0,
-        attack_farthest_efficiency=0.2,
+        attack_farthest_efficiency=0.25,
         defend_improvement=20.0,
         bank_value=0.8,
         can_grow_on_occupied=False,
@@ -166,6 +166,7 @@ class ActionFailureReason(models.TextChoices):
     GROW_PROTECTED = "grow_protected", "Tile is protected"
     GROW_NO_NEIGHBOR = "grow_no_neighbor", "Not on a neighbor"
     ATTACK_PROTECTED = "attack_protected", "Tile is protected"
+    ATTACK_TOO_FAR = "attack_too_far", "Attack too far"
 
 
 class RandomEventType(models.TextChoices):

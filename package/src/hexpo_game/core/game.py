@@ -571,6 +571,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             return messages
 
         old_level = occupied_tile.level
+
         distance = max(
             1,
             min(
@@ -578,6 +579,22 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                 for col, row in player_in_game.occupiedtile_set.values_list("col", "row")
             ),
         )
+        if distance > player_in_game.level:
+            logger.warning(
+                "%s attacked %s but it's too far (distance: %s, level: %s)",
+                player.name,
+                tile.for_human(),
+                distance,
+                player_in_game.level,
+            )
+            action.fail(reason=ActionFailureReason.ATTACK_TOO_FAR)
+            add_message(
+                player_in_game,
+                f"{player_in_game.player.name} a attaqué en vain en {tile.for_human()} trop loin "
+                f"(level {player_in_game.level} limité à {distance})",
+            )
+            return messages
+
         distance_efficiency = (
             (1 - game.config.attack_farthest_efficiency) * distance
             + game.config.attack_farthest_efficiency
