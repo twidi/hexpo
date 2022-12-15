@@ -185,6 +185,9 @@ body.multi-steps #top-bar #general-instructions {
     align-items: center;
     position: relative;
 }
+.player:not(.is-active) {
+    color: #aaa;
+}
 .player.cannot-play {
     background-color: #480b0a;
 }

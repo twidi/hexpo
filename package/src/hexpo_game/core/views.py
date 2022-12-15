@@ -172,6 +172,7 @@ class GameState:
                 "is_protected": player_in_game.is_protected(),
                 "nb_tiles": player_in_game.nb_tiles,  # type: ignore[attr-defined]
                 "next_respawn_turn": player_in_game.next_respawn_turn if player_in_game.ended_turn else None,
+                "is_active": player_in_game.is_active,
             }
             | (
                 {
