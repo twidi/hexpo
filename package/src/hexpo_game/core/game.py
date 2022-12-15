@@ -30,6 +30,7 @@ from .constants import (
     EROSION_DAMAGES_ACTIVE_PLAYER,
     EROSION_DAMAGES_INACTIVE_PLAYER,
     LATENCY_DELAY,
+    NB_ATTACKS_PER_LEVEL,
     NB_COLORS,
     NO_EVENT_MESSAGES,
     PALETTE,
@@ -165,7 +166,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         action = cls.step_collecting_actions_handle_click_single_step(player_click, game)
         if action is None:
             return []
-        messages = execute_action(action, game, grid, game.current_turn, defaultdict(int), set())
+        messages = execute_action(action, game, grid, game.current_turn, defaultdict(int), defaultdict(int), set())
         action.refresh_from_db()
         if action.state == ActionState.FAILURE:
             player_in_game.die()
@@ -437,7 +438,13 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
 
 
 def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
-    action: Action, game: Game, grid: Grid, turn: int, nb_actions: dict[int, int], dead_during_turn: set[int]
+    action: Action,
+    game: Game,
+    grid: Grid,
+    turn: int,
+    nb_actions: dict[int, int],
+    nb_attacks: dict[int, int],
+    dead_during_turn: set[int],
 ) -> GameMessages:
     """Execute the action."""
     # pycharm: disable = redefine-outer-name
@@ -594,6 +601,24 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
                 f"(level {player_in_game.level} limité à {distance})",
             )
             return messages
+
+        if nb_attacks[player_in_game.id] >= (max_attacks := NB_ATTACKS_PER_LEVEL * player_in_game.level):
+            logger.warning(
+                "%s attacked %s but did too many attacks (max: %s, level: %s)",
+                player.name,
+                tile.for_human(),
+                max_attacks,
+                player_in_game.level,
+            )
+            action.fail(reason=ActionFailureReason.ATTACK_TOO_MANY)
+            add_message(
+                player_in_game,
+                f"{player_in_game.player.name} a attaqué en vain en {tile.for_human()}"
+                f"(level {player_in_game.level} limité à {max_attacks} par tour)",
+            )
+            return messages
+
+        nb_attacks[player_in_game.id] += 1
 
         distance_efficiency = (
             (1 - game.config.attack_farthest_efficiency) * distance
@@ -815,9 +840,12 @@ async def aplay_turn(
             lambda: set(game.playeringame_set.filter(ended_turn=turn).values_list("id", flat=True))
         )()
     nb_actions: dict[int, int] = defaultdict(int)
+    nb_attacks: dict[int, int] = defaultdict(int)
     all_messages: GameMessages = []
     for action in actions:
-        if messages := await sync_to_async(execute_action)(action, game, grid, turn, nb_actions, dead_during_turn):
+        if messages := await sync_to_async(execute_action)(
+            action, game, grid, turn, nb_actions, nb_attacks, dead_during_turn
+        ):
             if send_messages is not None:
                 await send_messages(messages)
                 if game.config.multi_steps:

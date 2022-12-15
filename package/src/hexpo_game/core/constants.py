@@ -167,6 +167,7 @@ class ActionFailureReason(models.TextChoices):
     GROW_NO_NEIGHBOR = "grow_no_neighbor", "Not on a neighbor"
     ATTACK_PROTECTED = "attack_protected", "Tile is protected"
     ATTACK_TOO_FAR = "attack_too_far", "Attack too far"
+    ATTACK_TOO_MANY = "attack_too_many", "Too many attacks"
 
 
 class RandomEventType(models.TextChoices):
@@ -199,6 +200,8 @@ RANDOM_EVENTS_PROBABILITIES = {
     RandomEventType.DROP_ACTIONS: (0.3, 0.45),
 }
 RANDOM_EVENTS_MIN_TURN = 20  # Minimum turn to wait before a random event
+
+NB_ATTACKS_PER_LEVEL = 3  # Number of attacks per level
 
 
 # Damage to the tile level for each border that is not with a tile from the same player

@@ -609,7 +609,7 @@ async def test_turn_mode_can_attack():
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_turn_mode_too_attack():
+async def test_turn_mode_too_far_attack():
     """Test that attacking a tile too far is forbidden in turn mode"""
     game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
     far_tile = Tile(game.grid_nb_cols - 1, game.grid_nb_rows - 1)
@@ -625,6 +625,28 @@ async def test_turn_mode_too_attack():
     assert (
         await game.occupiedtile_set.aget(col=far_tile.col, row=far_tile.row)
     ).level == game.config.tile_start_level
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_turn_mode_too_many_attack():
+    """Test that attacking a tile too far is forbidden in turn mode"""
+    game, _, player_in_game = await make_turn_game_and_player(Tile(0, 0))
+    player_in_game.banked_actions = 10
+    await player_in_game.asave()
+    await make_player_in_game(game, await make_player(2), [other_tile := Tile(0, 1)])
+
+    await aplay_turn(game, grid := get_grid(game))
+
+    for _ in range(game.config.respawn_protected_max_turns + 1):
+        await game.anext_turn()
+
+    assert (await asave_action(player_in_game.player, game, other_tile, efficiency=0.01)) is not None
+    assert (await asave_action(player_in_game.player, game, other_tile, efficiency=0.01)) is not None
+    assert (await asave_action(player_in_game.player, game, other_tile, efficiency=0.01)) is not None
+    assert (action := await asave_action(player_in_game.player, game, other_tile, efficiency=0.01)) is not None
+    await aplay_turn(game, grid)
+    await assert_action_state(action, ActionState.FAILURE, ActionFailureReason.ATTACK_TOO_MANY)
 
 
 @pytest.mark.asyncio
