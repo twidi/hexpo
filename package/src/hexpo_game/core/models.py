@@ -179,7 +179,7 @@ class Game(BaseModel):  # pylint: disable=too-many-public-methods
             return f"{minutes}m"
         return f"{seconds}s"
 
-    def get_all_players_in_games(self) -> QuerySet[PlayerInGame]:
+    def get_all_players_in_game(self) -> QuerySet[PlayerInGame]:
         """Get the players in the game, dead or alive."""
         return self.playeringame_set.alias(
             last_playeringame_id=Subquery(
@@ -206,7 +206,7 @@ class Game(BaseModel):  # pylint: disable=too-many-public-methods
 
     def get_players_in_game_for_leader_board(self, limit: Optional[int] = None) -> QuerySet[PlayerInGame]:
         """Get the players in game for the leader board."""
-        queryset = self.get_all_players_in_games().annotate(
+        queryset = self.get_all_players_in_game().annotate(
             nb_tiles=Count("occupiedtile"), tiles_level=Sum("occupiedtile__level")
         )
         if self.config.multi_steps:
