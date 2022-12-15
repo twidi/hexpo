@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from functools import cached_property
 from math import floor
 from random import randint, random
-from typing import Any, Optional, cast
+from typing import Any, Optional, Sequence, cast
 
 from asgiref.sync import sync_to_async
 from django.db import models
@@ -344,6 +344,7 @@ class PlayerInGame(BaseModel):
     first_in_game_for_player = models.BooleanField(
         default=False, help_text="Whether this is the first appearance of the player in the game."
     )
+    last_turn_played = models.PositiveIntegerField(help_text="Last turn the player played.", default=0)
 
     class Meta:
         """Meta class for PlayerInGame."""
@@ -451,6 +452,16 @@ class PlayerInGame(BaseModel):
         """Update the banked actions of the player."""
         await sync_to_async(cls.update_all_banked_actions)(used_actions_per_player)
 
+    @classmethod
+    def update_last_turn_played(cls, players_in_game_ids: Sequence[int], turn: int) -> None:
+        """Update the last turn played of the player."""
+        PlayerInGame.objects.filter(id__in=players_in_game_ids).update(last_turn_played=turn)
+
+    @classmethod
+    async def aupdate_last_turn_played(cls, players_in_game_ids: Sequence[int], turn: int) -> None:
+        """Update the last turn played of the player."""
+        await sync_to_async(cls.update_last_turn_played)(players_in_game_ids, turn)
+
     async def compute_level(self, start_level: int, levels: dict[int, int]) -> int:
         """Compute the level of a player in game depending of the number of tiles he has."""
         if not levels:
@@ -487,12 +498,7 @@ class PlayerInGame(BaseModel):
 
     def is_active(self) -> bool:
         """Return whether the player is active or not."""
-        last_action = (
-            self.action_set.filter(state__in=(ActionState.SUCCESS, ActionState.FAILURE)).order_by("-turn").first()
-        )
-        if last_action is None:
-            return False
-        return last_action.turn >= self.game.current_turn - INACTIVE_PLAYER_THRESHOLD
+        return self.last_turn_played >= self.game.current_turn - INACTIVE_PLAYER_THRESHOLD
 
 
 class OccupiedTile(BaseModel):

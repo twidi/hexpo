@@ -814,6 +814,7 @@ async def aplay_turn(
 
     if game.config.multi_steps:
         await PlayerInGame.aupdate_all_banked_actions(nb_actions)
+        await PlayerInGame.aupdate_last_turn_played(tuple(nb_actions.keys()), game.current_turn)
         await update_levels(game)
 
     return all_messages
@@ -1079,7 +1080,7 @@ def run_random_events(  # pylint: disable=too-many-branches, too-many-statements
             logger_events.info("Lightning with no effect")
             add_anonymous_message(
                 f"Un éclair de force {random_event.lightning_damage} "
-                f"a frappé en {random_event.tile.for_human()} sans faire de dégats.",
+                f"a frappé en {random_event.tile.for_human()} sans faire de dégâts.",
             )
         else:
             if tile_destroyed:
@@ -1124,7 +1125,7 @@ def run_random_events(  # pylint: disable=too-many-branches, too-many-statements
             add_anonymous_message(
                 f"Un tremblement de terre de force {random_event.earthquake_damage} "
                 f"et rayon {random_event.earthquake_radius} a frappé en {random_event.tile.for_human()} "
-                f"sans faire de dégats.",
+                f"sans faire de dégâts.",
             )
         for player_in_game, (nb_tiles, nb_destroyed_tiles) in touched_players_in_game.items():
             nb_touched_tiles = nb_tiles - nb_destroyed_tiles
