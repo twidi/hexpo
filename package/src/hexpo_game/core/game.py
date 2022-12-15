@@ -42,6 +42,7 @@ from .constants import (
     GameMode,
     GameStep,
     RandomEventType,
+    StepChangedDetails,
 )
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame, RandomEvent
@@ -326,7 +327,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         if self.game.config.multi_steps:
             await self.game_messages_queue.put(
                 GameMessage(
-                    text=step.label,
+                    text=step.label + (f"\n{StepChangedDetails[step]}" if step in StepChangedDetails else ""),
                     kind=GameMessageKind.GAME_STEP_CHANGED,
                 )
             )

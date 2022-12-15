@@ -425,12 +425,24 @@ body.multi-steps:not([data-game-step="collecting_actions"]) #buttons {
     color: #eee;
     position: absolute;
     top: calc(100% + 4px);
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.6);
     height: auto;
     padding: 10px;
     left: -4px;
     right: -4px;
     box-shadow: 7px 7px 11px 2px var(--shell-shadow);
+}
+
+#btn-instructions {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 10px;
+  height: calc(100% - 6px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  box-shadow: 7px 7px 11px 2px var(--shell-shadow);
 }
 
 #messages-queue { display: none; }
