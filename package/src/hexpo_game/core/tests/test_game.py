@@ -1214,7 +1214,7 @@ async def test_earthquake_on_occupied_tiles():
     assert await game.occupiedtile_set.filter(col=7, row=6).aexists() is False
     assert await game.occupiedtile_set.filter(col=7, row=7).aexists() is True
     occupied_tile = await game.occupiedtile_set.aget(col=7, row=7)
-    assert occupied_tile.level == 10
+    assert occupied_tile.level == 15
 
 
 @pytest.mark.asyncio
