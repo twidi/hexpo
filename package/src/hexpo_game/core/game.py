@@ -33,6 +33,7 @@ from .constants import (
     NB_COLORS,
     NO_EVENT_MESSAGES,
     PALETTE,
+    RANDOM_EVENTS_MIN_TURN,
     ActionFailureReason,
     ActionState,
     ActionType,
@@ -376,6 +377,12 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
             ):
                 force_step = GameStep.WAITING_FOR_PLAYERS
             await self.game.anext_step(force_step)  # will change the turn if needed
+            if (
+                self.game.config.multi_steps
+                and self.game.current_turn_step == GameStep.RANDOM_EVENTS
+                and self.game.current_turn < RANDOM_EVENTS_MIN_TURN
+            ):
+                await self.game.anext_step(force_step)
             if self.game.current_turn != current_turn:
                 current_turn = self.game.current_turn
                 if self.game.config.multi_steps:

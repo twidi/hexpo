@@ -197,6 +197,7 @@ RANDOM_EVENTS_PROBABILITIES = {
     RandomEventType.EARTHQUAKE: (0.2, 0.3),
     RandomEventType.DROP_ACTIONS: (0.3, 0.45),
 }
+RANDOM_EVENTS_MIN_TURN = 20  # Minimum turn to wait before a random event
 
 
 # Damage to the tile level for each border that is not with a tile from the same player
