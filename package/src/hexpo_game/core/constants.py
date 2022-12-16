@@ -229,9 +229,6 @@ class GameStep(models.TextChoices):
         return self == FirstGameStep
 
 
-StepChangedDetails: dict[GameStep, str] = {GameStep.COLLECTING_ACTIONS: "Clique sur une case puis confirme"}
-
-
 FirstGameStep = list(GameStep)[0]
 
 
