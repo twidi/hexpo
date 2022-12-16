@@ -197,8 +197,8 @@ EARTHQUAKE_MIN_DAMAGES = 5  # Damage for tiles the farthest from earthquake cent
 DROP_ACTIONS_RANGE = (1, 20)  # Number of actions in the drop
 RANDOM_EVENTS_PROBABILITIES = {
     RandomEventType.LIGHTNING: (0, 0.15),
-    RandomEventType.EARTHQUAKE: (0.2, 0.3),
-    RandomEventType.DROP_ACTIONS: (0.3, 0.45),
+    RandomEventType.EARTHQUAKE: (0.2, 0.35),
+    RandomEventType.DROP_ACTIONS: (0.7, 0.85),
 }
 RANDOM_EVENTS_MIN_TURN = 20  # Minimum turn to wait before a random event
 
