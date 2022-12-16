@@ -52,6 +52,10 @@ class BaseModel(models.Model):
         """Save the instance."""
         await sync_to_async(self.save)(*args, **kwargs)
 
+    async def adelete(self, using: Any = None, keep_parents: bool = False) -> tuple[int, dict[str, int]]:
+        """Delete the game."""
+        return cast(tuple[int, dict[str, int]], await sync_to_async(self.delete)(using, keep_parents))
+
 
 class Game(BaseModel):  # pylint: disable=too-many-public-methods
     """Represent a playing game."""
@@ -306,6 +310,7 @@ class Player(BaseModel):
     welcome_chat_message_sent_at = models.DateTimeField(
         default=None, null=True, help_text="Date of the welcome message."
     )
+    extra_actions = models.FloatField(default=0, help_text="Extra actions the player can do.")
 
     def __str__(self) -> str:
         """Return the string representation of the player."""
@@ -324,7 +329,17 @@ class Player(BaseModel):
         return set(Player.objects.filter(allowed=False).values_list("external_id", flat=True))
 
 
-class PlayerInGame(BaseModel):
+class ExtraActionOperation(BaseModel):
+    """Represent an operation on the extra actions of a player."""
+
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name="extra_action_operations")
+    reason = models.CharField(max_length=255, help_text="Reason of the operation.")
+    value = models.FloatField(default=0, help_text="Value of the operation.")
+    done_at = models.DateTimeField(auto_now_add=True, help_text="Date of the operation.")
+    reference = models.CharField(max_length=255, help_text="Reference of the operation.")
+
+
+class PlayerInGame(BaseModel):  # pylint: disable=too-many-public-methods
     """Represent a player in a game.
 
     We can have many PlayerInGame for the same (player, game) couple, but only with is_alive = True.
@@ -371,6 +386,39 @@ class PlayerInGame(BaseModel):
                 condition=Q(ended_turn__isnull=True),
             ),
         ]
+
+    @property
+    def all_banked_actions(self) -> float:
+        """Get the total number of banked actions of the player."""
+        return self.banked_actions + self.player.extra_actions
+
+    def use_actions(self, amount: float) -> None:
+        """Use actions."""
+        if not amount:
+            return
+
+        use_extra: float = 0.0
+        left: float = self.banked_actions - amount
+        if left < 0:
+            use_extra, left = -left, 0
+
+        if self.banked_actions != left:
+            self.banked_actions = left
+            self.save()
+
+        if use_extra:
+            self.player.refresh_from_db()
+            self.player.extra_actions -= use_extra
+            self.player.save()
+            self.player.extra_action_operations.create(
+                reason=f"Usage in game {self.game.id} at turn {self.game.current_turn}",
+                value=-use_extra,
+                reference=f"game-{self.game.id}:turn-{self.game.current_turn}",
+            )
+
+    async def ause_actions(self, amount: float) -> None:
+        """Use actions."""
+        await sync_to_async(self.use_actions)(amount)
 
     @cached_property
     def color_object(self) -> Color:
@@ -431,7 +479,7 @@ class PlayerInGame(BaseModel):
         """Return the number of available actions for the player for the current turn."""
         if nb_actions_in_turn is None:
             nb_actions_in_turn = self.get_nb_actions_in_turn()
-        return floor(self.level + self.banked_actions - nb_actions_in_turn)
+        return floor(self.level + self.all_banked_actions - nb_actions_in_turn)
 
     def can_create_action(self) -> bool:
         """Return whether the player can create an action or not."""
@@ -455,9 +503,7 @@ class PlayerInGame(BaseModel):
             player_in_game = players_in_game[player_in_game_id]
             if used_actions <= player_in_game.level:
                 continue
-            player_in_game.banked_actions -= used_actions - player_in_game.level
-            player_in_game.banked_actions = max(player_in_game.banked_actions, 0)
-            player_in_game.save()
+            player_in_game.use_actions(used_actions - player_in_game.level)
 
     @classmethod
     async def aupdate_all_banked_actions(cls, used_actions_per_player: dict[int, int]) -> None:

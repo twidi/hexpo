@@ -31,6 +31,7 @@ from .constants import (
     EROSION_DAMAGES_INACTIVE_PLAYER,
     LATENCY_DELAY,
     NB_ATTACKS_PER_LEVEL,
+    NB_BANKS_PER_TURN,
     NB_COLORS,
     NO_EVENT_MESSAGES,
     PALETTE,
@@ -44,7 +45,6 @@ from .constants import (
     GameMode,
     GameStep,
     RandomEventType,
-    NB_BANKS_PER_TURN,
 )
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame, RandomEvent
@@ -166,7 +166,9 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         action = cls.step_collecting_actions_handle_click_single_step(player_click, game)
         if action is None:
             return []
-        messages = execute_action(action, game, grid, game.current_turn, defaultdict(int), defaultdict(int), defaultdict(int), set())
+        messages = execute_action(
+            action, game, grid, game.current_turn, defaultdict(int), defaultdict(int), defaultdict(int), set()
+        )
         action.refresh_from_db()
         if action.state == ActionState.FAILURE:
             player_in_game.die()
@@ -467,13 +469,15 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
         return []
 
     nb_actions[player_in_game.id] += 1
-    if nb_actions[player_in_game.id] > player_in_game.level + player_in_game.banked_actions:
+    if nb_actions[player_in_game.id] > player_in_game.level + player_in_game.all_banked_actions:
         logger.warning(
-            "%s USED TOO MANY ACTIONS (%s used, level %s, banked %s)",
+            "%s USED TOO MANY ACTIONS (%s used, level %s, avail %s = %s + %s)",
             player.name,
             nb_actions[player_in_game.id],
             player_in_game.level,
-            player_in_game.banked_actions,
+            f"{player_in_game.all_banked_actions:.2f}",
+            f"{player_in_game.banked_actions:.2f}",
+            f"{player_in_game.player.extra_actions:.2f}",
         )
         return []
 
@@ -517,7 +521,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             action.fail(reason=ActionFailureReason.BANK_TOO_MANY)
             add_message(
                 player_in_game,
-                f"{player_in_game.player.name} a banqué en vain (un seul \"banque\" autorisé  par tour)",
+                f'{player_in_game.player.name} a banqué en vain (un seul "banque" autorisé  par tour)',
             )
             return messages
 
@@ -528,11 +532,13 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
         player_in_game.save()
         action.success()
         logger.info(
-            "%s banked %s (from %s to %s)",
+            "%s banked %s (from %s to %s, + %s = %s)",
             player.name,
             f"{banked:.2f}",
             f"{old_banked:.2f}",
             f"{player_in_game.banked_actions:.2f}",
+            f"{player_in_game.player.extra_actions:.2f}",
+            f"{player_in_game.all_banked_actions:.2f}",
         )
         add_message(player_in_game, f"{player_in_game.player.name} a mis de côté {banked:.2f} points d'actions")
         return messages

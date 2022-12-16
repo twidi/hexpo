@@ -8,6 +8,7 @@ from typing import Optional, Sequence, Set, cast
 import pytest
 from asgiref.sync import sync_to_async
 from django.utils import timezone
+from pytest import approx
 
 from hexpo_game.core.constants import (
     GAME_MODE_CONFIGS,
@@ -534,33 +535,93 @@ async def test_first_click_on_protected():
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_cannot_use_more_than_allowed_actions():
+async def test_cannot_use_more_than_allowed_actions():  # pylint: disable=too-many-statements
     """Test that a player cannot confirm more actions than allowed."""
-    game, _, player_in_game = await make_game_and_player(Tile(0, 0))
+    game, player, player_in_game = await make_game_and_player(Tile(0, 0), player_level=1)
     await aplay_turn(game, get_grid(game))
     await game.anext_turn()
 
-    assert await asave_action(player_in_game.player, game, Tile(0, 1)) is not None
-    assert await asave_action(player_in_game.player, game, Tile(0, 0)) is None
+    assert (action1 := await asave_action(player, game, Tile(0, 1))) is not None
+    assert await asave_action(player, game, Tile(0, 0)) is None
+    await player_in_game.ause_actions(1 - player_in_game.level)
+    assert player_in_game.banked_actions == 0
+    await player.arefresh_from_db()
+    assert player.extra_actions == 0.0
 
-    player_in_game.level += 1
+    await action1.adelete()
+
+    player_in_game.level = 2
     await player_in_game.asave()
-    assert await asave_action(player_in_game.player, game, Tile(0, 0)) is not None
-    assert await asave_action(player_in_game.player, game, Tile(0, 0)) is None
+    assert (action1 := await asave_action(player, game, Tile(0, 0))) is not None
+    assert (action2 := await asave_action(player, game, Tile(0, 0))) is not None
+    assert await asave_action(player, game, Tile(0, 0)) is None
+    await player_in_game.ause_actions(2 - player_in_game.level)
+    assert player_in_game.banked_actions == 0
+    await player.arefresh_from_db()
+    assert player.extra_actions == 0.0
+
+    await action1.adelete()
+    await action2.adelete()
 
     player_in_game.banked_actions = 0.5
     await player_in_game.asave()
-    assert await asave_action(player_in_game.player, game, Tile(0, 0)) is None
+    assert (action1 := await asave_action(player, game, Tile(0, 0))) is not None
+    assert (action2 := await asave_action(player, game, Tile(0, 0))) is not None
+    assert await asave_action(player, game, Tile(0, 0)) is None
+    await player_in_game.ause_actions(2 - player_in_game.level)
+    assert player_in_game.banked_actions == 0.5
+    await player.arefresh_from_db()
+    assert player.extra_actions == 0.0
 
-    player_in_game.banked_actions = 1.99999
-    await player_in_game.asave()
-    assert await asave_action(player_in_game.player, game, Tile(0, 0)) is not None
-    assert await asave_action(player_in_game.player, game, Tile(0, 0)) is None
+    await action1.adelete()
+    await action2.adelete()
 
-    player_in_game.banked_actions = 2.0001
+    player_in_game.banked_actions = 1.9
     await player_in_game.asave()
-    assert await asave_action(player_in_game.player, game, Tile(0, 0)) is not None
-    assert await asave_action(player_in_game.player, game, Tile(0, 0)) is None
+    assert (action1 := await asave_action(player, game, Tile(0, 0))) is not None
+    assert (action2 := await asave_action(player, game, Tile(0, 0))) is not None
+    assert (action3 := await asave_action(player, game, Tile(0, 0))) is not None
+    assert await asave_action(player, game, Tile(0, 0)) is None
+    await player_in_game.ause_actions(3 - player_in_game.level)
+    assert player_in_game.banked_actions == approx(0.9)
+    await player.arefresh_from_db()
+    assert player.extra_actions == 0.0
+
+    await action1.adelete()
+    await action2.adelete()
+    await action3.adelete()
+
+    player_in_game.banked_actions = 2.1
+    await player_in_game.asave()
+    assert (action1 := await asave_action(player, game, Tile(0, 0))) is not None
+    assert (action2 := await asave_action(player, game, Tile(0, 0))) is not None
+    assert (action3 := await asave_action(player, game, Tile(0, 0))) is not None
+    assert (action4 := await asave_action(player, game, Tile(0, 0))) is not None
+    assert await asave_action(player, game, Tile(0, 0)) is None
+    await player_in_game.ause_actions(4 - player_in_game.level)
+    assert player_in_game.banked_actions == approx(0.1)
+    await player.arefresh_from_db()
+    assert player.extra_actions == 0.0
+
+    await action1.adelete()
+    await action2.adelete()
+    await action3.adelete()
+    await action4.adelete()
+
+    player_in_game.banked_actions = 2.1
+    await player_in_game.asave()
+    player.extra_actions = 1.5
+    await player.asave()
+    assert await asave_action(player, game, Tile(0, 0)) is not None
+    assert await asave_action(player, game, Tile(0, 0)) is not None
+    assert await asave_action(player, game, Tile(0, 0)) is not None
+    assert await asave_action(player, game, Tile(0, 0)) is not None
+    assert await asave_action(player, game, Tile(0, 0)) is not None
+    assert await asave_action(player, game, Tile(0, 0)) is None
+    await player_in_game.ause_actions(5 - player_in_game.level)
+    assert player_in_game.banked_actions == 0.0
+    await player.arefresh_from_db()
+    assert player.extra_actions == approx(0.6)  # 1.5 - (4 - 2.1)
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -38,8 +39,10 @@ logger = logging.getLogger(__name__)
 #
 
 
-def int_or_float_as_str(value: float) -> str:
+def int_or_float_as_str(value: float, int_if_at_least: Optional[float] = None) -> str:
     """Return the string representation of a float or an int."""
+    if int_if_at_least is not None and value >= int_if_at_least:
+        return str(math.floor(value))
     return str(int(value)) if value.is_integer() else f"{value:.2f}"
 
 
@@ -180,7 +183,8 @@ class GameState:
                     "current_turn_actions": (actions := actions_by_player.get(player_in_game.id, [])),
                     "level_actions_left": max(0, overflow_actions := (player_in_game.level - len(actions))),
                     "banked_actions_left": int_or_float_as_str(
-                        player_in_game.banked_actions - max(0, -overflow_actions)
+                        player_in_game.all_banked_actions - max(0, -overflow_actions),
+                        int_if_at_least=100,
                     ),
                 }
                 if self.game.config.multi_steps
