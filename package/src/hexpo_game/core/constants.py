@@ -168,6 +168,7 @@ class ActionFailureReason(models.TextChoices):
     ATTACK_PROTECTED = "attack_protected", "Tile is protected"
     ATTACK_TOO_FAR = "attack_too_far", "Attack too far"
     ATTACK_TOO_MANY = "attack_too_many", "Too many attacks"
+    BANK_TOO_MANY = "bank_too_many", "Too many banks"
 
 
 class RandomEventType(models.TextChoices):
@@ -202,6 +203,7 @@ RANDOM_EVENTS_PROBABILITIES = {
 RANDOM_EVENTS_MIN_TURN = 20  # Minimum turn to wait before a random event
 
 NB_ATTACKS_PER_LEVEL = 3  # Number of attacks per level
+NB_BANKS_PER_TURN = 1  # Number of banks per turn
 
 
 # Damage to the tile level for each border that is not with a tile from the same player

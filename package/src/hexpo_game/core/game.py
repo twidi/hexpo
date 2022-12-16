@@ -44,6 +44,7 @@ from .constants import (
     GameMode,
     GameStep,
     RandomEventType,
+    NB_BANKS_PER_TURN,
 )
 from .grid import ConcreteGrid, Grid
 from .models import Action, Game, OccupiedTile, Player, PlayerInGame, RandomEvent
@@ -165,7 +166,7 @@ class GameLoop:  # pylint: disable=too-many-instance-attributes, too-many-argume
         action = cls.step_collecting_actions_handle_click_single_step(player_click, game)
         if action is None:
             return []
-        messages = execute_action(action, game, grid, game.current_turn, defaultdict(int), defaultdict(int), set())
+        messages = execute_action(action, game, grid, game.current_turn, defaultdict(int), defaultdict(int), defaultdict(int), set())
         action.refresh_from_db()
         if action.state == ActionState.FAILURE:
             player_in_game.die()
@@ -443,6 +444,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
     turn: int,
     nb_actions: dict[int, int],
     nb_attacks: dict[int, int],
+    nb_banks: dict[int, int],
     dead_during_turn: set[int],
 ) -> GameMessages:
     """Execute the action."""
@@ -509,6 +511,18 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             action.fail(reason=ActionFailureReason.BAD_FIRST)
             logger.warning("%s had no tiles but did a wrong first action: %s", player.name, action.action_type)
             return []
+
+        if nb_banks[player_in_game.id] >= NB_BANKS_PER_TURN:
+            logger.warning("%s banked but already did it in this turn", player.name)
+            action.fail(reason=ActionFailureReason.BANK_TOO_MANY)
+            add_message(
+                player_in_game,
+                f"{player_in_game.player.name} a banqué en vain (un seul \"banque\" autorisé  par tour)",
+            )
+            return messages
+
+        nb_banks[player_in_game.id] += 1
+
         old_banked = player_in_game.banked_actions
         player_in_game.banked_actions += (banked := game.config.bank_value * action.efficiency)
         player_in_game.save()
@@ -597,7 +611,7 @@ def execute_action(  # pylint:disable=too-many-locals,too-many-branches,too-many
             add_message(
                 player_in_game,
                 f"{player_in_game.player.name} a attaqué en vain en {tile.for_human()} trop loin "
-                f"(level {player_in_game.level} limité à {distance})",
+                f"(level {player_in_game.level} limité à {player_in_game.level})",
             )
             return messages
 
@@ -845,10 +859,11 @@ async def aplay_turn(
         )()
     nb_actions: dict[int, int] = defaultdict(int)
     nb_attacks: dict[int, int] = defaultdict(int)
+    nb_banks: dict[int, int] = defaultdict(int)
     all_messages: GameMessages = []
     for action in actions:
         if messages := await sync_to_async(execute_action)(
-            action, game, grid, turn, nb_actions, nb_attacks, dead_during_turn
+            action, game, grid, turn, nb_actions, nb_attacks, nb_banks, dead_during_turn
         ):
             if send_messages is not None:
                 await send_messages(messages)
