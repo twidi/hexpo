@@ -5,7 +5,6 @@ import os
 from asyncio import Queue
 from typing import Optional, TypeAlias, cast
 
-from twitchAPI.oauth import UserAuthenticator  # type: ignore[import]
 from twitchAPI.twitch import Twitch  # type: ignore[import]
 from twitchAPI.types import AuthScope  # type: ignore[import]
 from twitchio import Channel  # type: ignore[import]
@@ -37,9 +36,20 @@ async def get_twitch_tokens() -> tuple[str, str]:
     if not os.environ.get("TWITCH_CLIENT_SECRET"):
         raise RuntimeError("TWITCH_CLIENT_SECRET is not set. Please set it in .env or as an environment variable.")
 
+    if os.environ.get("TWITCH_TOKEN") and os.environ.get("TWITCH_REFRESH_TOKEN"):
+        return os.environ["TWITCH_TOKEN"], os.environ["TWITCH_REFRESH_TOKEN"]
+
+    # print("FAILURE")
+    # for k, v in sorted(os.environ.items()):
+    #     print(k, v)
     twitch = Twitch(os.environ["TWITCH_CLIENT_ID"], os.environ["TWITCH_CLIENT_SECRET"])
+    # pylint: disable=import-outside-toplevel
+    from twitchAPI.oauth import UserAuthenticator  # type: ignore[import]
+
     auth = UserAuthenticator(twitch, [AuthScope.CHAT_EDIT, AuthScope.CHAT_READ], force_verify=False)
-    return cast(tuple[str, str], await auth.authenticate())
+    token, refresh_token = cast(tuple[str, str], await auth.authenticate())
+    # print(token, refresh_token)
+    return token, refresh_token
 
 
 class TwitchClient(Bot):

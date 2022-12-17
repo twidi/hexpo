@@ -267,7 +267,7 @@ class Game(BaseModel):  # pylint: disable=too-many-public-methods
                 nb_tiles = winner.nb_tiles  # type: ignore[attr-defined]
                 if self.end_mode == GameEndMode.FULL_MAP and nb_tiles < self.grid.nb_tiles:
                     winner = None
-                elif self.end_mode == GameEndMode.HALF_MAP and nb_tiles < self.grid.nb_tiles:
+                elif self.end_mode == GameEndMode.HALF_MAP and nb_tiles < self.grid.nb_tiles / 2:
                     winner = None
 
         if winner is None:
