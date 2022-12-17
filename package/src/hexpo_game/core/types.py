@@ -201,6 +201,7 @@ class GameMessageKind(enum.Enum):
     EROSION = "erosion"
     GAME_OVER = "game_over"
     OTHER = "other"
+    DONATION = "donation"
 
 
 class GameMessage(NamedTuple):

@@ -29,6 +29,7 @@ dependencies = [
     "django",
     "dj-database-url",
     "django-extensions",
+    "ffmpeg-python",
     "numpy",
     "opencv-python",
     "psycopg2-binary",

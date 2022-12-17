@@ -10,6 +10,7 @@ from typing import Any
 from aiohttp import web
 
 from hexpo_game.core.constants import GameMode
+from hexpo_game.core.devevent import fetch_donations
 from hexpo_game.core.types import GameMessagesQueue
 
 from . import django_setup  # noqa: F401  # pylint: disable=unused-import
@@ -57,6 +58,7 @@ def main(game_mode: str) -> None:
         )
         async_tasks.append(ensure_future(twitch_client.send_messages(chat_messages_queue)))
         async_tasks.append(ensure_future(game_state.update_forever(game_messages_queue, delay=0.5)))
+        async_tasks.append(ensure_future(fetch_donations(game_messages_queue, chat_messages_queue)))
 
     async def on_web_shutdown(app: web.Application) -> None:  # pylint: disable=unused-argument
         await clicks_queue.join()
