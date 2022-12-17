@@ -8,7 +8,7 @@ from asynctest import CoroutineMock, patch  # type: ignore[import]
 from django.db.models import Sum
 
 from hexpo_game.core.devevent import fetch_donations
-from hexpo_game.core.models import Player
+from hexpo_game.core.models import ExtraActionOperation, Player
 from hexpo_game.core.twitch import ChatMessagesQueue
 from hexpo_game.core.types import GameMessageKind, GameMessagesQueue
 
@@ -109,9 +109,12 @@ async def test_donations(mock: CoroutineMock) -> None:
 
     await fetch_donations(game_messages_queue, chat_messages_queue, max_loops=2, sleep_seconds=0)
 
+    await player.arefresh_from_db()
+    assert player.extra_actions == 1
     player_operations = await sync_to_async(lambda: list(player.extra_action_operations.all()))()
     assert len(player_operations) == 1
     assert await sync_to_async(lambda: player.extra_action_operations.aggregate(Sum("value"))["value__sum"])() == 1
+    assert await ExtraActionOperation.objects.filter(player__isnull=True).acount() == 1
     assert game_messages_queue.qsize() == 2
     assert chat_messages_queue.qsize() == 2
     game_message1 = game_messages_queue.get_nowait()
@@ -159,8 +162,11 @@ async def test_donations(mock: CoroutineMock) -> None:
     await fetch_donations(game_messages_queue, chat_messages_queue, max_loops=2, sleep_seconds=0)
 
     player_operations = await sync_to_async(lambda: list(player.extra_action_operations.all()))()
+    await player.arefresh_from_db()
+    assert player.extra_actions == 2.5
     assert len(player_operations) == 2
     assert await sync_to_async(lambda: player.extra_action_operations.aggregate(Sum("value"))["value__sum"])() == 2.5
+    assert await ExtraActionOperation.objects.filter(player__isnull=True).acount() == 1
     assert game_messages_queue.qsize() == 1
     assert chat_messages_queue.qsize() == 1
     game_message1 = game_messages_queue.get_nowait()

@@ -50,14 +50,16 @@ async def handle_donation(donation: dict[str, Any]) -> Optional[GameMessage]:
         logger.warning("%s donated %s", saved_donation.name, amount_human)
 
         player = await Player.objects.filter(name__iexact=saved_donation.name).afirst()
+
         if player is not None:
-
-            await player.extra_action_operations.acreate(
-                value=saved_donation.amount, reason=reason, reference=f"{REFERENCE_KEY}-{donation['id']}"
-            )
-
             reason += " Et gagne autant de PA."
             chat_message = f"@{player.name}  a donné {amount_human}€. Et gagne autant de PA."
+            player.extra_actions += saved_donation.amount
+            await player.asave()
+
+        await ExtraActionOperation.objects.acreate(
+            player=player, value=saved_donation.amount, reason=reason, reference=f"{REFERENCE_KEY}-{donation['id']}"
+        )
 
         return GameMessage(
             text=reason,

@@ -332,7 +332,7 @@ class Player(BaseModel):
 class ExtraActionOperation(BaseModel):
     """Represent an operation on the extra actions of a player."""
 
-    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name="extra_action_operations")
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name="extra_action_operations", null=True)
     reason = models.CharField(max_length=255, help_text="Reason of the operation.")
     value = models.FloatField(default=0, help_text="Value of the operation.")
     done_at = models.DateTimeField(auto_now_add=True, help_text="Date of the operation.")
