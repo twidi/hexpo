@@ -88,6 +88,7 @@ class TwitchClient(Bot):
             else:
                 await self.channel.send(message)
                 queue.task_done()
+                await asyncio.sleep(2)
 
     @commands.command()  # type: ignore[misc]
     async def game(self, ctx: Context) -> None:
