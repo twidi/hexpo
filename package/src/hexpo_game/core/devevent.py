@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 import aiohttp
 from asgiref.sync import sync_to_async
@@ -17,8 +17,6 @@ TEAM_ID = "487066378935865344"
 TEAM_MEMBER_ID = "342049851833454592"
 REFERENCE_KEY = "devevent2022"
 
-MESSAGE_COLOR = Color.from_hex("#ef65ef")
-
 DONATIONS_URL = f"https://streamlabscharity.com/api/v1/teams/{TEAM_ID}/donations"
 
 logger = logging.getLogger("hexpo_game.devevent")
@@ -27,24 +25,20 @@ logger = logging.getLogger("hexpo_game.devevent")
 class SavedDonation(NamedTuple):
     """Local saving of a donation."""
 
+    id: str
     name: str
     amount: float
+    is_via_member: bool
 
 
 saved_donations: dict[str, SavedDonation] = {}
 
 
-async def handle_donation(donation: dict[str, Any]) -> Optional[GameMessage]:
+async def handle_donation(saved_donation: SavedDonation) -> Optional[GameMessage]:
     """Save the donation as an extra actions operation if it does not exist."""
     try:
-        if donation["id"] in saved_donations:
-            return None
-
-        saved_donations[donation["id"]] = saved_donation = SavedDonation(
-            name=donation["display_name"].strip(), amount=donation["converted_amount"] / 100
-        )
         amount_human = int_or_float_as_str(saved_donation.amount)
-        reason = f"{saved_donation.name.lower()} a donné {amount_human}€."
+        reason = f"#DevEvent {saved_donation.name.lower()} a donné {amount_human}€."
         chat_message = reason
 
         logger.warning("%s donated %s", saved_donation.name, amount_human)
@@ -53,18 +47,21 @@ async def handle_donation(donation: dict[str, Any]) -> Optional[GameMessage]:
 
         if player is not None:
             reason += " Et gagne autant de PA."
-            chat_message = f"@{player.name}  a donné {amount_human}€. Et gagne autant de PA."
+            chat_message = f"#DevEvent @{player.name}  a donné {amount_human}€. Et gagne autant de PA."
             player.extra_actions += saved_donation.amount
             await player.asave()
 
         await ExtraActionOperation.objects.acreate(
-            player=player, value=saved_donation.amount, reason=reason, reference=f"{REFERENCE_KEY}-{donation['id']}"
+            player=player,
+            value=saved_donation.amount,
+            reason=reason,
+            reference=f"{REFERENCE_KEY}-{saved_donation.id}",
         )
 
         return GameMessage(
             text=reason,
-            kind=GameMessageKind.DONATION,
-            color=MESSAGE_COLOR,
+            kind=GameMessageKind.DEVEVENT,
+            color=Color(0, 0, 0),
             player_id=None if player is None else player.id,
             chat_text=chat_message,
         )
@@ -73,7 +70,7 @@ async def handle_donation(donation: dict[str, Any]) -> Optional[GameMessage]:
         return None
 
 
-async def fetch_donations(
+async def fetch_donations(  # pylint: disable=too-many-locals, too-many-branches
     game_messages_queue: GameMessagesQueue,
     chat_messages_queue: ChatMessagesQueue,
     max_loops: Optional[int] = None,
@@ -84,7 +81,10 @@ async def fetch_donations(
         saved_donations.update(
             {
                 operation.reference[len(REFERENCE_KEY) + 1 :]: SavedDonation(
-                    name=operation.player.name, amount=operation.value
+                    id=operation.reference[len(REFERENCE_KEY) + 1 :],
+                    name=operation.player.name,
+                    amount=operation.value,
+                    is_via_member=operation.player_id is not None,
                 )
                 for operation in await sync_to_async(
                     lambda: list(
@@ -96,26 +96,81 @@ async def fetch_donations(
             }
         )
 
+    team_amount = team_member_amount = 0.0
+    for donation in saved_donations.values():
+        team_amount += donation.amount
+        if donation.is_via_member:
+            team_member_amount += donation.amount
+
     nb_loops = 0
+    old_team_amount, old_team_member_amount = team_amount, team_member_amount
     async with aiohttp.ClientSession() as session:
         while True:
             try:
                 async with session.get(DONATIONS_URL) as resp:
                     entries = await resp.json()
                     for entry in entries:
-                        if ((entry.get("member") or {}).get("user") or {}).get("id") != TEAM_MEMBER_ID:
-                            continue
-                        if donation := entry.get("donation"):
-                            if (message := await handle_donation(donation)) is None:
+                        try:
+                            if (donation := entry.get("donation")) is None:
+                                continue
+                            if (donation_id := donation.get("id")) is None or donation_id in saved_donations:
+                                continue
+                            saved_donations[donation_id] = saved_donation = SavedDonation(
+                                id=donation_id,
+                                name=donation["display_name"].strip(),
+                                amount=donation["converted_amount"] / 100,
+                                is_via_member=((entry.get("member") or {}).get("user") or {}).get("id")
+                                == TEAM_MEMBER_ID,
+                            )
+                            team_amount += saved_donation.amount
+                            if not saved_donation.is_via_member:
+                                continue
+                            team_member_amount += saved_donation.amount
+                            if (message := await handle_donation(saved_donation)) is None:
                                 continue
                             if message.chat_text is not None:
                                 await chat_messages_queue.put(message.chat_text)
                             await game_messages_queue.put(message)
 
+                        except Exception:  # pylint: disable=broad-except
+                            logger.exception("Error while handling donation %s", entry)
+
+                if team_member_amount != old_team_member_amount:
+                    await game_messages_queue.put(
+                        GameMessage(
+                            text=f"#DevEvent Vous avez donné {int_or_float_as_str(team_member_amount)}€ !",
+                            kind=GameMessageKind.DEVEVENT,
+                            color=Color(0, 0, 0),
+                            player_id=None,
+                        )
+                    )
+                    await chat_messages_queue.put(
+                        f"#DevEvent Vous avez donné {int_or_float_as_str(team_member_amount)}€ ! "
+                        f"(total des streamers: {int_or_float_as_str(team_amount)}€ )",
+                    )
+
+                elif team_amount != old_team_amount:
+                    await game_messages_queue.put(
+                        GameMessage(
+                            text=f"#DevEvent Le total de dons est de {int_or_float_as_str(team_amount)}€.",
+                            kind=GameMessageKind.DEVEVENT,
+                            color=Color(0, 0, 0),
+                            player_id=None,
+                        )
+                    )
+                    await chat_messages_queue.put(
+                        f"#DevEvent Le total de dons est de {int_or_float_as_str(team_amount)}€ "
+                        f"(dont {int_or_float_as_str(team_member_amount)}€ par vous !)."
+                    )
+
             except KeyboardInterrupt:
                 break
             except Exception:  # pylint: disable=broad-except
-                pass
+                logger.exception("Error while fetching donations")
+
+            old_team_amount = team_amount
+            old_team_member_amount = team_member_amount
+
             nb_loops += 1
             if max_loops is not None and nb_loops >= max_loops:
                 break

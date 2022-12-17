@@ -16,7 +16,7 @@ from hexpo_game.core.types import GameMessageKind, GameMessagesQueue
 @patch("aiohttp.ClientSession.get")
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
-async def test_donations(mock: CoroutineMock) -> None:
+async def test_donations(mock: CoroutineMock) -> None:  # pylint: disable=too-many-statements
     """
     Mock calling aiohttp HTTP request
     """
@@ -115,22 +115,29 @@ async def test_donations(mock: CoroutineMock) -> None:
     assert len(player_operations) == 1
     assert await sync_to_async(lambda: player.extra_action_operations.aggregate(Sum("value"))["value__sum"])() == 1
     assert await ExtraActionOperation.objects.filter(player__isnull=True).acount() == 1
-    assert game_messages_queue.qsize() == 2
-    assert chat_messages_queue.qsize() == 2
+    assert game_messages_queue.qsize() == 3
+    assert chat_messages_queue.qsize() == 3
     game_message1 = game_messages_queue.get_nowait()
     game_messages_queue.task_done()
     game_message2 = game_messages_queue.get_nowait()
+    game_messages_queue.task_done()
+    game_message3 = game_messages_queue.get_nowait()
     game_messages_queue.task_done()
     chat_message1 = chat_messages_queue.get_nowait()
     chat_messages_queue.task_done()
     chat_message2 = chat_messages_queue.get_nowait()
     chat_messages_queue.task_done()
-    assert game_message1.kind == GameMessageKind.DONATION
+    chat_message3 = chat_messages_queue.get_nowait()
+    chat_messages_queue.task_done()
+    assert game_message1.kind == GameMessageKind.DEVEVENT
     assert game_message1.player_id == player.id
-    assert game_message2.kind == GameMessageKind.DONATION
+    assert chat_message1.startswith("#DevEvent @Existing_User ")
+    assert game_message2.kind == GameMessageKind.DEVEVENT
     assert game_message2.player_id is None
-    assert chat_message1.startswith("@Existing_User ")
-    assert chat_message2.startswith("non_existing_user ")
+    assert chat_message2.startswith("#DevEvent non_existing_user ")
+    assert game_message3.kind == GameMessageKind.DEVEVENT
+    assert game_message3.player_id is None
+    assert chat_message3.startswith("#DevEvent Vous avez ")
 
     donations.append(
         {
@@ -167,12 +174,58 @@ async def test_donations(mock: CoroutineMock) -> None:
     assert len(player_operations) == 2
     assert await sync_to_async(lambda: player.extra_action_operations.aggregate(Sum("value"))["value__sum"])() == 2.5
     assert await ExtraActionOperation.objects.filter(player__isnull=True).acount() == 1
+    assert game_messages_queue.qsize() == 2
+    assert chat_messages_queue.qsize() == 2
+    game_message1 = game_messages_queue.get_nowait()
+    chat_message1 = chat_messages_queue.get_nowait()
+    game_messages_queue.task_done()
+    chat_messages_queue.task_done()
+    game_message2 = game_messages_queue.get_nowait()
+    chat_message2 = chat_messages_queue.get_nowait()
+    game_messages_queue.task_done()
+    chat_messages_queue.task_done()
+    assert game_message1.kind == GameMessageKind.DEVEVENT
+    assert game_message1.player_id == player.id
+    assert chat_message1.startswith("#DevEvent @Existing_User ")
+    assert game_message2.kind == GameMessageKind.DEVEVENT
+    assert game_message2.player_id is None
+    assert chat_message2.startswith("#DevEvent Vous avez ")
+
+    donations.append(
+        {
+            "id": "555845029492521659",
+            "donation": {
+                "id": "555768204816944712",
+                "display_name": "other_non_existing_user",
+                "amount_usd": 106,
+                "converted_currency": "EUR",
+                "converted_amount": 150,
+                "created_at": "2022-12-14T14:28:32+00:00",
+                "team_member_id": "490500326743478453",
+                "comment": {"id": "455845021506364170", "text": "test 1"},
+                "z_event_name": None,
+            },
+            "member": {
+                "id": "490500326743478453",
+                "user": {
+                    "id": "342049851833454593",
+                    "display_name": "Twidi_Angel",
+                    "slug": "twidi-angel",
+                    "is_live": False,
+                    "currency": "EUR",
+                },
+            },
+        },
+    )
+
+    await fetch_donations(game_messages_queue, chat_messages_queue, max_loops=2, sleep_seconds=0)
+
     assert game_messages_queue.qsize() == 1
     assert chat_messages_queue.qsize() == 1
     game_message1 = game_messages_queue.get_nowait()
     chat_message1 = chat_messages_queue.get_nowait()
     game_messages_queue.task_done()
     chat_messages_queue.task_done()
-    assert game_message1.kind == GameMessageKind.DONATION
-    assert game_message1.player_id == player.id
-    assert chat_message1.startswith("@Existing_User ")
+    assert game_message1.kind == GameMessageKind.DEVEVENT
+    assert game_message1.player_id is None
+    assert chat_message1.startswith("#DevEvent Le total ")

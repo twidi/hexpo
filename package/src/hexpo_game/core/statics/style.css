@@ -501,6 +501,10 @@ body.multi-steps:not([data-game-step="collecting_actions"]) #buttons {
     background: var(--text-color);
     color: var(--shell-background);
 }
+.message.message-type-game_step_changed {
+    background: var(--bright-color);
+    color: white;
+}
 .message-removed {
   transform: translateX(-150%) !important;
   opacity: 0 !important;
